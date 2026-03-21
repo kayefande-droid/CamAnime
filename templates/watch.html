@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch {{ anime.title }} EP {{ ep_num }} | Camanime</title>
+    <title>Watch {{ anime.title.english or anime.title.romaji }} EP {{ ep_num }} | Camanime</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
@@ -50,9 +50,6 @@
         .btn-dl { background: #FFB347; color: #000; font-weight: bold; border: none; cursor: pointer; }
 
         .info { margin-bottom: 2rem; }
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 0.5rem; margin-top: 1rem; }
-        .ep-link { background: #1e263a; padding: 0.5rem; border-radius: 4px; text-align: center; text-decoration: none; color: #b9c3e6; font-size: 0.9rem; transition: 0.2s; }
-        .ep-link:hover, .ep-link.active { background: #FFB347; color: #0a0c15; font-weight: bold; }
 
         /* Server Switcher */
         .server-select { display: flex; gap: 0.5rem; margin-top: 1rem; }
@@ -83,7 +80,7 @@
 
     <!-- Server Controls -->
     <div class="server-select">
-        <button class="server-btn active" onclick="switchSource('native')">Fast Server (Native)</button>
+        <button class="server-btn active" onclick="switchSource('native')">Fast Server (VidCloud)</button>
         <button class="server-btn" onclick="switchSource('embed')">Backup Server (Embed)</button>
     </div>
 
@@ -120,7 +117,7 @@
         hls.loadSource(streamUrl);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function() {
-            // video.play(); // Auto-play often blocked by browsers
+            // video.play();
         });
 
         // Handle Errors - fallback to embed
