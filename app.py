@@ -214,17 +214,33 @@ def details(anime_id):
 
 @app.route('/watch/<path:anime_id>/<path:ep_id>')
 def watch(anime_id, ep_id):
-    anime = scrape_details(anime_id) # Need title for UI
+    anime = scrape_details(anime_id)
     stream_url = extract_stream_url(anime_id, ep_id)
     
-    # Fallback if still empty
     if not stream_url:
         stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_id}"
 
+    prev_ep = None
+    next_ep = None
+    display_num = ep_id
+    
+    if anime and anime.get('episodes'):
+        eps = anime['episodes']
+        for i, ep in enumerate(eps):
+            if ep['id'] == ep_id:
+                display_num = ep['num']
+                if i > 0:
+                    next_ep = eps[i-1] # Episodes are reversed in list
+                if i < len(eps) - 1:
+                    prev_ep = eps[i+1]
+                break
+
     return render_template('watch.html', 
                          anime=anime, 
-                         ep_num=ep_id, 
-                         stream_url=stream_url)
+                         ep_num=display_num, 
+                         stream_url=stream_url,
+                         prev_ep=prev_ep,
+                         next_ep=next_ep)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

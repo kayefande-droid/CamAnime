@@ -14,7 +14,6 @@
 
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
 
-        /* Video Container */
         .video-wrapper {
             position: relative; width: 100%; aspect-ratio: 16/9;
             background: #000;
@@ -55,19 +54,22 @@
 
 <div class="container">
     <div class="video-wrapper">
-        <!-- Direct Embed Player -->
         <iframe src="{{ stream_url }}" allowfullscreen></iframe>
     </div>
 
     <div class="controls">
-        <a href="#" class="nav-btn"><i class="fas fa-chevron-left"></i> Prev</a>
+        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep.id if prev_ep else '#' }}" class="nav-btn {{ 'disabled' if not prev_ep else '' }}">
+            <i class="fas fa-chevron-left"></i> Prev
+        </a>
 
         <div style="text-align: center;">
-            <span class="ep-badge">EP {{ ep_num }}</span>
+            <span class="ep-badge">{{ ep_num }}</span>
             <span style="font-weight: bold;">{{ anime.title }}</span>
         </div>
 
-        <a href="#" class="nav-btn">Next <i class="fas fa-chevron-right"></i></a>
+        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="nav-btn {{ 'disabled' if not next_ep else '' }}">
+            Next <i class="fas fa-chevron-right"></i>
+        </a>
     </div>
 
     <div class="info">
