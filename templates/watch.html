@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch {{ anime.title }} EP {{ ep_num }} | Camanime</title>
+    <title>Watch {{ anime.title.english or anime.title.romaji }} EP {{ ep_num }} | Camanime</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
@@ -14,85 +14,69 @@
 
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
 
-        .video-wrapper { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: #555; flex-direction: column; }
-        .video-wrapper video { width: 100%; height: 100%; }
+        .video-wrapper {
+            position: relative; width: 100%; aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        iframe { width: 100%; height: 100%; border: none; }
 
-        .anime-title { font-size: 1.8rem; font-weight: 800; margin-bottom: 0.5rem; color: #FFB347; }
+        .controls { display: flex; justify-content: space-between; align-items: center; background: #1e263a; padding: 1rem; border-radius: 12px; margin-bottom: 2rem; }
         .ep-badge { background: #FFB347; color: #0a0c15; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 700; font-size: 0.9rem; margin-right: 0.5rem; }
 
-        .controls { display: flex; gap: 1rem; margin-top: 1rem; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-        .nav-btn { background: #1e263a; border: 1px solid rgba(255,255,255,0.1); padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; color: white; transition: 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.9rem; }
-        .nav-btn:hover { background: #2d3748; border-color: #FFB347; color: #FFB347; }
+        .nav-btn {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            transition: 0.2s;
+            font-size: 0.9rem;
+        }
+        .nav-btn:hover { background: #FFB347; color: #0a0c15; }
+        .nav-btn.disabled { opacity: 0.5; pointer-events: none; }
 
-        .download-btn { background: #FFB347; color: #0a0c15; border: none; padding: 0.6rem 1.2rem; border-radius: 30px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; transition: 0.2s; }
-        .download-btn:hover { background: #ffa01e; transform: scale(1.05); }
+        .btn-dl { background: #FFB347; color: #000; font-weight: bold; }
 
-        .episodes-list { margin-top: 3rem; }
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 0.5rem; margin-top: 1rem; }
-        .ep-link { background: #1e263a; padding: 0.5rem; border-radius: 4px; text-align: center; text-decoration: none; color: #b9c3e6; font-size: 0.9rem; transition: 0.2s; }
-        .ep-link:hover, .ep-link.active { background: #FFB347; color: #0a0c15; font-weight: bold; }
-
-        footer { margin-top: 4rem; text-align: center; color: #6f7aa3; font-size: 0.8rem; padding: 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
+        .info { margin-bottom: 2rem; }
+        .info h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #FFB347; }
     </style>
 </head>
 <body>
 
 <header>
-    <a href="/" class="site-title">Camanime</a>
+    <div style="max-width: 1400px; margin: 0 auto;">
+        <a href="/" class="site-title">Camanime</a>
+    </div>
 </header>
 
 <div class="container">
     <div class="video-wrapper">
-        <!-- Placeholder video for demo purposes -->
-        <video controls poster="https://placehold.co/1280x720/1a1e2f/FFB347?text=Simulated+Stream:+{{ anime.title }}+EP+{{ ep_num }}">
-            <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
+        <iframe src="{{ stream_url }}" allowfullscreen></iframe>
     </div>
 
     <div class="controls">
-        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-            <h1 class="anime-title" style="margin-bottom: 0;">{{ anime.title }}</h1>
-            <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
-                <span class="ep-badge">EPISODE {{ ep_num }}</span>
-                <div style="display: flex; gap: 0.5rem;">
-                    {% set current_index = anime.episodes.index(ep_num) %}
-                    {% if current_index > 0 %}
-                    <a href="/watch/{{ anime_id }}/{{ anime.episodes[current_index - 1] }}" class="nav-btn">
-                        <i class="fas fa-chevron-left"></i> Prev
-                    </a>
-                    {% endif %}
-                    
-                    {% if current_index < (anime.episodes|length - 1) %}
-                    <a href="/watch/{{ anime_id }}/{{ anime.episodes[current_index + 1] }}" class="nav-btn">
-                        Next <i class="fas fa-chevron-right"></i>
-                    </a>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep if prev_ep else '#' }}" class="nav-btn {{ 'disabled' if not prev_ep else '' }}">
+            <i class="fas fa-chevron-left"></i> Prev
+        </a>
+
         <div>
-            <a href="/download/{{ anime_id }}/{{ ep_num }}" class="download-btn">
-                <i class="fas fa-download"></i> Download
-            </a>
+            <span class="ep-badge">EP {{ ep_num }}</span>
+            <span style="font-weight: bold;">{{ anime.title.english or anime.title.romaji }}</span>
         </div>
+
+        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep if next_ep else '#' }}" class="nav-btn {{ 'disabled' if not next_ep else '' }}">
+            Next <i class="fas fa-chevron-right"></i>
+        </a>
     </div>
 
-    <div class="episodes-list">
-        <h3 style="color: #FFB347; margin-bottom: 0.5rem;">All Episodes</h3>
-        <div class="ep-grid">
-            {% for ep in anime.episodes %}
-            <a href="/watch/{{ anime_id }}/{{ ep }}" class="ep-link {% if ep == ep_num %}active{% endif %}">
-                {{ ep }}
-            </a>
-            {% endfor %}
-        </div>
+    <div class="info">
+        <a href="/anime/{{ anime.id }}" class="nav-btn"><i class="fas fa-list"></i> View All Episodes</a>
     </div>
 </div>
-
-<footer>
-    <p>Camanime Demo - All videos are simulated dummy files.</p>
-</footer>
 
 </body>
 </html>

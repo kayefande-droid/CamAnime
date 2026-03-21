@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ anime.title }} | Camanime</title>
+    <title>{{ anime.title.english or anime.title.romaji }} - Camanime</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
@@ -14,68 +14,111 @@
 
         .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
 
-        .anime-header { display: flex; gap: 2rem; margin-bottom: 3rem; }
-        .anime-poster { width: 300px; height: 450px; background: #1e263a; border-radius: 12px; object-fit: cover; }
+        .anime-header { display: flex; gap: 2rem; margin-bottom: 3rem; background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 20px; }
+        .anime-poster { width: 300px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         .anime-info { flex: 1; }
-        .anime-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; color: #FFB347; }
-        .anime-meta { display: flex; gap: 1rem; color: #b9c3e6; margin-bottom: 1.5rem; font-size: 0.9rem; }
-        .anime-rating { background: #FFB347; color: #0a0c15; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; }
-        .anime-desc { color: #cbd5e1; margin-bottom: 2rem; max-width: 800px; }
-        .anime-actions { display: flex; gap: 1rem; }
-        .btn { padding: 0.6rem 1.2rem; border-radius: 30px; text-decoration: none; font-weight: 600; transition: 0.2s; background: #1e263a; color: white; border: 1px solid rgba(255,255,255,0.1); }
-        .btn:hover { background: #2d3748; border-color: #FFB347; }
+        .anime-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; color: #FFB347; line-height: 1.1; }
+        .anime-meta { display: flex; gap: 1rem; color: #b9c3e6; margin-bottom: 1.5rem; font-size: 0.9rem; flex-wrap: wrap; }
+        .tag { background: rgba(255, 255, 255, 0.1); padding: 0.2rem 0.6rem; border-radius: 4px; }
+        .rating { color: #FFB347; font-weight: bold; }
 
-        .episodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 1rem; margin-top: 2rem; }
-        .ep-btn { background: #1e263a; border: 1px solid rgba(255,255,255,0.1); padding: 0.8rem; border-radius: 8px; text-align: center; text-decoration: none; color: white; transition: 0.2s; font-weight: 600; }
-        .ep-btn:hover { background: #FFB347; color: #0a0c15; border-color: #FFB347; transform: translateY(-2px); }
+        .desc { color: #cbd5e1; margin-bottom: 2rem; max-height: 150px; overflow-y: auto; line-height: 1.6; }
 
-        footer { margin-top: 4rem; text-align: center; color: #6f7aa3; font-size: 0.8rem; padding: 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
+        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.8rem; }
+        .ep-btn {
+            background: #1e263a;
+            color: white;
+            padding: 0.8rem;
+            border-radius: 8px;
+            text-align: center;
+            text-decoration: none;
+            font-weight: 600;
+            transition: 0.2s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .ep-btn:hover { background: #FFB347; color: #0a0c15; border-color: #FFB347; transform: translateY(-3px); }
+
+        .btn-action {
+            display: inline-block;
+            background: #FFB347;
+            color: #000;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-right: 1rem;
+            cursor: pointer;
+            border: none;
+        }
 
         @media (max-width: 768px) {
-            .anime-header { flex-direction: column; align-items: center; text-align: center; }
-            .anime-poster { width: 200px; height: 300px; }
-            .anime-meta { justify-content: center; }
-            .anime-actions { justify-content: center; }
+            .anime-header { flex-direction: column; align-items: center; text-align: center; padding: 1rem; }
+            .anime-poster { width: 200px; }
+            .anime-title { font-size: 1.8rem; }
         }
     </style>
 </head>
 <body>
 
 <header>
-    <a href="/" class="site-title">Camanime</a>
+    <div style="max-width: 1400px; margin: 0 auto;">
+        <a href="/" class="site-title">Camanime</a>
+    </div>
 </header>
 
 <div class="container">
     <div class="anime-header">
-        <img src="{{ anime.image }}" alt="{{ anime.title }}" class="anime-poster">
+        <img src="{{ anime.coverImage.extraLarge }}" class="anime-poster" alt="Poster">
         <div class="anime-info">
-            <h1 class="anime-title">{{ anime.title }}</h1>
+            <h1 class="anime-title">{{ anime.title.english or anime.title.romaji }}</h1>
             <div class="anime-meta">
-                <span class="anime-rating">⭐ {{ anime.rating }}</span>
-                <span>{{ anime.tags | join(', ') }}</span>
-                <span>{{ anime.episodes | length }} Episodes</span>
+                <span class="rating"><i class="fas fa-star"></i> {{ anime.averageScore / 10 if anime.averageScore else 'N/A' }}</span>
+                <span class="tag">{{ anime.format }}</span>
+                <span class="tag">{{ anime.status }}</span>
+                <span class="tag">{{ anime.episodes or '?' }} Eps</span>
             </div>
-            <p class="anime-desc">{{ anime.description }}</p>
-            <div class="anime-actions">
-                <a href="#" class="btn"><i class="far fa-bookmark"></i> Bookmark</a>
-                <a href="#" class="btn"><i class="far fa-star"></i> Rate</a>
+
+            <div class="anime-meta">
+                {% for genre in anime.genres %}
+                <span class="tag">{{ genre }}</span>
+                {% endfor %}
             </div>
+
+            <div class="desc" style="white-space: pre-line;">{{ anime.description | safe }}</div>
+
+            <button class="btn-action" onclick="toggleBookmark()"><i class="fas fa-bookmark"></i> Bookmark</button>
         </div>
     </div>
 
-    <h3 style="color: #FFB347; margin-bottom: 1rem; border-bottom: 2px solid #FFB347; display: inline-block; padding-bottom: 5px;">Episodes</h3>
-    <div class="episodes-grid">
-        {% for ep in anime.episodes %}
-        <a href="/watch/{{ anime_id }}/{{ ep }}" class="ep-btn">
+    <h2 style="border-left: 5px solid #FFB347; padding-left: 10px; margin-bottom: 1.5rem;">Episodes</h2>
+    <div class="ep-grid">
+        {% for ep in episode_list %}
+        <a href="/watch/{{ anime.id }}/{{ ep }}" class="ep-btn">
             EP {{ ep }}
         </a>
         {% endfor %}
     </div>
 </div>
 
-<footer>
-    <p>Camanime Demo - All videos are simulated dummy files.</p>
-</footer>
+<script>
+    function toggleBookmark() {
+        const anime = {
+            id: "{{ anime.id }}",
+            title: "{{ anime.title.english or anime.title.romaji }}",
+            img: "{{ anime.coverImage.extraLarge }}"
+        };
+
+        let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+        const exists = bookmarks.find(b => b.id === anime.id);
+
+        if (!exists) {
+            bookmarks.push(anime);
+            localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+            alert("Added to Bookmarks!");
+        } else {
+            alert("Already in Bookmarks!");
+        }
+    }
+</script>
 
 </body>
 </html>

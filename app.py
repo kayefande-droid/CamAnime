@@ -1,134 +1,153 @@
-from flask import Flask, render_template, send_file, abort
-import io
+import requests
+from flask import Flask, render_template, request, redirect, url_for
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key"
 
-# --- MOCK DATABASE ---
-# In a real app, this would be a SQLite/PostgreSQL database
-ANIME_DB = {
-    "medalist-season-2": {
-        "title": "Medalist Season 2",
-        "description": "The second season of Medalist. Witness the dazzling return to the ice as the competition heats up.",
-        "tags": ["Sports", "Drama", "Seinen", "Ice Skating"],
-        "rating": "8.7",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Medalist+S2",
-        "episodes": list(range(1, 10))  # 9 episodes
-    },
-    "fumetsu-no-anata-e-s3": {
-        "title": "Fumetsu no Anata e Season 3",
-        "description": "The journey of the immortal continues in a modern era.",
-        "tags": ["Adventure", "Drama", "Supernatural"],
-        "rating": "8.5",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Fumetsu+S3",
-        "episodes": list(range(1, 21))
-    },
-    "jigokuraku-2": {
-        "title": "Jigokuraku 2nd Season",
-        "description": "Gabimaru and the others continue their survival on the island.",
-        "tags": ["Action", "Fantasy", "Historical"],
-        "rating": "8.6",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Jigokuraku+2",
-        "episodes": list(range(1, 12))
-    },
-    "one-piece": {
-        "title": "One Piece",
-        "description": "Luffy and his crew continue their adventure in the New World.",
-        "tags": ["Action", "Adventure", "Shounen"],
-        "rating": "9.0",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=One+Piece",
-        "episodes": list(range(1000, 1091))
-    },
-    "jujutsu-kaisen-3": {
-        "title": "Jujutsu Kaisen: Shimetsu Kaiyuu",
-        "description": "The Culling Game begins.",
-        "tags": ["Action", "Supernatural", "School"],
-        "rating": "8.9",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Jujutsu+Kaisen",
-        "episodes": list(range(1, 3))
-    },
-    "sousou-no-frieren-2": {
-        "title": "Sousou no Frieren Season 2",
-        "description": "Frieren continues her journey to Aureole.",
-        "tags": ["Adventure", "Fantasy", "Slice of Life"],
-        "rating": "9.2",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Frieren+S2",
-        "episodes": list(range(1, 5))
-    },
-    "rezero-4": {
-        "title": "Re:Zero 4th Season",
-        "description": "Subaru faces new challenges.",
-        "tags": ["Psychological", "Fantasy", "Thriller"],
-        "rating": "8.8",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=Re:Zero+S4",
-        "episodes": list(range(1, 5))
-    },
-    "boku-no-hero-7": {
-        "title": "Boku no Hero Academia 7",
-        "description": "The final war approaches.",
-        "tags": ["Action", "School", "Super Power"],
-        "rating": "8.4",
-        "image": "https://placehold.co/400x600/1e293b/FFB347?text=MHA+S7",
-        "episodes": list(range(1, 10))
+# --- CONFIGURATION ---
+ANILIST_API_URL = 'https://graphql.anilist.co'
+
+# --- GRAPHQL QUERIES ---
+TRENDING_QUERY = '''
+query ($page: Int, $perPage: Int) {
+  Page (page: $page, perPage: $perPage) {
+    media (sort: TRENDING_DESC, type: ANIME) {
+      id
+      title { romaji english }
+      coverImage { large extraLarge }
+      bannerImage
+      episodes
+      status
+      format
+      averageScore
+      nextAiringEpisode { episode timeUntilAiring }
     }
+  }
 }
+'''
 
-SCHEDULE_ITEMS = [
-    {"id": "medalist-season-2", "ep": 9, "status": "1 hour ago"},
-    {"id": "fumetsu-no-anata-e-s3", "ep": 20, "status": "Episode Released"},
-    {"id": "jigokuraku-2", "ep": 11, "status": "Episode Released"},
-    {"id": "one-piece", "ep": 1090, "status": "Episode Released"},
-    {"id": "jujutsu-kaisen-3", "ep": 2, "status": "Episode Released"},
-    {"id": "sousou-no-frieren-2", "ep": 4, "status": "Episode Released"},
-    {"id": "rezero-4", "ep": 3, "status": "Episode Released"},
-    {"id": "boku-no-hero-7", "ep": 8, "status": "Episode Released"},
-]
+SEARCH_QUERY = '''
+query ($search: String, $page: Int, $perPage: Int) {
+  Page (page: $page, perPage: $perPage) {
+    media (search: $search, sort: POPULARITY_DESC, type: ANIME) {
+      id
+      title { romaji english }
+      coverImage { large }
+      episodes
+      status
+      averageScore
+    }
+  }
+}
+'''
+
+DETAILS_QUERY = '''
+query ($id: Int) {
+  Media (id: $id, type: ANIME) {
+    id
+    title { romaji english }
+    description
+    coverImage { extraLarge }
+    bannerImage
+    episodes
+    status
+    format
+    genres
+    averageScore
+    nextAiringEpisode { episode }
+    recommendations(page: 1, perPage: 10) {
+      nodes {
+        mediaRecommendation {
+          id
+          title { romaji }
+          coverImage { medium }
+          averageScore
+        }
+      }
+    }
+  }
+}
+'''
+
+def fetch_anilist(query, variables):
+    """Helper to send requests to AniList API."""
+    try:
+        response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
+        return response.json().get('data', {})
+    except Exception as e:
+        print(f"API Error: {e}")
+        return {}
 
 @app.route('/')
 def home():
-    # Enrich schedule items with full anime data
-    full_schedule = []
-    for item in SCHEDULE_ITEMS:
-        anime = ANIME_DB.get(item['id'])
-        if anime:
-            full_schedule.append({
-                "id": item['id'],
-                "title": anime['title'],
-                "ep": item['ep'],
-                "status": item['status'],
-                "image": anime['image']
-            })
-    return render_template('index.html', schedule=full_schedule, featured=ANIME_DB['medalist-season-2'], featured_id="medalist-season-2")
-
-@app.route('/anime/<anime_id>')
-def anime_details(anime_id):
-    anime = ANIME_DB.get(anime_id)
-    if not anime:
-        return abort(404)
-    return render_template('details.html', anime=anime, anime_id=anime_id)
-
-@app.route('/watch/<anime_id>/<int:ep_num>')
-def watch_episode(anime_id, ep_num):
-    anime = ANIME_DB.get(anime_id)
-    if not anime:
-        return abort(404)
-    # Basic check if episode exists
-    if ep_num not in anime['episodes']:
-        return abort(404)
+    # Fetch Trending Anime (serves as "New/Popular")
+    data = fetch_anilist(TRENDING_QUERY, {'page': 1, 'perPage': 20})
+    trending = data.get('Page', {}).get('media', [])
     
-    return render_template('watch.html', anime=anime, ep_num=ep_num, anime_id=anime_id)
+    # Pick the top item as the "Featured" hero anime
+    featured = trending[0] if trending else None
+    
+    return render_template('index.html', trending=trending, featured=featured, page_type="home")
 
-@app.route('/download/<anime_id>/<int:ep_num>')
-def download_episode(anime_id, ep_num):
-    # DUMMY DOWNLOAD functionality
-    filename = f"{anime_id}_ep{ep_num}.mp4"
-    content = f"This is a dummy video file for {anime_id} Episode {ep_num}.\nIn a real app, this would be the actual video stream or file."
-    return send_file(
-        io.BytesIO(content.encode()),
-        as_attachment=True,
-        download_name=filename,
-        mimetype='text/plain' 
-    )
+@app.route('/search')
+def search():
+    query = request.args.get('q')
+    if not query:
+        return redirect(url_for('home'))
+        
+    data = fetch_anilist(SEARCH_QUERY, {'search': query, 'page': 1, 'perPage': 24})
+    results = data.get('Page', {}).get('media', [])
+    
+    return render_template('index.html', trending=results, search_query=query, page_type="search")
+
+@app.route('/anime/<int:anime_id>')
+def details(anime_id):
+    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
+    anime = data.get('Media')
+    
+    if not anime:
+        return "Anime not found", 404
+
+    # Calculate available episodes
+    # If ongoing, nextAiringEpisode tells us the current max. 
+    # If finished, use 'episodes'.
+    total_episodes = anime.get('episodes') or 0
+    if anime.get('status') == 'RELEASING' and anime.get('nextAiringEpisode'):
+        total_episodes = anime['nextAiringEpisode']['episode'] - 1
+    elif total_episodes == 0:
+         # Fallback for long runners with unknown count
+         total_episodes = 1000 
+    
+    # Generate list of episodes
+    episode_list = list(range(1, total_episodes + 1))
+    episode_list.reverse() # Show newest first
+
+    return render_template('details.html', anime=anime, episode_list=episode_list)
+
+@app.route('/watch/<int:anime_id>/<int:ep_num>')
+def watch(anime_id, ep_num):
+    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
+    anime = data.get('Media')
+    
+    if not anime:
+        return "Anime not found", 404
+
+    # Primary Embed Source (vidsrc.cc uses AniList ID)
+    stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
+    
+    # Generate simple next/prev links
+    total_episodes = anime.get('episodes') or 1000
+    if anime.get('nextAiringEpisode'):
+        total_episodes = anime['nextAiringEpisode']['episode'] - 1
+        
+    prev_ep = ep_num - 1 if ep_num > 1 else None
+    next_ep = ep_num + 1 if ep_num < total_episodes else None
+
+    return render_template('watch.html', 
+                         anime=anime, 
+                         ep_num=ep_num, 
+                         stream_url=stream_url,
+                         prev_ep=prev_ep, 
+                         next_ep=next_ep)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
