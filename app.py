@@ -1,212 +1,219 @@
-import cloudscraper
-import re
-import urllib.parse
-from bs4 import BeautifulSoup
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+import requests
+from flask import Flask, render_template, request, redirect, url_for
 
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
-BASE_URL = "https://animeheaven.me"
+ANILIST_API_URL = 'https://graphql.anilist.co'
+CONSUMET_API_URL = 'https://api.consumet.org/meta/anilist' 
 
-# Initialize CloudScraper to bypass bot protection
-scraper = cloudscraper.create_scraper(
-    browser={
-        'browser': 'chrome',
-        'platform': 'windows',
-        'desktop': True
+# --- GRAPHQL QUERIES ---
+TRENDING_QUERY = '''
+query ($page: Int, $perPage: Int) {
+  Page (page: $page, perPage: $perPage) {
+    media (sort: TRENDING_DESC, type: ANIME) {
+      id
+      title { romaji english }
+      coverImage { large extraLarge }
+      bannerImage
+      episodes
+      status
+      format
+      averageScore
+      nextAiringEpisode { episode }
     }
-)
+  }
+}
+'''
 
-# --- SCRAPER FUNCTIONS (The "API" Logic) ---
+SEARCH_QUERY = '''
+query ($search: String, $page: Int, $perPage: Int) {
+  Page (page: $page, perPage: $perPage) {
+    media (search: $search, sort: POPULARITY_DESC, type: ANIME) {
+      id
+      title { romaji english }
+      coverImage { large }
+      episodes
+      status
+      averageScore
+    }
+  }
+}
+'''
 
-def get_soup(url):
-    """Fetches a URL and returns BeautifulSoup object."""
+DETAILS_QUERY = '''
+query ($id: Int) {
+  Media (id: $id, type: ANIME) {
+    id
+    title { romaji english }
+    description
+    coverImage { extraLarge }
+    bannerImage
+    episodes
+    status
+    format
+    genres
+    averageScore
+    nextAiringEpisode { episode }
+  }
+}
+'''
+
+def fetch_anilist(query, variables):
+    """Fetches data from AniList GraphQL API."""
     try:
-        resp = scraper.get(url, timeout=15)
-        if resp.status_code == 200:
-            return BeautifulSoup(resp.content, "html.parser")
-        else:
-            print(f"Failed to fetch {url}: {resp.status_code}")
+        response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
+        return response.json().get('data', {})
     except Exception as e:
-        print(f"Scraper Error ({url}): {e}")
-    return None
+        print(f"AniList API Error: {e}")
+        return {}
 
-def extract_id(url):
-    """Extracts ID from AnimeHeaven URL."""
-    if "?" in url:
-        return url.split("?")[-1]
-    return url.split("/")[-1]
-
-def scrape_list(path):
-    """Scrapes anime list (New/Popular)."""
-    soup = get_soup(f"{BASE_URL}/{path}")
-    results = []
-    if soup:
-        # AnimeHeaven class selectors
-        items = soup.select(".c") 
-        for item in items:
-            link = item.select_one("a")
-            img = item.select_one("img")
-            title_tag = item.select_one(".t")
-            ep_tag = item.select_one(".ep")
+def get_consumet_stream(anime_id, episode_num):
+    """
+    Fetches streaming links via Consumet (VidCloud).
+    """
+    try:
+        # 1. Get episode list mapping
+        info_url = f"{CONSUMET_API_URL}/info/{anime_id}"
+        resp = requests.get(info_url, timeout=5)
+        
+        if resp.status_code != 200:
+            return None
             
-            if link and img:
-                title = title_tag.get_text(strip=True) if title_tag else "Unknown"
-                ep_text = ep_tag.get_text(strip=True) if ep_tag else "?"
-                
-                img_src = img.get('src', '')
-                if img_src.startswith("//"): img_src = "https:" + img_src
-                elif img_src.startswith("/"): img_src = BASE_URL + img_src
-                
-                href = link.get('href', '')
-                anime_id = extract_id(href)
-                
-                results.append({
-                    "id": anime_id,
-                    "title": title,
-                    "image": img_src,
-                    "episode": ep_text
-                })
-    return results
+        data = resp.json()
+        episodes = data.get('episodes', [])
+        
+        # Find the matching episode object
+        target_ep = next((ep for ep in episodes if ep.get('number') == episode_num), None)
+        
+        if not target_ep:
+            return None
+            
+        # 2. Get streaming links
+        watch_url = f"{CONSUMET_API_URL}/watch/{target_ep['id']}"
+        stream_resp = requests.get(watch_url, timeout=5)
+        
+        if stream_resp.status_code != 200:
+            return None
+            
+        stream_data = stream_resp.json()
+        sources = stream_data.get('sources', [])
+        
+        # Prefer default quality
+        best_source = next((s for s in sources if s.get('quality') == 'default'), None)
+        if not best_source and sources:
+            best_source = sources[0]
+            
+        return best_source.get('url') if best_source else None
 
-def scrape_search_results(query):
-    """Scrapes search results."""
-    return scrape_list(f"search.php?q={urllib.parse.quote(query)}")
-
-def scrape_anime_details(anime_id):
-    """Scrapes anime info and episode list."""
-    url = f"{BASE_URL}/anime.php?{anime_id}"
-    soup = get_soup(url)
-    
-    if not soup:
+    except Exception as e:
+        print(f"Consumet API Exception: {e}")
         return None
-        
-    title = soup.select_one(".infotitle").get_text(strip=True) if soup.select_one(".infotitle") else "Unknown"
-    desc = soup.select_one(".infodes").get_text(strip=True) if soup.select_one(".infodes") else ""
-    img_tag = soup.select_one(".poster img")
-    img_src = img_tag.get('src', '') if img_tag else ""
-    if img_src.startswith("//"): img_src = "https:" + img_src
-    elif img_src.startswith("/"): img_src = BASE_URL + img_src
-    
-    # Episodes
-    episodes = []
-    # Try multiple selectors for episode links
-    links = soup.select(".d a") or soup.select(".episode a")
-    
-    for link in reversed(links):
-        href = link.get('href', '')
-        ep_num = link.get_text(strip=True)
-        try:
-            ep_id = extract_id(href)
-            # Ensure we have a valid numeric display if possible
-            num_match = re.search(r'\d+', ep_num)
-            clean_num = num_match.group() if num_match else ep_num
-            
-            episodes.append({
-                "id": ep_id,
-                "num": clean_num,
-                "url": href
-            })
-        except:
-            pass
-            
-    return {
-        "id": anime_id,
-        "title": title,
-        "description": desc,
-        "image": img_src,
-        "episodes": episodes
-    }
-
-def extract_video(ep_id):
-    """
-    Attempts to find the video embed URL.
-    Falls back to vidsrc.cc if direct scraping fails.
-    """
-    # Construct URL. Sometimes ep_id is 'episode.php?id' sometimes just 'id'
-    url = f"{BASE_URL}/episode.php?{ep_id}" if "episode.php" not in ep_id else f"{BASE_URL}/{ep_id}"
-    soup = get_soup(url)
-    stream_url = None
-    
-    if soup:
-        # Strategy: Find iframe
-        iframe = soup.select_one("iframe")
-        if iframe:
-            src = iframe.get('src', '')
-            if src:
-                if src.startswith("//"): src = "https:" + src
-                stream_url = src
-
-    # Fallback Logic (if scraper blocked)
-    # Heuristic: try to guess anime ID and ep num from the ep_id string
-    if not stream_url:
-        # Common pattern: anime_id&ep=5
-        # We need to extract the anime_id part for vidsrc
-        # This is tricky because ep_id varies. 
-        # Best fallback is simply to tell the user we couldn't find it.
-        pass
-        
-    return stream_url
-
-# --- ROUTES ---
 
 @app.route('/')
 def home():
-    # Mimics /api/anime/popular + /api/anime/new-episodes
-    # We'll scrape 'New' for the homepage
-    trending = scrape_list("new.php")
+    data = fetch_anilist(TRENDING_QUERY, {'page': 1, 'perPage': 20})
+    trending = data.get('Page', {}).get('media', [])
     featured = trending[0] if trending else None
-    return render_template('index.html', trending=trending, featured=featured, page_type="home")
+    
+    # Process data for template
+    processed_trending = []
+    for anime in trending:
+        processed_trending.append({
+            "id": anime['id'],
+            "title": anime['title']['english'] or anime['title']['romaji'],
+            "image": anime['coverImage']['large'],
+            "episode": f"Ep {anime['nextAiringEpisode']['episode'] - 1}" if anime.get('nextAiringEpisode') else f"{anime.get('episodes')} Eps"
+        })
+        
+    processed_featured = None
+    if featured:
+        processed_featured = {
+            "id": featured['id'],
+            "title": featured['title']['english'] or featured['title']['romaji'],
+            "image": featured['bannerImage'] or featured['coverImage']['extraLarge'],
+            "format": featured['format'],
+            "episode": f"Ep {featured['nextAiringEpisode']['episode'] - 1}" if featured.get('nextAiringEpisode') else f"{featured.get('episodes')} Eps"
+        }
+
+    return render_template('index.html', trending=processed_trending, featured=processed_featured, page_type="home")
 
 @app.route('/search')
 def search():
     query = request.args.get('q')
     if not query:
         return redirect(url_for('home'))
-    results = scrape_search_results(query)
+        
+    data = fetch_anilist(SEARCH_QUERY, {'search': query, 'page': 1, 'perPage': 24})
+    raw_results = data.get('Page', {}).get('media', [])
+    
+    results = []
+    for anime in raw_results:
+        results.append({
+            "id": anime['id'],
+            "title": anime['title']['english'] or anime['title']['romaji'],
+            "image": anime['coverImage']['large'],
+            "episode": f"{anime.get('episodes') or '?'} Eps"
+        })
+        
     return render_template('index.html', trending=results, search_query=query, page_type="search")
 
-@app.route('/anime/<path:anime_id>')
+@app.route('/anime/<int:anime_id>')
 def details(anime_id):
-    anime = scrape_anime_details(anime_id)
-    if not anime:
-        return "Anime not found (Scraper might be blocked)", 404
+    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
+    raw_anime = data.get('Media')
+    
+    if not raw_anime:
+        return "Anime not found", 404
+
+    # Calculate episodes
+    total_episodes = raw_anime.get('episodes') or 0
+    if raw_anime.get('status') == 'RELEASING' and raw_anime.get('nextAiringEpisode'):
+        total_episodes = raw_anime['nextAiringEpisode']['episode'] - 1
+    elif total_episodes == 0:
+         total_episodes = 100 
+    
+    episode_list = []
+    for i in range(1, total_episodes + 1):
+        episode_list.append({"id": i, "num": i})
+    episode_list.reverse()
+
+    anime = {
+        "id": raw_anime['id'],
+        "title": raw_anime['title']['english'] or raw_anime['title']['romaji'],
+        "description": raw_anime['description'],
+        "image": raw_anime['coverImage']['extraLarge'],
+        "rating": raw_anime['averageScore'] / 10 if raw_anime.get('averageScore') else "N/A",
+        "tags": raw_anime['genres'],
+        "format": raw_anime['format'],
+        "status": raw_anime['status'],
+        "episodes": episode_list
+    }
+
     return render_template('details.html', anime=anime)
 
-@app.route('/watch/<path:anime_id>/<path:ep_id>')
-def watch(anime_id, ep_id):
-    anime = scrape_anime_details(anime_id) # Need metadata
+@app.route('/watch/<int:anime_id>/<int:ep_num>')
+def watch(anime_id, ep_num):
+    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
+    raw_anime = data.get('Media')
     
-    stream_url = extract_video(ep_id)
+    anime_title = "Unknown Anime"
+    if raw_anime:
+        anime_title = raw_anime['title']['english'] or raw_anime['title']['romaji']
     
-    # If direct scrape fails, we try a fallback if we can parse the ID
-    if not stream_url:
-        # Try to construct a vidsrc link if the ID looks standard
-        # Example ep_id: "episode.php?anime=123&ep=5" -> anime=123, ep=5
-        try:
-            match_id = re.search(r'anime=([^&]+)', ep_id)
-            match_ep = re.search(r'ep=(\d+)', ep_id)
-            if match_id and match_ep:
-                aid = match_id.group(1)
-                enum = match_ep.group(1)
-                stream_url = f"https://vidsrc.cc/v2/embed/anime/{aid}/{enum}"
-        except:
-            pass
+    # Get Stream from Consumet
+    stream_url = get_consumet_stream(anime_id, ep_num)
+    
+    # Fallback Embed
+    backup_embed = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
 
     return render_template('watch.html', 
-                         anime=anime, 
-                         ep_num=ep_id, 
-                         stream_url=stream_url)
-
-# --- API ENDPOINTS (Optional: If you want to use this as an API service too) ---
-@app.route('/api/popular')
-def api_popular():
-    return jsonify(scrape_list("popular.php"))
-
-@app.route('/api/search')
-def api_search():
-    return jsonify(scrape_search_results(request.args.get('q')))
+                         anime={"id": anime_id, "title": anime_title, "bannerImage": raw_anime.get('bannerImage') if raw_anime else ""}, 
+                         ep_num=ep_num, 
+                         stream_url=stream_url,
+                         backup_embed=backup_embed,
+                         prev_ep=ep_num - 1 if ep_num > 1 else None, 
+                         next_ep=ep_num + 1)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
