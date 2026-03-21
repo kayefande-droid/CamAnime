@@ -1,12 +1,16 @@
 import requests
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 
 # --- CONFIGURATION ---
 ANILIST_API_URL = 'https://graphql.anilist.co'
+CONSUMET_API_URL = 'https://api.consumet.org/meta/anilist' 
+# Alternative mirrors if the main one is down:
+# https://api.consumet.org/meta/anilist
+# https://consumet-api.herokuapp.com/meta/anilist
 
-# --- GRAPHQL QUERIES ---
+# --- GRAPHQL QUERIES (Keep these for fast metadata) ---
 TRENDING_QUERY = '''
 query ($page: Int, $perPage: Int) {
   Page (page: $page, perPage: $perPage) {
@@ -19,7 +23,7 @@ query ($page: Int, $perPage: Int) {
       status
       format
       averageScore
-      nextAiringEpisode { episode timeUntilAiring }
+      nextAiringEpisode { episode }
     }
   }
 }
@@ -74,18 +78,66 @@ def fetch_anilist(query, variables):
         response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
         return response.json().get('data', {})
     except Exception as e:
-        print(f"API Error: {e}")
+        print(f"AniList API Error: {e}")
         return {}
+
+def get_consumet_stream(anime_id, episode_num):
+    """
+    Fetches the streaming link for a specific episode using Consumet API.
+    1. Fetches episode list for the anime to find the specific episode ID.
+    2. Fetches the stream sources for that episode ID.
+    """
+    try:
+        # Step 1: Get episode list from Consumet (mapping AniList ID to provider IDs)
+        # We use the AniList ID directly
+        info_url = f"{CONSUMET_API_URL}/info/{anime_id}"
+        resp = requests.get(info_url, timeout=5)
+        
+        if resp.status_code != 200:
+            print(f"Consumet Info Error: {resp.status_code}")
+            return None
+            
+        data = resp.json()
+        episodes = data.get('episodes', [])
+        
+        # Find the matching episode object
+        target_ep = next((ep for ep in episodes if ep.get('number') == episode_num), None)
+        
+        if not target_ep:
+            print(f"Episode {episode_num} not found in Consumet data")
+            return None
+            
+        episode_id = target_ep['id']
+        
+        # Step 2: Get streaming links
+        watch_url = f"{CONSUMET_API_URL}/watch/{episode_id}"
+        stream_resp = requests.get(watch_url, timeout=5)
+        
+        if stream_resp.status_code != 200:
+            print(f"Consumet Watch Error: {stream_resp.status_code}")
+            return None
+            
+        stream_data = stream_resp.json()
+        
+        # Prefer higher quality (default/auto is usually best for HLS)
+        sources = stream_data.get('sources', [])
+        if not sources:
+            return None
+            
+        # Return the best source (usually the one with 'default' or 'backup')
+        # We prefer m3u8 (HLS) for better streaming
+        best_source = next((s for s in sources if s.get('quality') == 'default'), sources[0])
+        return best_source.get('url')
+
+    except Exception as e:
+        print(f"Consumet API Exception: {e}")
+        return None
 
 @app.route('/')
 def home():
-    # Fetch Trending Anime (serves as "New/Popular")
     data = fetch_anilist(TRENDING_QUERY, {'page': 1, 'perPage': 20})
     trending = data.get('Page', {}).get('media', [])
-    
-    # Pick the top item as the "Featured" hero anime
     featured = trending[0] if trending else None
-    
     return render_template('index.html', trending=trending, featured=featured, page_type="home")
 
 @app.route('/search')
@@ -93,33 +145,26 @@ def search():
     query = request.args.get('q')
     if not query:
         return redirect(url_for('home'))
-        
     data = fetch_anilist(SEARCH_QUERY, {'search': query, 'page': 1, 'perPage': 24})
     results = data.get('Page', {}).get('media', [])
-    
     return render_template('index.html', trending=results, search_query=query, page_type="search")
 
 @app.route('/anime/<int:anime_id>')
 def details(anime_id):
     data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
     anime = data.get('Media')
-    
     if not anime:
         return "Anime not found", 404
 
-    # Calculate available episodes
-    # If ongoing, nextAiringEpisode tells us the current max. 
-    # If finished, use 'episodes'.
+    # Logic to determine max episodes
     total_episodes = anime.get('episodes') or 0
     if anime.get('status') == 'RELEASING' and anime.get('nextAiringEpisode'):
         total_episodes = anime['nextAiringEpisode']['episode'] - 1
     elif total_episodes == 0:
-         # Fallback for long runners with unknown count
-         total_episodes = 1000 
+         total_episodes = 100 # Fallback
     
-    # Generate list of episodes
     episode_list = list(range(1, total_episodes + 1))
-    episode_list.reverse() # Show newest first
+    episode_list.reverse()
 
     return render_template('details.html', anime=anime, episode_list=episode_list)
 
@@ -131,11 +176,14 @@ def watch(anime_id, ep_num):
     if not anime:
         return "Anime not found", 404
 
-    # Primary Embed Source (vidsrc.cc uses AniList ID)
-    stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
+    # Fetch real stream URL
+    stream_url = get_consumet_stream(anime_id, ep_num)
     
-    # Generate simple next/prev links
-    total_episodes = anime.get('episodes') or 1000
+    # Fallback to embedded players if API fetch fails or is slow
+    # This ensures user always sees SOMETHING
+    backup_embed = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
+    
+    total_episodes = anime.get('episodes') or 100
     if anime.get('nextAiringEpisode'):
         total_episodes = anime['nextAiringEpisode']['episode'] - 1
         
@@ -146,6 +194,7 @@ def watch(anime_id, ep_num):
                          anime=anime, 
                          ep_num=ep_num, 
                          stream_url=stream_url,
+                         backup_embed=backup_embed,
                          prev_ep=prev_ep, 
                          next_ep=next_ep)
 
