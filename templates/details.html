@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ anime.title }} | Camanime</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: #0a0c15; color: #eef2ff; line-height: 1.5; }
+
+        header { background: rgba(10, 12, 21, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255, 180, 71, 0.2); position: sticky; top: 0; z-index: 1000; padding: 0.8rem 1.5rem; }
+        .site-title { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; color: transparent; text-decoration: none; }
+
+        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
+
+        .anime-header { display: flex; gap: 2rem; margin-bottom: 3rem; }
+        .anime-poster { width: 300px; height: 450px; background: #1e263a; border-radius: 12px; object-fit: cover; }
+        .anime-info { flex: 1; }
+        .anime-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; color: #FFB347; }
+        .anime-meta { display: flex; gap: 1rem; color: #b9c3e6; margin-bottom: 1.5rem; font-size: 0.9rem; }
+        .anime-rating { background: #FFB347; color: #0a0c15; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700; }
+        .anime-desc { color: #cbd5e1; margin-bottom: 2rem; max-width: 800px; }
+        .anime-actions { display: flex; gap: 1rem; }
+        .btn { padding: 0.6rem 1.2rem; border-radius: 30px; text-decoration: none; font-weight: 600; transition: 0.2s; background: #1e263a; color: white; border: 1px solid rgba(255,255,255,0.1); }
+        .btn:hover { background: #2d3748; border-color: #FFB347; }
+
+        .episodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 1rem; margin-top: 2rem; }
+        .ep-btn { background: #1e263a; border: 1px solid rgba(255,255,255,0.1); padding: 0.8rem; border-radius: 8px; text-align: center; text-decoration: none; color: white; transition: 0.2s; font-weight: 600; }
+        .ep-btn:hover { background: #FFB347; color: #0a0c15; border-color: #FFB347; transform: translateY(-2px); }
+
+        footer { margin-top: 4rem; text-align: center; color: #6f7aa3; font-size: 0.8rem; padding: 2rem; border-top: 1px solid rgba(255,255,255,0.05); }
+
+        @media (max-width: 768px) {
+            .anime-header { flex-direction: column; align-items: center; text-align: center; }
+            .anime-poster { width: 200px; height: 300px; }
+            .anime-meta { justify-content: center; }
+            .anime-actions { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <a href="/" class="site-title">Camanime</a>
+</header>
+
+<div class="container">
+    <div class="anime-header">
+        <img src="{{ anime.image }}" alt="{{ anime.title }}" class="anime-poster">
+        <div class="anime-info">
+            <h1 class="anime-title">{{ anime.title }}</h1>
+            <div class="anime-meta">
+                <span class="anime-rating">⭐ {{ anime.rating }}</span>
+                <span>{{ anime.tags | join(', ') }}</span>
+                <span>{{ anime.episodes | length }} Episodes</span>
+            </div>
+            <p class="anime-desc">{{ anime.description }}</p>
+            <div class="anime-actions">
+                <a href="#" class="btn"><i class="far fa-bookmark"></i> Bookmark</a>
+                <a href="#" class="btn"><i class="far fa-star"></i> Rate</a>
+            </div>
+        </div>
+    </div>
+
+    <h3 style="color: #FFB347; margin-bottom: 1rem; border-bottom: 2px solid #FFB347; display: inline-block; padding-bottom: 5px;">Episodes</h3>
+    <div class="episodes-grid">
+        {% for ep in anime.episodes %}
+        <a href="/watch/{{ anime_id }}/{{ ep }}" class="ep-btn">
+            EP {{ ep }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
+<footer>
+    <p>Camanime Demo - All videos are simulated dummy files.</p>
+</footer>
+
+</body>
+</html>
