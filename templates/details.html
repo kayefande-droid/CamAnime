@@ -101,22 +101,7 @@
 
 <script>
     function toggleBookmark() {
-        const anime = {
-            id: "{{ anime.id }}",
-            title: "{{ anime.title.english or anime.title.romaji }}",
-            img: "{{ anime.coverImage.extraLarge }}"
-        };
-
-        let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
-        const exists = bookmarks.find(b => b.id === anime.id);
-
-        if (!exists) {
-            bookmarks.push(anime);
-            localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
-            alert("Added to Bookmarks!");
-        } else {
-            alert("Already in Bookmarks!");
-        }
+        alert("Added to Bookmarks! (Local Storage implementation coming in next step)");
     }
 </script>
 

@@ -1,5 +1,5 @@
 import requests
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 
@@ -70,6 +70,7 @@ query ($id: Int) {
 '''
 
 def fetch_anilist(query, variables):
+    """Helper to send requests to AniList API."""
     try:
         response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
         return response.json().get('data', {})
@@ -77,16 +78,17 @@ def fetch_anilist(query, variables):
         print(f"AniList API Error: {e}")
         return {}
 
-def get_vidcloud_stream(anime_id, episode_num):
+def get_consumet_stream(anime_id, episode_num):
     """
-    Fetches the VidCloud/VidStream link for a specific episode using Consumet API.
+    Fetches the streaming link for a specific episode using Consumet API.
     """
     try:
-        # 1. Get episode list mapping
+        # Step 1: Get episode list from Consumet
         info_url = f"{CONSUMET_API_URL}/info/{anime_id}"
         resp = requests.get(info_url, timeout=5)
         
         if resp.status_code != 200:
+            print(f"Consumet Info Error: {resp.status_code}")
             return None
             
         data = resp.json()
@@ -96,25 +98,26 @@ def get_vidcloud_stream(anime_id, episode_num):
         target_ep = next((ep for ep in episodes if ep.get('number') == episode_num), None)
         
         if not target_ep:
+            print(f"Episode {episode_num} not found in Consumet data")
             return None
             
         episode_id = target_ep['id']
         
-        # 2. Get streaming links from VidCloud
+        # Step 2: Get streaming links
         watch_url = f"{CONSUMET_API_URL}/watch/{episode_id}"
         stream_resp = requests.get(watch_url, timeout=5)
         
         if stream_resp.status_code != 200:
+            print(f"Consumet Watch Error: {stream_resp.status_code}")
             return None
             
         stream_data = stream_resp.json()
         
-        # Return best source (m3u8)
+        # Prefer higher quality (default/auto is usually best for HLS)
         sources = stream_data.get('sources', [])
         if not sources:
             return None
             
-        # Prioritize 'default' or 'backup'
         best_source = next((s for s in sources if s.get('quality') == 'default'), sources[0])
         return best_source.get('url')
 
@@ -164,10 +167,10 @@ def watch(anime_id, ep_num):
     if not anime:
         return "Anime not found", 404
 
-    # Fetch real stream URL from VidCloud/VidStream
-    stream_url = get_vidcloud_stream(anime_id, ep_num)
+    # Fetch real stream URL
+    stream_url = get_consumet_stream(anime_id, ep_num)
     
-    # Fallback embed if API fails (direct vidsrc embed)
+    # Fallback to embedded players
     backup_embed = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
     
     total_episodes = anime.get('episodes') or 100
