@@ -1,6 +1,5 @@
-import requests
+import cloudscraper
 import re
-import json
 import urllib.parse
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, request, redirect, url_for
@@ -9,26 +8,33 @@ app = Flask(__name__)
 
 # --- CONFIGURATION ---
 BASE_URL = "https://animeheaven.me"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
-    "Referer": "https://animeheaven.me/",
-    "Origin": "https://animeheaven.me"
-}
+
+# Initialize CloudScraper (bypasses Cloudflare)
+scraper = cloudscraper.create_scraper(
+    browser={
+        'browser': 'chrome',
+        'platform': 'windows',
+        'desktop': True
+    }
+)
 
 # --- HELPER FUNCTIONS ---
 
 def get_soup(url):
-    """Fetches a URL and returns a BeautifulSoup object."""
+    """Fetches a URL using CloudScraper and returns BeautifulSoup."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
+        # Cloudscraper handles cookies and headers automatically
+        resp = scraper.get(url, timeout=15)
         if resp.status_code == 200:
             return BeautifulSoup(resp.content, "html.parser")
+        else:
+            print(f"Failed to fetch {url}: Status {resp.status_code}")
     except Exception as e:
-        print(f"Request Error ({url}): {e}")
+        print(f"Scraper Error ({url}): {e}")
     return None
 
 def extract_anime_id(url):
-    """Extracts ID from URL like /anime.php?id=123 or /anime/123."""
+    """Extracts ID from URL like /anime.php?id=123."""
     if "?" in url:
         return url.split("?")[-1]
     return url.split("/")[-1]
@@ -41,25 +47,23 @@ def scrape_home():
     anime_list = []
     
     if soup:
-        # Select anime grid items (adjust selector based on actual site structure)
-        # Typically .c or .iep for grid items
+        # Updated selector logic based on standard AH structure
         items = soup.select(".c") 
         for item in items:
             link = item.select_one("a")
             img = item.select_one("img")
-            title_tag = item.select_one(".t") # title class
-            ep_tag = item.select_one(".ep")   # episode count class
+            title_tag = item.select_one(".t")
+            ep_tag = item.select_one(".ep")
             
             if link and img:
                 title = title_tag.get_text(strip=True) if title_tag else "Unknown"
                 ep_text = ep_tag.get_text(strip=True) if ep_tag else "?"
                 
-                # Fix relative URLs
-                img_src = img['src']
+                img_src = img.get('src', '')
                 if img_src.startswith("//"): img_src = "https:" + img_src
                 elif img_src.startswith("/"): img_src = BASE_URL + img_src
                 
-                href = link['href']
+                href = link.get('href', '')
                 anime_id = extract_anime_id(href)
 
                 anime_list.append({
@@ -85,24 +89,25 @@ def scrape_search(query):
             
             if link and img:
                 title = title_tag.get_text(strip=True) if title_tag else "Unknown"
-                img_src = img['src']
+                img_src = img.get('src', '')
                 if img_src.startswith("//"): img_src = "https:" + img_src
+                elif img_src.startswith("/"): img_src = BASE_URL + img_src
                 
-                href = link['href']
+                href = link.get('href', '')
                 anime_id = extract_anime_id(href)
                 
                 results.append({
                     "id": anime_id,
                     "title": title,
                     "image": img_src,
-                    "episode": "?", # Search results might not show ep count
+                    "episode": "?",
                     "url": href
                 })
     return results
 
 def scrape_details(anime_id):
     """Scrapes anime details and episode list."""
-    url = f"{BASE_URL}/anime.php?{anime_id}" # Typical AH pattern
+    url = f"{BASE_URL}/anime.php?{anime_id}"
     soup = get_soup(url)
     
     if not soup:
@@ -110,20 +115,23 @@ def scrape_details(anime_id):
         
     title = soup.select_one(".infotitle").get_text(strip=True) if soup.select_one(".infotitle") else "Unknown"
     desc = soup.select_one(".infodes").get_text(strip=True) if soup.select_one(".infodes") else ""
-    img = soup.select_one(".poster img")
-    img_src = img['src'] if img else ""
+    
+    img_tag = soup.select_one(".poster img")
+    img_src = img_tag.get('src', '') if img_tag else ""
     if img_src.startswith("//"): img_src = "https:" + img_src
+    elif img_src.startswith("/"): img_src = BASE_URL + img_src
     
     # Get Episodes
     episodes = []
-    # Episodes are usually links in a grid, e.g. .d a
-    ep_links = soup.select(".d a") 
-    for link in reversed(ep_links): # Newest first usually
-        ep_url = link['href']
+    # Try different selectors for episodes as layouts vary
+    ep_links = soup.select(".d a") or soup.select(".episode a")
+    
+    for link in reversed(ep_links):
+        ep_url = link.get('href', '')
         ep_num = link.get_text(strip=True)
-        # Often just "1", "2", etc.
         try:
-            ep_id = extract_anime_id(ep_url)
+            # Extract episode ID (e.g., episode.php?anime_id&ep=1)
+            ep_id = ep_url.split("?")[-1] if "?" in ep_url else ep_url
             episodes.append({
                 "num": ep_num,
                 "id": ep_id,
@@ -142,44 +150,44 @@ def scrape_details(anime_id):
 
 def extract_stream_url(anime_id, ep_id):
     """
-    Attempts to extract the video URL from the episode page.
-    This is the hardest part. AH usually embeds a player.
+    Attempts to extract the video embed URL.
+    Falls back to vidsrc.cc if direct scraping fails.
     """
-    # 1. Get episode page
-    url = f"{BASE_URL}/{ep_id}" if "php" in ep_id else f"{BASE_URL}/episode.php?{ep_id}"
+    url = f"{BASE_URL}/episode.php?{ep_id}"
     soup = get_soup(url)
     
     stream_url = None
-    backup_embed = None
     
     if soup:
-        # Strategy 1: Look for IFRAME (Embed)
-        # Often id='video' or class='player'
+        # Try to find the iframe directly
         iframe = soup.select_one("iframe")
         if iframe:
-            src = iframe['src']
-            if src.startswith("//"): src = "https:" + src
-            # This is likely a VidCloud/Gogo/StreamTape embed
-            backup_embed = src
-            
-        # Strategy 2: Look for direct script injection (p, packed JS)
-        # This requires JS execution which we can't do easily in pure Python.
-        # However, we can use a known consistent fallback like vidsrc.cc based on ID.
-        
-        # If we found a specific embed URL (e.g. from Gogoanime), use it.
-        # Otherwise, construct a fallback.
-        
-    # Since direct extraction of the 'm3u8' is very hard without Selenium/Node,
-    # we will return the embed URL found, or a constructed fallback.
-    
-    # Construct fallback based on knowledge of other APIs
-    if not backup_embed:
-        # Fallback to vidsrc.cc using the anime ID + episode number if possible
-        # We need the numeric episode number for this.
-        # For now, let's just use the iframe found or None.
+            src = iframe.get('src', '')
+            if src:
+                if src.startswith("//"): src = "https:" + src
+                # Filter out ads or junk iframes
+                if "google" in src or "vid" in src or "mp4" in src:
+                    stream_url = src
+
+    # Reliable Fallback: Construct vidsrc.cc embed
+    # We need the numeric episode number for the fallback
+    # The ep_id often looks like 'anime_id&ep=1' or similar
+    try:
+        if not stream_url:
+            # Try to parse the episode number from the ID string if possible
+            # This is a heuristic guess
+            match = re.search(r'ep=(\d+)', ep_id)
+            if match:
+                ep_num = match.group(1)
+                stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
+            else:
+                # Last ditch: just use the ep_id if it looks like a number
+                if ep_id.isdigit():
+                    stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_id}"
+    except:
         pass
         
-    return backup_embed
+    return stream_url
 
 # --- ROUTES ---
 
@@ -206,26 +214,17 @@ def details(anime_id):
 
 @app.route('/watch/<path:anime_id>/<path:ep_id>')
 def watch(anime_id, ep_id):
-    anime = scrape_details(anime_id) # Need metadata
-    
-    # Get the actual stream URL from the episode page
+    anime = scrape_details(anime_id) # Need title for UI
     stream_url = extract_stream_url(anime_id, ep_id)
     
-    # If scraper fails to find an iframe, use a generic fallback
-    # (This assumes standard ID format, might need adjustment)
+    # Fallback if still empty
     if not stream_url:
         stream_url = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_id}"
 
-    # Find prev/next
-    prev_ep = None
-    next_ep = None
-    # (Simple logic: find current in list and get neighbors)
-    
     return render_template('watch.html', 
                          anime=anime, 
                          ep_num=ep_id, 
-                         stream_url=stream_url,
-                         backup_embed=stream_url)
+                         stream_url=stream_url)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
