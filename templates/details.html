@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ anime.title.english or anime.title.romaji }} - Camanime</title>
+    <title>{{ anime.title }} - Camanime</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
@@ -67,20 +67,12 @@
 
 <div class="container">
     <div class="anime-header">
-        <img src="{{ anime.coverImage.extraLarge }}" class="anime-poster" alt="Poster">
+        <img src="{{ anime.image }}" class="anime-poster" alt="Poster">
         <div class="anime-info">
-            <h1 class="anime-title">{{ anime.title.english or anime.title.romaji }}</h1>
+            <h1 class="anime-title">{{ anime.title }}</h1>
             <div class="anime-meta">
-                <span class="rating"><i class="fas fa-star"></i> {{ anime.averageScore / 10 if anime.averageScore else 'N/A' }}</span>
-                <span class="tag">{{ anime.format }}</span>
-                <span class="tag">{{ anime.status }}</span>
-                <span class="tag">{{ anime.episodes or '?' }} Eps</span>
-            </div>
-
-            <div class="anime-meta">
-                {% for genre in anime.genres %}
-                <span class="tag">{{ genre }}</span>
-                {% endfor %}
+                <span class="tag">Anime</span>
+                <span class="tag">{{ anime.episodes | length }} Eps</span>
             </div>
 
             <div class="desc" style="white-space: pre-line;">{{ anime.description | safe }}</div>
@@ -91,9 +83,9 @@
 
     <h2 style="border-left: 5px solid #FFB347; padding-left: 10px; margin-bottom: 1.5rem;">Episodes</h2>
     <div class="ep-grid">
-        {% for ep in episode_list %}
-        <a href="/watch/{{ anime.id }}/{{ ep }}" class="ep-btn">
-            EP {{ ep }}
+        {% for ep in anime.episodes %}
+        <a href="/watch/{{ anime.id }}/{{ ep.id }}" class="ep-btn">
+            EP {{ ep.num }}
         </a>
         {% endfor %}
     </div>
@@ -101,7 +93,7 @@
 
 <script>
     function toggleBookmark() {
-        alert("Added to Bookmarks! (Local Storage implementation coming in next step)");
+        alert("Added to Bookmarks! (Local Storage)");
     }
 </script>
 

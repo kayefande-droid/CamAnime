@@ -98,10 +98,10 @@
 <div class="container">
     {% if page_type == 'home' and featured %}
     <div class="featured-hero">
-        <img src="{{ featured.bannerImage or featured.coverImage.extraLarge }}" class="hero-bg" alt="Hero Background">
+        <img src="{{ featured.image }}" class="hero-bg" alt="Hero Background">
         <div class="hero-content">
-            <div class="hero-meta">Trending Now • {{ featured.format }}</div>
-            <h1 class="hero-title">{{ featured.title.english or featured.title.romaji }}</h1>
+            <div class="hero-meta">Trending Now • {{ featured.episode }}</div>
+            <h1 class="hero-title">{{ featured.title }}</h1>
             <a href="/anime/{{ featured.id }}" class="hero-btn"><i class="fas fa-play"></i> Watch Now</a>
         </div>
     </div>
@@ -118,10 +118,10 @@
     <div class="anime-grid">
         {% for anime in trending %}
         <a href="/anime/{{ anime.id }}" class="anime-card">
-            <span class="ep-badge">EP {{ anime.episodes or '?' }}</span>
-            <img src="{{ anime.coverImage.large }}" loading="lazy" alt="{{ anime.title.romaji }}">
+            <span class="ep-badge">{{ anime.episode }}</span>
+            <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
             <div class="card-overlay">
-                <div class="card-title">{{ anime.title.english or anime.title.romaji }}</div>
+                <div class="card-title">{{ anime.title }}</div>
             </div>
         </a>
         {% endfor %}

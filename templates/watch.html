@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch {{ anime.title.english or anime.title.romaji }} EP {{ ep_num }} | Camanime</title>
+    <title>Watch {{ anime.title }} | Camanime</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background: #0a0c15; color: #eef2ff; line-height: 1.5; }
@@ -25,10 +24,6 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        /* Native Video Player */
-        video { width: 100%; height: 100%; object-fit: contain; }
-
-        /* Fallback Iframe */
         iframe { width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0; }
 
         .controls { display: flex; justify-content: space-between; align-items: center; background: #1e263a; padding: 1rem; border-radius: 12px; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
@@ -47,14 +42,7 @@
         .nav-btn:hover { background: #FFB347; color: #0a0c15; }
         .nav-btn.disabled { opacity: 0.5; pointer-events: none; }
 
-        .btn-dl { background: #FFB347; color: #000; font-weight: bold; border: none; cursor: pointer; }
-
         .info { margin-bottom: 2rem; }
-
-        /* Server Switcher */
-        .server-select { display: flex; gap: 0.5rem; margin-top: 1rem; }
-        .server-btn { background: #333; color: white; border: 1px solid #555; padding: 0.3rem 0.8rem; cursor: pointer; border-radius: 4px; }
-        .server-btn.active { background: #FFB347; color: black; border-color: #FFB347; }
     </style>
 </head>
 <body>
@@ -66,115 +54,26 @@
 </header>
 
 <div class="container">
-    <div class="video-wrapper" id="videoContainer">
-        {% if stream_url %}
-            <!-- Primary Player (HLS) -->
-            <video id="videoPlayer" controls poster="{{ anime.bannerImage }}">
-                Your browser does not support the video tag.
-            </video>
-        {% else %}
-            <!-- Fallback Embed immediately if API failed -->
-            <iframe src="{{ backup_embed }}" allowfullscreen></iframe>
-        {% endif %}
-    </div>
-
-    <!-- Server Controls -->
-    <div class="server-select">
-        <button class="server-btn active" onclick="switchSource('native')">Fast Server (Native)</button>
-        <button class="server-btn" onclick="switchSource('embed')">Backup Server (Embed)</button>
+    <div class="video-wrapper">
+        <!-- Direct Embed Player -->
+        <iframe src="{{ stream_url }}" allowfullscreen></iframe>
     </div>
 
     <div class="controls">
-        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep if prev_ep else '#' }}" class="nav-btn {{ 'disabled' if not prev_ep else '' }}">
-            <i class="fas fa-chevron-left"></i> Prev
-        </a>
+        <a href="#" class="nav-btn"><i class="fas fa-chevron-left"></i> Prev</a>
 
         <div style="text-align: center;">
             <span class="ep-badge">EP {{ ep_num }}</span>
-            <span style="font-weight: bold;">{{ anime.title.english or anime.title.romaji }}</span>
+            <span style="font-weight: bold;">{{ anime.title }}</span>
         </div>
 
-        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep if next_ep else '#' }}" class="nav-btn {{ 'disabled' if not next_ep else '' }}">
-            Next <i class="fas fa-chevron-right"></i>
-        </a>
+        <a href="#" class="nav-btn">Next <i class="fas fa-chevron-right"></i></a>
     </div>
 
     <div class="info">
-         <button class="nav-btn btn-dl" onclick="downloadVideo()"><i class="fas fa-download"></i> Download Episode</button>
          <a href="/anime/{{ anime.id }}" class="nav-btn"><i class="fas fa-list"></i> View All Episodes</a>
     </div>
 </div>
-
-<script>
-    var video = document.getElementById('videoPlayer');
-    var streamUrl = "{{ stream_url }}";
-    var backupUrl = "{{ backup_embed }}";
-    var container = document.getElementById('videoContainer');
-
-    // Initialize HLS Player if stream URL exists
-    if (streamUrl && Hls.isSupported()) {
-        var hls = new Hls();
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, function() {
-            // video.play();
-        });
-
-        // Handle Errors - fallback to embed
-        hls.on(Hls.Events.ERROR, function (event, data) {
-            if (data.fatal) {
-                console.log("HLS Error, switching to backup...");
-                switchSource('embed');
-            }
-        });
-    } else if (streamUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = streamUrl;
-    } else if (!streamUrl) {
-        // No stream URL found initially
-        console.log("No direct stream found, using backup embed.");
-    }
-
-    function switchSource(type) {
-        container.innerHTML = ''; // Clear container
-
-        document.querySelectorAll('.server-btn').forEach(b => b.classList.remove('active'));
-
-        if (type === 'native' && streamUrl) {
-            // Re-create video element
-            var newVideo = document.createElement('video');
-            newVideo.id = 'videoPlayer';
-            newVideo.controls = true;
-            newVideo.style.width = '100%';
-            newVideo.style.height = '100%';
-            container.appendChild(newVideo);
-
-            if (Hls.isSupported()) {
-                var hls = new Hls();
-                hls.loadSource(streamUrl);
-                hls.attachMedia(newVideo);
-            } else {
-                newVideo.src = streamUrl;
-            }
-            document.querySelector("button[onclick=\"switchSource('native')\"]").classList.add('active');
-        } else {
-            // Switch to Iframe
-            var iframe = document.createElement('iframe');
-            iframe.src = backupUrl;
-            iframe.allowFullscreen = true;
-            container.appendChild(iframe);
-            document.querySelector("button[onclick=\"switchSource('embed')\"]").classList.add('active');
-        }
-    }
-
-    function downloadVideo() {
-        if (streamUrl) {
-            window.open(streamUrl, '_blank');
-        } else {
-            alert("Direct download not available for this source. Try using a video downloader extension on the Backup Server.");
-        }
-    }
-</script>
 
 </body>
 </html>
