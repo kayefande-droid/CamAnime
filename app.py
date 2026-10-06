@@ -1,5 +1,13 @@
 import requests
+import logging
+import re
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from flask import Flask, render_template, request, redirect, url_for
+from streaming_providers import streaming_manager
 
 app = Flask(__name__)
 
@@ -32,7 +40,7 @@ query ($search: String, $page: Int, $perPage: Int) {
     media (search: $search, sort: POPULARITY_DESC, type: ANIME) {
       id
       title { romaji english }
-      coverImage { large }
+      coverImage { large extraLarge }
       episodes
       status
       averageScore
@@ -63,52 +71,15 @@ def fetch_anilist(query, variables):
     """Fetches data from AniList GraphQL API."""
     try:
         response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
+        response.raise_for_status()  # Raise an exception for bad status codes
         return response.json().get('data', {})
-    except Exception as e:
-        print(f"AniList API Error: {e}")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"AniList API Error: {e}")
+        return {}
+    except ValueError as e:  # JSON decode error
+        logger.error(f"AniList JSON Decode Error: {e}")
         return {}
 
-def get_consumet_stream(anime_id, episode_num):
-    """
-    Fetches streaming links via Consumet (VidCloud).
-    """
-    try:
-        # 1. Get episode list mapping
-        info_url = f"{CONSUMET_API_URL}/info/{anime_id}"
-        resp = requests.get(info_url, timeout=5)
-        
-        if resp.status_code != 200:
-            return None
-            
-        data = resp.json()
-        episodes = data.get('episodes', [])
-        
-        # Find the matching episode object
-        target_ep = next((ep for ep in episodes if ep.get('number') == episode_num), None)
-        
-        if not target_ep:
-            return None
-            
-        # 2. Get streaming links
-        watch_url = f"{CONSUMET_API_URL}/watch/{target_ep['id']}"
-        stream_resp = requests.get(watch_url, timeout=5)
-        
-        if stream_resp.status_code != 200:
-            return None
-            
-        stream_data = stream_resp.json()
-        sources = stream_data.get('sources', [])
-        
-        # Prefer default quality
-        best_source = next((s for s in sources if s.get('quality') == 'default'), None)
-        if not best_source and sources:
-            best_source = sources[0]
-            
-        return best_source.get('url') if best_source else None
-
-    except Exception as e:
-        print(f"Consumet API Exception: {e}")
-        return None
 
 @app.route('/')
 def home():
@@ -119,11 +90,14 @@ def home():
     # Process data for template
     processed_trending = []
     for anime in trending:
+        # Use extraLarge if available, otherwise fall back to large
+        cover_image = anime['coverImage']
+        image_url = cover_image.get('extraLarge') or cover_image.get('large')
         processed_trending.append({
             "id": anime['id'],
             "title": anime['title']['english'] or anime['title']['romaji'],
-            "image": anime['coverImage']['large'],
-            "episode": f"Ep {anime['nextAiringEpisode']['episode'] - 1}" if anime.get('nextAiringEpisode') else f"{anime.get('episodes')} Eps"
+            "image": image_url,
+            "episode": f"Ep {anime.get('nextAiringEpisode', {}).get('episode', 0) - 1}" if anime.get('nextAiringEpisode') else f"{anime.get('episodes')} Eps"
         })
         
     processed_featured = None
@@ -133,7 +107,7 @@ def home():
             "title": featured['title']['english'] or featured['title']['romaji'],
             "image": featured['bannerImage'] or featured['coverImage']['extraLarge'],
             "format": featured['format'],
-            "episode": f"Ep {featured['nextAiringEpisode']['episode'] - 1}" if featured.get('nextAiringEpisode') else f"{featured.get('episodes')} Eps"
+            "episode": f"Ep {featured.get('nextAiringEpisode', {}).get('episode', 0) - 1}" if featured.get('nextAiringEpisode') else f"{featured.get('episodes')} Eps"
         }
 
     return render_template('index.html', trending=processed_trending, featured=processed_featured, page_type="home")
@@ -149,10 +123,14 @@ def search():
     
     results = []
     for anime in raw_results:
+        # Use extraLarge if available, otherwise fall back to large
+        cover_image = anime['coverImage']
+        image_url = cover_image.get('extraLarge') or cover_image.get('large')
+
         results.append({
             "id": anime['id'],
             "title": anime['title']['english'] or anime['title']['romaji'],
-            "image": anime['coverImage']['large'],
+            "image": image_url,
             "episode": f"{anime.get('episodes') or '?'} Eps"
         })
         
@@ -171,12 +149,19 @@ def details(anime_id):
     if raw_anime.get('status') == 'RELEASING' and raw_anime.get('nextAiringEpisode'):
         total_episodes = raw_anime['nextAiringEpisode']['episode'] - 1
     elif total_episodes == 0:
-         total_episodes = 100 
+         total_episodes = None  # Unknown episode count
     
     episode_list = []
-    for i in range(1, total_episodes + 1):
-        episode_list.append({"id": i, "num": i})
-    episode_list.reverse()
+    if total_episodes is not None:
+        for i in range(1, total_episodes + 1):
+            episode_list.append({"id": i, "num": i})
+        episode_list.reverse()
+    else:
+        # If episode count is unknown, show a reasonable default or leave empty
+        # For now, we'll show first 20 episodes as placeholder
+        for i in range(1, 21):
+            episode_list.append({"id": i, "num": i})
+        episode_list.reverse()
 
     anime = {
         "id": raw_anime['id'],
@@ -201,9 +186,16 @@ def watch(anime_id, ep_num):
     if raw_anime:
         anime_title = raw_anime['title']['english'] or raw_anime['title']['romaji']
     
-    # Get Stream from Consumet
-    stream_url = get_consumet_stream(anime_id, ep_num)
-    
+    # Get streaming sources using our manager with fallback
+    # Try to get streaming sources from any available provider
+    streaming_result = streaming_manager.get_streaming_sources(str(anime_id), provider=None)
+
+    # Extract the best available stream URL
+    stream_url = None
+    if streaming_result.get('sources') and len(streaming_result['sources']) > 0:
+        # Use the first available source
+        stream_url = streaming_result['sources'][0].get('url')
+
     # Fallback Embed
     backup_embed = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
 

@@ -67,7 +67,11 @@
 
 <div class="container">
     <div class="anime-header">
-        <img src="{{ anime.image }}" class="anime-poster" alt="Poster">
+        <img src="{{ anime.image }}"
+     srcset="{{ anime.image }} 1x, {{ anime.image }} 2x"
+     sizes="(max-width: 768px) 90vw, 300px"
+     class="anime-poster"
+     alt="{{ anime.title }} Poster">
         <div class="anime-info">
             <h1 class="anime-title">{{ anime.title }}</h1>
             <div class="anime-meta">

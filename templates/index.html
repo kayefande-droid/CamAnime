@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Camanime | Watch Anime Online Free</title>
+    <meta name="google-site-verification" content="PLACEHOLDER_GOOGLE_VERIFICATION_CODE" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
@@ -98,7 +99,12 @@
 <div class="container">
     {% if page_type == 'home' and featured %}
     <div class="featured-hero">
-        <img src="{{ featured.image }}" class="hero-bg" alt="Hero Background">
+        <img src="{{ featured.image }}"
+     srcset="{{ featured.image }} 1x, {{ featured.image }} 2x"
+     sizes="(max-width: 768px) 100vw, 400px"
+     class="hero-bg"
+     alt="Hero Background"
+     fetchpriority="high">
         <div class="hero-content">
             <div class="hero-meta">Trending Now • {{ featured.episode }}</div>
             <h1 class="hero-title">{{ featured.title }}</h1>
@@ -119,7 +125,11 @@
         {% for anime in trending %}
         <a href="/anime/{{ anime.id }}" class="anime-card">
             <span class="ep-badge">{{ anime.episode }}</span>
-            <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+            <img src="{{ anime.image }}"
+     srcset="{{ anime.image }} 1x, {{ anime.image }} 2x"
+     sizes="(max-width: 768px) calc(50vw - 2rem), (max-width: 1200px) calc(33.333vw - 2rem), 200px"
+     loading="lazy"
+     alt="{{ anime.title }}">
             <div class="card-overlay">
                 <div class="card-title">{{ anime.title }}</div>
             </div>
