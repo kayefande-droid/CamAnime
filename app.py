@@ -475,6 +475,10 @@ def details(anime_id: int):
             rel_card["relation"] = (edge.get("relationType") or "RELATED").replace("_", " ")
             relations.append(rel_card)
 
+    # Order seasons chronologically: prequels/parents first, then by year
+    _rel_order = {"PREQUEL": 0, "PARENT": 0, "SOURCE": 1, "SEQUEL": 2, "SPIN OFF": 3, "SIDE STORY": 3}
+    relations.sort(key=lambda r: (_rel_order.get((r.get("relation") or "").upper(), 4), r.get("year") or 0))
+
     # Recommendations
     recommendations = []
     for rec in (raw_anime.get("recommendations") or {}).get("nodes") or []:

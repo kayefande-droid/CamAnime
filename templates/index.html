@@ -1340,5 +1340,45 @@
     document.addEventListener('DOMContentLoaded', loadWatchlist);
 </script>
 
+<script>
+/* Header search autocomplete: AnimeHeaven catalog (covers old + niche titles), match highlighted */
+(function () {
+  var form = document.querySelector('.search-form');
+  if (!form) return;
+  var input = form.querySelector('.search-input');
+  var box = document.createElement('div');
+  box.className = 'search-suggest'; box.hidden = true;
+  form.appendChild(box);
+  var t = null;
+  function esc(x) { return (x || '').replace(/[&<>"]/g, function (m) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]; }); }
+  function hi(title, q) {
+    var i = title.toLowerCase().indexOf(q.toLowerCase());
+    if (i < 0 || !q) return esc(title);
+    return esc(title.slice(0, i)) + '<mark>' + esc(title.slice(i, i + q.length)) + '</mark>' + esc(title.slice(i + q.length));
+  }
+  input.addEventListener('input', function () {
+    clearTimeout(t);
+    var q = input.value.trim();
+    if (q.length < 2) { box.hidden = true; return; }
+    t = setTimeout(function () {
+      fetch('/api/heaven/search?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var items = (d.results || []).slice(0, 7);
+          if (!items.length) { box.hidden = true; return; }
+          box.innerHTML = items.map(function (x) {
+            return '<a class="sg-item" href="/heaven/' + encodeURIComponent(x.id) + '">'
+              + '<span class="sg-title">' + hi(x.title || 'Unknown anime', q) + '</span>'
+              + '<span class="sg-sub">AnimeHeaven</span></a>';
+          }).join('');
+          box.hidden = false;
+        })
+        .catch(function () { box.hidden = true; });
+    }, 250);
+  });
+  document.addEventListener('click', function (e) { if (!form.contains(e.target)) box.hidden = true; });
+  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') box.hidden = true; });
+})();
+</script>
 </body>
 </html>

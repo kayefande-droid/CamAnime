@@ -686,7 +686,7 @@
             <a href="/anime/{{ rel.id }}" class="mini-poster-card">
                 <img src="{{ rel.image }}" loading="lazy" alt="{{ rel.title }}">
                 <div class="mini-poster-body">
-                    <div class="mini-poster-rel">{{ rel.relation }} • {{ rel.format }}</div>
+                    <div class="mini-poster-rel">{{ rel.relation }} • {{ rel.format }}{% if rel.year %} • {{ rel.year }}{% endif %}</div>
                     <div class="mini-poster-title">{{ rel.title }}</div>
                 </div>
             </a>
