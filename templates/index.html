@@ -146,7 +146,7 @@
             border-radius: 50%;
             background: var(--emerald);
             box-shadow: 0 0 8px var(--emerald);
-            animation: pulseDot 2s infinite;
+            animation: pulseDot 1.2s infinite;
         }
         @keyframes pulseDot {
             0%, 100% { opacity: 1; transform: scale(1); }
@@ -256,7 +256,7 @@
             inset: 0;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.65s ease;
+            transition: opacity 0.4s ease;
             display: flex;
             align-items: flex-end;
         }
@@ -276,7 +276,7 @@
             object-position: center 20%;
             filter: saturate(1.1) contrast(1.05);
             transform: scale(1.02);
-            transition: transform 6s ease;
+            transition: transform 3.5s ease;
         }
         .hero-slide.active .hero-backdrop {
             transform: scale(1);
@@ -522,7 +522,7 @@
             background: var(--bg-elevated);
             border: 1px solid var(--border-subtle);
             overflow: hidden;
-            transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
             display: flex;
             flex-direction: column;
             text-decoration: none;
@@ -544,7 +544,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
-            transition: transform 0.4s ease;
+            transition: transform 0.25s ease;
         }
         .anime-card:hover .card-poster-wrap img {
             transform: scale(1.07);
@@ -1232,7 +1232,7 @@
     if (slides.length > 1) {
         setInterval(() => {
             setHeroSlide((currentSlide + 1) % slides.length);
-        }, 7000);
+        }, 4500);
     }
 
     // YouTube Trailer Modal

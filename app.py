@@ -32,13 +32,36 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.secret_key = os.environ.get("CAMANIME_SECRET", "camanime-dev-secret-change-me")
 
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400  # /static cached 1 day
+
+
+@app.after_request
+def _speed_headers(resp):
+    """Long-cache static assets; gzip large text responses (stdlib, no deps)."""
+    try:
+        if request.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
+            return resp
+        if resp.status_code == 200 and "gzip" in (request.headers.get("Accept-Encoding") or ""):
+            body = resp.get_data()
+            ctype = resp.headers.get("Content-Type", "")
+            if len(body) > 1024 and ("text/html" in ctype or "application/json" in ctype or "javascript" in ctype or "text/css" in ctype):
+                import gzip as _gz
+                resp.set_data(_gz.compress(body, compresslevel=5))
+                resp.headers["Content-Encoding"] = "gzip"
+                resp.headers["Content-Length"] = str(len(resp.get_data()))
+    except Exception:
+        pass
+    return resp
+
+
 PLATFORM_STORE = platform.load_store()
 platform.ensure_admin(PLATFORM_STORE)
 PLATFORM_STORE = platform.load_store()
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: Dict[str, tuple] = {}
-ANILIST_CACHE_TTL = 900  # 15 minutes
+ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
 
 MEDIA_FRAGMENT = """
   id

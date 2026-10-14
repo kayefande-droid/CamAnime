@@ -33,7 +33,7 @@ body { font-size: clamp(0.92rem, 0.88rem + 0.25vw, 1rem); }
 /* Search popup slide */
 .ca-search-pop { position: fixed; inset: auto 1rem 1rem 1rem; z-index: 3000; display: none; justify-content: center; pointer-events: none; }
 .ca-search-pop.open { display: flex; }
-.ca-search-pop .sheet { pointer-events: auto; width: min(560px, 100%); background: #0e111a; border: 1px solid rgba(255,179,71,.4); border-radius: 16px; padding: 1rem 1.1rem; box-shadow: 0 24px 60px rgba(0,0,0,.7); animation: caUp .28s ease; }
+.ca-search-pop .sheet { pointer-events: auto; width: min(560px, 100%); background: #0e111a; border: 1px solid rgba(255,179,71,.4); border-radius: 16px; padding: 1rem 1.1rem; box-shadow: 0 24px 60px rgba(0,0,0,.7); animation: caUp .18s ease; }
 @keyframes caUp { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
 /* Themes: midnight (default), vibrant, sakura, forest */
 [data-theme="vibrant"] { --accent: #7C61D4; --accent-crimson: #EAAE87; }
