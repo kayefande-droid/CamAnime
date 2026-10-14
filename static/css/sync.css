@@ -120,3 +120,6 @@ body .sg-item:hover { background: rgba(255,179,71,.1); }
 body .sg-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body .sg-title mark { background: transparent; color: #FFB347; font-weight: 800; }
 body .sg-sub { font-size: .7rem; color: #64708a; flex-shrink: 0; }
+
+/* ── CEO announcement banner ── */
+body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; background: linear-gradient(135deg, rgba(255,179,71,.12), rgba(255,94,98,.08)); border: 1px solid rgba(255,179,71,.35); border-radius: 14px; padding: .9rem 1.1rem; margin-bottom: 1.4rem; font-size: .9rem; }

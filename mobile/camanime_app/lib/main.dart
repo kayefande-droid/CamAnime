@@ -7,16 +7,25 @@ import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
-const String API_BASE_DEFAULT = 'https://your-camanime-host';
-const APP_CREDIT = 'Made by kayefande-droid & co.';
+// ── Release line ───────────────────────────────────────
+const String APP_VERSION = '1.0.0';
+const String APP_CREDIT = 'Made by kayefande-droid & co.';
 
-// ── Brand ──────────────────────────────────────────────
+// API host is baked at build time (kept out of the repo source):
+//   flutter build apk --release --dart-define=CAMANIME_API=https://your-host
+// It can still be overridden per-device on the You tab.
+const String API_HOST = String.fromEnvironment(
+  'CAMANIME_API',
+  defaultValue: 'https://camanime.onrender.com',
+);
+
+// ── Website-mirrored palette ───────────────────────────
 const bg = Color(0xFF07080D);
 const card = Color(0xFF0E111A);
 const card2 = Color(0xFF141926);
 const amber = Color(0xFFFFB347);
-const purple = Color(0xFF7C61D4);
 const pink = Color(0xFFFF5E62);
+const purple = Color(0xFF7C61D4);
 const mint = Color(0xFF10B981);
 const muted = Color(0xFFA0ABC0);
 
@@ -29,75 +38,125 @@ class CamAnimeApp extends StatefulWidget {
 }
 
 class _CamAnimeAppState extends State<CamAnimeApp> {
-  ThemeMode mode = ThemeMode.dark;
   int tab = 0;
+  bool showTutorial = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _firstRun();
+  }
+
+  Future<void> _firstRun() async {
+    final p = await SharedPreferences.getInstance();
+    if (p.getBool('tutorial_done') != true) {
+      if (mounted) setState(() => showTutorial = true);
+    } else {
+      _checkUpdate();
+    }
+  }
+
+  Future<void> _checkUpdate({bool manual = false}) async {
+    try {
+      final b = await Api.base();
+      final r = await http.get(Uri.parse('$b/api/version')).timeout(const Duration(seconds: 12));
+      final d = json.decode(r.body) as Map<String, dynamic>;
+      final latest = (d['app_version'] ?? '').toString();
+      if (latest.isNotEmpty && latest != APP_VERSION && mounted) {
+        _updateDialog(latest);
+      } else if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('You are on the latest version ($APP_VERSION)')));
+      }
+    } catch (_) {
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not reach the website — check internet.')));
+      }
+    }
+  }
+
+  void _updateDialog(String latest) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: card,
+        title: Text('Update available: $latest'),
+        content: const Text('A newer CamAnime is on the website. Download it now? Watching stays free, no login needed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Later')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() => tab = 3);
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Open the Updates tab to download.')));
+            },
+            child: const Text('Get it'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final dark = ThemeData.dark(useMaterial3: true).copyWith(
-      scaffoldBackgroundColor: bg,
-      colorScheme: ColorScheme.fromSeed(
-          seedColor: amber, brightness: Brightness.dark, primary: amber),
-      cardTheme: CardThemeData(
-          color: card,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: card2,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none),
-        hintStyle: const TextStyle(color: muted),
-      ),
-      navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Color(0xFF0B0E16),
-          indicatorColor: Color(0x33FFB347)),
-    );
-    final light = ThemeData(useMaterial3: true).copyWith(
-      colorScheme: ColorScheme.fromSeed(seedColor: purple),
-      cardTheme: CardThemeData(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-    );
     return MaterialApp(
       title: 'CamAnime',
       debugShowCheckedModeBanner: false,
-      themeMode: mode,
-      theme: light,
-      darkTheme: dark,
-      home: Scaffold(
-        body: [const HomeTab(), const SearchTab(), const LibraryTab(), const ProfileTab()][tab],
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: tab,
-          onDestinationSelected: (i) => setState(() => tab = i),
-          destinations: const [
-            NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Home'),
-            NavigationDestination(
-                icon: Icon(Icons.search_outlined),
-                selectedIcon: Icon(Icons.search),
-                label: 'Search'),
-            NavigationDestination(
-                icon: Icon(Icons.video_library_outlined),
-                selectedIcon: Icon(Icons.video_library),
-                label: 'Library'),
-            NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'You'),
-          ],
+      theme: ThemeData.dark(useMaterial3: true).copyWith(
+        scaffoldBackgroundColor: bg,
+        colorScheme: ColorScheme.fromSeed(seedColor: amber, brightness: Brightness.dark, primary: amber),
+        cardTheme: CardThemeData(color: card, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true, fillColor: card2,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          hintStyle: const TextStyle(color: muted),
         ),
+      ),
+      home: Stack(
+        children: [
+          Scaffold(
+            body: [
+              HomeTab(onUpdate: () => _checkUpdate(manual: true)),
+              const SearchTab(),
+              const LibraryTab(),
+              UpdatesTab(onCheck: () => _checkUpdate(manual: true)),
+              const ProfileTab(),
+            ][tab],
+            bottomNavigationBar: NavigationBar(
+              backgroundColor: const Color(0xFF0B0E16),
+              selectedIndex: tab,
+              onDestinationSelected: (i) => setState(() => tab = i),
+              destinations: const [
+                NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+                NavigationDestination(icon: Icon(Icons.search_outlined), selectedIcon: Icon(Icons.search), label: 'Search'),
+                NavigationDestination(icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Library'),
+                NavigationDestination(icon: Icon(Icons.system_update_outlined), selectedIcon: Icon(Icons.system_update), label: 'Updates'),
+                NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'You'),
+              ],
+            ),
+          ),
+          if (showTutorial)
+            TutorialOverlay(onDone: () async {
+              final p = await SharedPreferences.getInstance();
+              await p.setBool('tutorial_done', true);
+              setState(() => showTutorial = false);
+              _checkUpdate();
+            }),
+        ],
       ),
     );
   }
 }
 
+// ── API (website backend) ──────────────────────────────
 class Api {
   static Future<String> base() async {
     final p = await SharedPreferences.getInstance();
-    return p.getString('api_base') ?? API_BASE_DEFAULT;
+    final b = (p.getString('api_base') ?? '').trim();
+    return b.isEmpty ? API_HOST : b;
   }
 
   static Future<String?> token() async {
@@ -110,16 +169,44 @@ class Api {
     return {if (t != null) 'Authorization': 'Bearer $t'};
   }
 
-  static Future<Map<String, dynamic>> episodeSources(int id, int ep) async {
+  static Future<List> catalog(String feed) async {
     final b = await base();
-    final r = await http.get(Uri.parse('$b/api/public/anime/$id?ep=$ep'),
-        headers: await headers());
+    final r = await http.get(Uri.parse('$b/api/heaven/catalog?feed=$feed')).timeout(const Duration(seconds: 20));
+    return ((json.decode(r.body) as Map)['results'] as List?) ?? [];
+  }
+
+  static Future<List> search(String q) async {
+    final b = await base();
+    final r = await http.get(Uri.parse('$b/api/heaven/search?q=${Uri.encodeComponent(q)}')).timeout(const Duration(seconds: 20));
+    return ((json.decode(r.body)['results'] as List?) ?? []);
+  }
+
+  static Future<Map<String, dynamic>> animeInfo(String siteId) async {
+    final b = await base();
+    final r = await http.get(Uri.parse('$b/api/heaven/anime/${Uri.encodeComponent(siteId)}')).timeout(const Duration(seconds: 20));
+    return (json.decode(r.body)['anime'] as Map<String, dynamic>?) ?? {};
+  }
+
+  static Future<List> resolveSources(String key, String siteId) async {
+    final b = await base();
+    final r = await http.get(Uri.parse('$b/api/heaven/resolve/${Uri.encodeComponent(key)}?site_id=${Uri.encodeComponent(siteId)}')).timeout(const Duration(seconds: 25));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    return (d['sources'] as List?) ?? [];
+  }
+
+  static Future<Map<String, dynamic>> announcements() async {
+    final b = await base();
+    final r = await http.get(Uri.parse('$b/api/announcements')).timeout(const Duration(seconds: 12));
     return json.decode(r.body) as Map<String, dynamic>;
   }
 
-  /// Sign in (or register) against the website's permanent user database.
-  static Future<Map<String, dynamic>> signIn(String email, String password,
-      {bool register = false, String name = ''}) async {
+  static Future<Map<String, dynamic>> version() async {
+    final b = await base();
+    final r = await http.get(Uri.parse('$b/api/version')).timeout(const Duration(seconds: 12));
+    return json.decode(r.body) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> signIn(String email, String password, {bool register = false, String name = ''}) async {
     final b = await base();
     final path = register ? 'register' : 'login';
     final r = await http.post(Uri.parse('$b/api/auth/$path'),
@@ -137,8 +224,7 @@ class Api {
   static Future<void> signOut() async {
     final b = await base();
     try {
-      await http.post(Uri.parse('$b/api/auth/logout'),
-          headers: await headers());
+      await http.post(Uri.parse('$b/api/auth/logout'), headers: await headers());
     } catch (_) {}
     final p = await SharedPreferences.getInstance();
     await p.remove('api_token');
@@ -146,233 +232,435 @@ class Api {
   }
 }
 
-// ── Shared bits ────────────────────────────────────────
-class GradientHeader extends StatelessWidget {
-  final String title;
-  final String sub;
-  final bool showThemeToggle;
-  final VoidCallback? onThemeToggle;
-  final bool dark;
-  const GradientHeader(
-      {super.key,
-      required this.title,
-      required this.sub,
-      this.showThemeToggle = false,
-      this.onThemeToggle,
-      this.dark = true});
+// ── Shared widgets ─────────────────────────────────────
+class PosterCard extends StatelessWidget {
+  final Map item;
+  final double width;
+  const PosterCard({super.key, required this.item, this.width = 128});
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 52, 20, 20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1A1033), Color(0xFF07080D)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [amber, pink]),
-              borderRadius: BorderRadius.circular(14),
+    final img = (item['image'] ?? '').toString();
+    return GestureDetector(
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => DetailScreen(siteId: item['id'].toString(), title: (item['title'] ?? '').toString()))),
+      child: SizedBox(
+        width: width,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: AspectRatio(
+              aspectRatio: 2 / 2.85,
+              child: img.isEmpty
+                  ? Container(color: card2, child: const Icon(Icons.movie, color: muted))
+                  : Image.network(img, fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(color: card2, child: const Icon(Icons.broken_image, color: muted))),
             ),
-            child: const Icon(Icons.play_circle_fill,
-                color: Colors.black, size: 26),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w900)),
-                  Text(sub,
-                      style:
-                          const TextStyle(color: muted, fontSize: 12)),
-                ]),
-          ),
-          if (showThemeToggle)
-            IconButton(
-              icon: Icon(dark ? Icons.light_mode : Icons.dark_mode,
-                  color: amber),
-              onPressed: onThemeToggle,
-            ),
-        ],
+          const SizedBox(height: 6),
+          Text((item['title'] ?? 'Unknown').toString(),
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        ]),
       ),
     );
   }
 }
 
-class SectionTitle extends StatelessWidget {
-  final String text;
-  final String? action;
-  const SectionTitle({super.key, required this.text, this.action});
+// ── Tutorial ───────────────────────────────────────────
+class TutorialOverlay extends StatefulWidget {
+  final VoidCallback onDone;
+  const TutorialOverlay({super.key, required this.onDone});
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
-        child: Row(
-          children: [
-            Text(text,
-                style: const TextStyle(
-                    fontSize: 17, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            if (action != null)
-              const Text('See all',
-                  style: TextStyle(color: amber, fontSize: 12)),
-          ],
-        ),
+  State<TutorialOverlay> createState() => _TutorialOverlayState();
+}
+
+class _TutorialOverlayState extends State<TutorialOverlay> {
+  int i = 0;
+  static const steps = [
+    ['Find anime', 'Search the full catalog — classics included. Watching is free, no account needed.'],
+    ['Stream or save', 'Play 1080p SUB/DUB in the app, or download into the hidden library.'],
+    ['Take it with you', 'Files stay inside the app until you tap Save to device. Updates tab keeps you current.'],
+  ];
+  @override
+  Widget build(BuildContext context) => Container(
+        color: Colors.black.withOpacity(0.88),
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [amber, pink]), borderRadius: BorderRadius.circular(22)),
+            child: const Icon(Icons.play_circle_fill, color: Colors.black, size: 44),
+          ),
+          const SizedBox(height: 18),
+          Text(steps[i][0], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+          const SizedBox(height: 8),
+          Text(steps[i][1], textAlign: TextAlign.center, style: const TextStyle(color: muted)),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (var k = 0; k < steps.length; k++)
+              Container(margin: const EdgeInsets.symmetric(horizontal: 4), width: i == k ? 26 : 8, height: 8,
+                  decoration: BoxDecoration(color: i == k ? amber : muted, borderRadius: BorderRadius.circular(99))),
+          ]),
+          const SizedBox(height: 20),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+            onPressed: () => i < steps.length - 1 ? setState(() => i++) : widget.onDone(),
+            child: Text(i < steps.length - 1 ? 'Next' : 'Start watching'),
+          ),
+        ]),
       );
 }
 
 // ── Home ───────────────────────────────────────────────
-class HomeTab extends StatelessWidget {
-  const HomeTab({super.key});
+class HomeTab extends StatefulWidget {
+  final VoidCallback onUpdate;
+  const HomeTab({super.key, required this.onUpdate});
+  @override
+  State<HomeTab> createState() => _HomeTabState();
+}
 
-  static const picks = [
-    {'id': 113415, 't': 'Jujutsu Kaisen', 'e': '🍥 Sorcery • Action', 'g1': purple, 'g2': pink},
-    {'id': 21, 't': 'One Piece', 'e': '🏴‍☠️ Long-running • Adventure', 'g1': amber, 'g2': pink},
-    {'id': 20, 't': 'Naruto', 'e': '🍜 Classic • Ninja', 'g1': mint, 'g2': purple},
-    {'id': 16498, 't': 'Attack on Titan', 'e': '⚔️ Dark • Epic', 'g1': Color(0xFF334155), 'g2': pink},
-    {'id': 1535, 't': 'Death Note', 'e': '📓 Thriller • Mind games', 'g1': Color(0xFF1E1B4B), 'g2': purple},
-    {'id': 101922, 't': 'Demon Slayer', 'e': '🔥 Sword • Stunning fights', 'g1': pink, 'g2': amber},
-    {'id': 22297, 't': 'Frieren', 'e': '🌸 Calm • Fantasy', 'g1': mint, 'g2': Color(0xFF0EA5E9)},
-    {'id': 182765, 't': 'Solo Leveling', 'e': '👾 Action • Hunter', 'g1': purple, 'g2': Color(0xFF0EA5E9)},
-  ];
+class _HomeTabState extends State<HomeTab> {
+  List popular = [], fresh = [], ann = [];
+  bool loading = true;
+  String? err;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final results = await Future.wait([Api.catalog('popular'), Api.catalog('new'), Api.announcements()]);
+      if (!mounted) return;
+      setState(() {
+        popular = results[0] as List;
+        fresh = results[1] as List;
+        ann = ((results[2] as Map)['announcements'] as List?) ?? [];
+        loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        err = 'No internet — connect and pull to retry. The app streams from the website.';
+        loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: () async {
+          setState(() => loading = true);
+          await _load();
+        },
+        child: Builder(builder: (ctx) {
+          final kids = <Widget>[_header()];
+          if (loading) {
+            kids.add(const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator(color: amber))));
+          } else if (err != null) {
+            kids.add(Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(children: [
+                  const Icon(Icons.wifi_off, size: 48, color: muted),
+                  const SizedBox(height: 8),
+                  Text(err!, textAlign: TextAlign.center, style: const TextStyle(color: muted)),
+                ])));
+          } else {
+            kids.addAll(_homeContent());
+          }
+          return ListView(padding: EdgeInsets.zero, children: kids);
+        }),
+      );
+
+  Widget _header() => Container(
+        padding: const EdgeInsets.fromLTRB(20, 52, 20, 18),
+        decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF1A1033), bg], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+        child: Row(children: [
+          Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(gradient: const LinearGradient(colors: [amber, pink]), borderRadius: BorderRadius.circular(14)),
+              child: const Icon(Icons.play_circle_fill, color: Colors.black, size: 26)),
+          const SizedBox(width: 12),
+          const Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('CamAnime', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            Text('Free 1080p SUB + DUB · v$APP_VERSION', style: TextStyle(color: muted, fontSize: 12)),
+          ])),
+        ]),
+      );
+
+  List<Widget> _homeContent() {
+    final out = <Widget>[];
+    if (ann.isNotEmpty) {
+      out.add(Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+        child: Card(
+            child: ListTile(
+          leading: const Icon(Icons.campaign, color: amber),
+          title: Text((ann.first['title'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text((ann.first['body'] ?? '').toString(), maxLines: 2, overflow: TextOverflow.ellipsis),
+        )),
+      ));
+    }
+    out.add(_rail('Popular now', popular));
+    out.add(_rail('Fresh releases', fresh));
+    out.add(const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(APP_CREDIT, textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12))));
+    return out;
+  }
+
+  Widget _rail(String title, List items) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+        SizedBox(
+          height: 236,
+          child: items.isEmpty
+              ? const Center(child: Text('Nothing here yet — pull to refresh.', style: TextStyle(color: muted)))
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => PosterCard(item: items[i] as Map),
+                ),
+        ),
+      ]);
+}
+
+// ── Detail ─────────────────────────────────────────────
+class DetailScreen extends StatefulWidget {
+  final String siteId;
+  final String title;
+  const DetailScreen({super.key, required this.siteId, required this.title});
+  @override
+  State<DetailScreen> createState() => _DetailScreenState();
+}
+
+class _DetailScreenState extends State<DetailScreen> {
+  Map info = {};
+  bool loading = true;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final d = await Api.animeInfo(widget.siteId);
+      if (!mounted) return;
+      setState(() {
+        info = d;
+        loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
-        const GradientHeader(
-            title: 'CamAnime', sub: 'Free 1080p SUB + DUB • no account needed'),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _heroCard(context),
-                const SectionTitle(text: '🔥 Trending now', action: 'x'),
-                for (final a in picks)
-                  _animeCard(context, a),
-                const SizedBox(height: 12),
-                const Text(APP_CREDIT,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: muted, fontSize: 12)),
+    final eps = (info['episodes'] as List?) ?? [];
+    final poster = (info['poster'] ?? '').toString();
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      body: loading
+          ? const Center(child: CircularProgressIndicator(color: amber))
+          : ListView(padding: const EdgeInsets.all(16), children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: SizedBox(
+                    width: 120,
+                    child: AspectRatio(
+                      aspectRatio: 2 / 2.85,
+                      child: poster.isEmpty
+                          ? Container(color: card2, child: const Icon(Icons.movie, color: muted))
+                          : Image.network(poster, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(color: card2, child: const Icon(Icons.broken_image, color: muted))),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text((info['title'] ?? widget.title).toString(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  if ((info['title_jp'] ?? '').toString().isNotEmpty)
+                    Text(info['title_jp'].toString(), style: const TextStyle(color: muted, fontSize: 12)),
+                  const SizedBox(height: 6),
+                  Text('${eps.length} episodes • SUB + DUB', style: const TextStyle(color: mint, fontSize: 12)),
+                ])),
               ]),
-        ),
-      ],
+              if ((info['description'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(info['description'].toString(), maxLines: 4, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 13)),
+              ],
+              const SizedBox(height: 12),
+              const Text('Episodes', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              if (eps.isEmpty)
+                const Text('No episodes listed — try on the website.', style: TextStyle(color: muted))
+              else
+                for (final e in eps)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: amber.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.play_arrow, color: amber)),
+                      title: Text('Episode ${(e['num'] ?? '?').toString()}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text((e['title'] ?? '').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right, color: muted),
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => PlayerScreen(
+                                  siteId: widget.siteId,
+                                  epKey: (e['key'] ?? '').toString(),
+                                  label: 'Ep ${e['num']} • ${(info['title'] ?? widget.title).toString()}'))),
+                    ),
+                  ),
+            ]),
     );
   }
+}
 
-  Widget _heroCard(BuildContext ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              colors: [Color(0xFFFFB347), Color(0xFFFF5E62)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-                color: pink.withOpacity(0.35),
-                blurRadius: 24,
-                offset: const Offset(0, 10))
-          ],
-        ),
-        child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.25),
-                      borderRadius: BorderRadius.circular(999)),
-                  child: const Text('FREE 1080p SUB + DUB',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          fontSize: 12))),
-              const SizedBox(height: 10),
-              const Text('Watch anime beautifully.',
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black)),
-              const Text(
-                  'Trailers, simulcasts, classics, hidden downloads with save-to-device.',
-                  style: TextStyle(color: Color(0xFF3A2000))),
-              const SizedBox(height: 12),
-              Row(children: [
-                FilledButton(
-                    style: FilledButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white),
-                    onPressed: () => Navigator.push(
-                        ctx,
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                const SearchTab(full: true))),
-                    child: const Text('Find anime')),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.black26)),
-                    onPressed: () {},
-                    child: const Text('How it works')),
+// ── Player (heaven direct sources, no login needed) ────
+class PlayerScreen extends StatefulWidget {
+  final String siteId;
+  final String epKey;
+  final String label;
+  const PlayerScreen({super.key, required this.siteId, required this.epKey, required this.label});
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  VideoPlayerController? vc;
+  ChewieController? cc;
+  List sources = [];
+  Map? active;
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<String> _absUrl(String u) async {
+    if (u.startsWith('http')) return u;
+    return '${await Api.base()}$u';
+  }
+
+  Future<void> _play(Map s) async {
+    await vc?.pause();
+    cc?.dispose();
+    vc?.dispose();
+    vc = null;
+    cc = null;
+    final raw = (s['proxy_url'] ?? s['url'] ?? '').toString();
+    if (raw.isEmpty) return;
+    try {
+      vc = VideoPlayerController.networkUrl(Uri.parse(await _absUrl(raw)));
+      await vc!.initialize();
+      if (!mounted) return;
+      cc = ChewieController(videoPlayerController: vc!, autoPlay: true, allowMuting: true, allowFullScreen: true);
+    } catch (_) {}
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _load() async {
+    try {
+      sources = await Api.resolveSources(widget.epKey, widget.siteId);
+      if (sources.isNotEmpty) {
+        active = sources.first;
+        await _play(active!);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _downloadActive() async {
+    final tok = await Api.token();
+    if (tok == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Optional: sign in on the You tab to unlock downloads.')));
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Saved into the hidden in-app library.')));
+    }
+  }
+
+  @override
+  void dispose() {
+    vc?.dispose();
+    cc?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+        body: loading
+            ? const Center(child: CircularProgressIndicator(color: amber))
+            : ListView(padding: const EdgeInsets.all(16), children: [
+                Container(
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), color: Colors.black),
+                  clipBehavior: Clip.antiAlias,
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: cc != null
+                        ? Chewie(controller: cc!)
+                        : const Center(child: Text('Could not load a stream — try another source.', style: TextStyle(color: muted))),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                for (final s in sources)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    color: identical(s, active) ? const Color(0xFF1B2133) : card,
+                    child: ListTile(
+                      leading: const Icon(Icons.play_circle_fill, color: amber, size: 30),
+                      title: Text((s['quality'] ?? s['server'] ?? 'Source').toString(), style: const TextStyle(fontWeight: FontWeight.w700)),
+                      trailing: identical(s, active) ? const Icon(Icons.check_circle, color: mint) : null,
+                      onTap: () async {
+                        setState(() {
+                          active = s;
+                          loading = true;
+                        });
+                        await _play(s);
+                        setState(() => loading = false);
+                      },
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+                      onPressed: _downloadActive,
+                      child: const Text('Download to hidden library', style: TextStyle(fontWeight: FontWeight.w900))),
+                ),
+                const SizedBox(height: 10),
+                const Text(APP_CREDIT, textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12)),
               ]),
-            ]),
-      );
-
-  Widget _animeCard(BuildContext ctx, Map a) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(10),
-          leading: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  colors: [a['g1'] as Color, a['g2'] as Color]),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Center(
-                child: Text((a['t'] as String).substring(0, 1),
-                    style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white))),
-          ),
-          title: Text(a['t'] as String,
-              style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: Text(a['e'] as String,
-              style: const TextStyle(color: muted, fontSize: 12)),
-          trailing: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: amber.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.play_arrow, color: amber),
-          ),
-          onTap: () => Navigator.push(
-              ctx,
-              MaterialPageRoute(
-                  builder: (_) =>
-                      WatchScreen(animeId: a['id'] as int, ep: 1))),
-        ),
       );
 }
 
-// ── Search ─────────────────────────────────────────────
+// ── Search (posters, full catalog) ─────────────────────
 class SearchTab extends StatefulWidget {
-  final bool full;
-  const SearchTab({super.key, this.full = false});
+  const SearchTab({super.key});
   @override
   State<SearchTab> createState() => _SearchTabState();
 }
@@ -381,112 +669,61 @@ class _SearchTabState extends State<SearchTab> {
   final c = TextEditingController();
   List results = [];
   bool loading = false;
+
   Future<void> go() async {
-    if (c.text.trim().isEmpty) return;
+    if (c.text.trim().length < 2) return;
     setState(() => loading = true);
     try {
-      final b = await Api.base();
-      final r = await http.get(
-          Uri.parse('$b/api/heaven/search?q=${Uri.encodeComponent(c.text)}'));
-      results = (json.decode(r.body)['results'] as List?) ?? [];
+      results = await Api.search(c.text.trim());
     } catch (_) {
       results = [];
     }
-    setState(() => loading = false);
+    if (mounted) setState(() => loading = false);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final body = Column(children: [
-      if (!widget.full)
-        const GradientHeader(
-            title: 'Search', sub: 'AnimeHeaven catalog • SUB + DUB'),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              controller: c,
-              textInputAction: TextInputAction.search,
-              onSubmitted: (_) => go(),
-              decoration: const InputDecoration(
-                hintText: 'Search anime… e.g. One Piece',
-                prefixIcon: Icon(Icons.search),
+  Widget build(BuildContext context) => SafeArea(
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: c,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => go(),
+                  decoration: const InputDecoration(hintText: 'Search every anime…', prefixIcon: Icon(Icons.search)),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(gradient: const LinearGradient(colors: [amber, pink]), borderRadius: BorderRadius.circular(14)),
+                child: IconButton(icon: const Icon(Icons.arrow_forward, color: Colors.black), onPressed: go),
+              ),
+            ]),
           ),
-          const SizedBox(width: 8),
-          Container(
-            decoration: BoxDecoration(
-                gradient:
-                    const LinearGradient(colors: [amber, pink]),
-                borderRadius: BorderRadius.circular(14)),
-            child: IconButton(
-                icon: const Icon(Icons.arrow_forward, color: Colors.black),
-                onPressed: go),
+          if (loading) const LinearProgressIndicator(color: amber),
+          Expanded(
+            child: results.isEmpty
+                ? const Center(
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.search_rounded, size: 56, color: muted),
+                    SizedBox(height: 8),
+                    Text('Old classics included — just type.', style: TextStyle(color: muted)),
+                  ]))
+                : GridView.builder(
+                    padding: const EdgeInsets.all(16),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3, childAspectRatio: 0.52, crossAxisSpacing: 10, mainAxisSpacing: 12),
+                    itemCount: results.length,
+                    itemBuilder: (_, i) => PosterCard(item: results[i] as Map, width: double.infinity),
+                  ),
           ),
         ]),
-      ),
-      if (loading) const LinearProgressIndicator(color: amber),
-      Expanded(
-          child: results.isEmpty
-              ? const Center(
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                      Icon(Icons.search_rounded,
-                          size: 56, color: muted),
-                      SizedBox(height: 8),
-                      Text('Search anything — results appear here.',
-                          style: TextStyle(color: muted)),
-                    ]))
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: results.length,
-                  itemBuilder: (_, i) => Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      leading: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                                colors: [purple, pink]),
-                            borderRadius: BorderRadius.circular(12)),
-                        child: const Icon(Icons.movie,
-                            color: Colors.white),
-                      ),
-                      title: Text(results[i]['title'] ?? '',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700)),
-                      subtitle: Text(
-                          'AnimeHeaven • ${results[i]['id']}',
-                          style: const TextStyle(
-                              color: muted, fontSize: 12)),
-                      trailing: const Icon(Icons.play_circle_fill,
-                          color: amber, size: 30),
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => WatchScreen(
-                                  animeId: 113415,
-                                  ep: 1,
-                                  heavenId: results[i]['id']))),
-                    ),
-                  ),
-                )),
-    ]);
-    if (widget.full) {
-      return Scaffold(
-          appBar: AppBar(title: const Text('Search anime')), body: body);
-    }
-    return body;
-  }
+      );
 }
 
-// ── Library ────────────────────────────────────────────
+// ── Library (hidden in-app, save-to-device export) ─────
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key});
   @override
@@ -511,80 +748,184 @@ class _LibraryTabState extends State<LibraryTab> {
 
   Future<void> _saveToDevice(File f) async {
     try {
-      final pub =
-          await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      final pub = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
       await f.copy('${pub.path}/${f.uri.pathSegments.last}');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Saved to device Downloads')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to device Downloads')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 
   @override
-  Widget build(BuildContext context) => Column(children: [
-        const GradientHeader(
-            title: 'My Library', sub: 'Hidden in-app • export when you want'),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: files.isEmpty
-                ? const Center(
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                        Icon(Icons.video_library_outlined,
-                            size: 64, color: muted),
-                        SizedBox(height: 10),
-                        Text('No downloads yet',
-                            style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800)),
-                        Text(
-                            'Download from any Watch screen — files stay\ninside the app until you tap Save.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: muted)),
-                      ]))
-                : ListView.builder(
-                    itemCount: files.length,
-                    itemBuilder: (_, i) {
-                      final f = files[i] as File;
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        child: ListTile(
-                          leading: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                  color: purple.withOpacity(0.15),
-                                  borderRadius:
-                                      BorderRadius.circular(12)),
-                              child: const Icon(Icons.movie,
-                                  color: purple)),
-                          title: Text(f.uri.pathSegments.last,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
-                          trailing: FilledButton(
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: amber,
-                                  foregroundColor: Colors.black),
-                              onPressed: () => _saveToDevice(f),
-                              child: const Text('Save')),
-                        ),
-                      );
-                    }),
-          ),
+  Widget build(BuildContext context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('My Library', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            const Text('Hidden in-app — nothing leaves until you tap Save.', style: TextStyle(color: muted, fontSize: 12)),
+            const SizedBox(height: 10),
+            Expanded(
+              child: files.isEmpty
+                  ? const Center(
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.video_library_outlined, size: 64, color: muted),
+                      SizedBox(height: 10),
+                      Text('No downloads yet', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      Text('Download from any player screen.', style: TextStyle(color: muted)),
+                    ]))
+                  : ListView.builder(
+                      itemCount: files.length,
+                      itemBuilder: (_, i) {
+                        final f = files[i] as File;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: ListTile(
+                            leading: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(color: purple.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                                child: const Icon(Icons.movie, color: purple)),
+                            title: Text(f.uri.pathSegments.last, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+                            trailing: FilledButton(
+                                style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+                                onPressed: () => _saveToDevice(f),
+                                child: const Text('Save')),
+                          ),
+                        );
+                      }),
+            ),
+          ]),
         ),
-      ]);
+      );
 }
 
-// ── Profile ────────────────────────────────────────────
+// ── Updates (version check + CEO announcements) ─────────
+class UpdatesTab extends StatefulWidget {
+  final VoidCallback onCheck;
+  const UpdatesTab({super.key, required this.onCheck});
+  @override
+  State<UpdatesTab> createState() => _UpdatesTabState();
+}
+
+class _UpdatesTabState extends State<UpdatesTab> {
+  List ann = [];
+  Map ver = {};
+  bool busy = false;
+  double? progress;
+
+  Future<void> _load() async {
+    try {
+      final a = await Api.announcements();
+      final v = await Api.version();
+      if (!mounted) return;
+      setState(() {
+        ann = (a['announcements'] as List?) ?? [];
+        ver = v;
+      });
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _downloadUpdate() async {
+    setState(() {
+      busy = true;
+      progress = 0;
+    });
+    try {
+      final b = await Api.base();
+      final req = http.Request('GET', Uri.parse('$b/get/android'));
+      final resp = await http.Client().send(req);
+      final total = resp.contentLength ?? 0;
+      final bytes = <int>[];
+      await for (final chunk in resp.stream) {
+        bytes.addAll(chunk);
+        if (mounted && total > 0) setState(() => progress = bytes.length / total);
+      }
+      final dir = await getDownloadsDirectory() ?? await getApplicationDocumentsDirectory();
+      final f = File('${dir.path}/CamAnime-update.apk');
+      await f.writeAsBytes(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Update saved to Downloads — open CamAnime-update.apk to install.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Download failed — check internet.')));
+      }
+    }
+    if (mounted) {
+      setState(() {
+        busy = false;
+        progress = null;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final latest = (ver['app_version'] ?? '').toString();
+    final hasUpdate = latest.isNotEmpty && latest != APP_VERSION;
+    return SafeArea(
+      child: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('Updates', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+        Text('This app: v$APP_VERSION', style: const TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 10),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.system_update, color: amber),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(hasUpdate ? 'Version $latest is available' : 'You are up to date',
+                        style: const TextStyle(fontWeight: FontWeight.w800))),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+                      onPressed: busy ? null : _downloadUpdate,
+                      child: Text(busy ? 'Downloading…' : 'Download update')),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(onPressed: widget.onCheck, child: const Text('Check')),
+              ]),
+              if (progress != null) ...[
+                const SizedBox(height: 10),
+                LinearProgressIndicator(value: progress, color: amber),
+              ],
+            ]),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text('Announcements from kayefande-droid & co.', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        if (ann.isEmpty)
+          const Card(child: ListTile(title: Text('No announcements yet.', style: TextStyle(color: muted))))
+        else
+          for (final a in ann)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: const Icon(Icons.campaign, color: amber),
+                title: Text((a['title'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text((a['body'] ?? '').toString()),
+              ),
+            ),
+      ]),
+    );
+  }
+}
+
+// ── You (link, optional auth — watching needs no login) ─
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
   @override
@@ -602,77 +943,62 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _init() async {
     final p = await SharedPreferences.getInstance();
-    base.text = p.getString('api_base') ?? API_BASE_DEFAULT;
+    base.text = p.getString('api_base') ?? '';
     name.text = p.getString('username') ?? '';
     if (mounted) setState(() {});
   }
 
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const GradientHeader(
-              title: 'You', sub: 'One account • web + Android + Windows'),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(children: [
-                    const CircleAvatar(
-                        radius: 34,
-                        backgroundColor: Color(0x33FFB347),
-                        child: Icon(Icons.person,
-                            size: 38, color: amber)),
-                    const SizedBox(height: 8),
-                    TextField(
-                        controller: name,
-                        decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.badge_outlined))),
-                    const SizedBox(height: 8),
-                    TextField(
-                        controller: base,
-                        decoration: const InputDecoration(
-                            labelText: 'Website API base URL',
-                            prefixIcon: Icon(Icons.link))),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                          style: FilledButton.styleFrom(
-                              backgroundColor: amber,
-                              foregroundColor: Colors.black),
-                          onPressed: () async {
-                            final p =
-                                await SharedPreferences.getInstance();
-                            await p.setString(
-                                'api_base', base.text.trim());
-                            await p.setString(
-                                'username', name.text.trim());
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Linked to website API')));
-                            }
-                          },
-                          child: const Text('Save & link app to website')),
-                    ),
-                  ]),
-                ),
+  Widget build(BuildContext context) => ListView(padding: EdgeInsets.zero, children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 52, 20, 18),
+          decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF1A1033), bg], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('You', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+            Text('Watching is free without an account. Sign in to sync downloads, ratings and forums.', style: TextStyle(color: muted, fontSize: 12)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(children: [
+                  const CircleAvatar(radius: 34, backgroundColor: Color(0x33FFB347), child: Icon(Icons.person, size: 38, color: amber)),
+                  const SizedBox(height: 8),
+                  TextField(controller: name, decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.badge_outlined))),
+                  const SizedBox(height: 8),
+                  TextField(
+                      controller: base,
+                      decoration: const InputDecoration(
+                          labelText: 'Website URL (blank = built-in default)', prefixIcon: Icon(Icons.link))),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+                        onPressed: () async {
+                          final p = await SharedPreferences.getInstance();
+                          await p.setString('api_base', base.text.trim());
+                          await p.setString('username', name.text.trim());
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Linked to website backend')));
+                          }
+                        },
+                        child: const Text('Save & link app to website')),
+                  ),
+                ]),
               ),
-              const SizedBox(height: 12),
-              const _AuthCard(),
-              const SizedBox(height: 16),
-              const Text(APP_CREDIT,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: muted, fontSize: 12)),
-            ]),
-          ),
-        ],
-      );
+            ),
+            const SizedBox(height: 12),
+            const _AuthCard(),
+            const SizedBox(height: 16),
+            const Text(APP_CREDIT, textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12)),
+          ]),
+        ),
+      ]);
 }
 
 class _AuthCard extends StatefulWidget {
@@ -701,17 +1027,12 @@ class _AuthCardState extends State<_AuthCard> {
   Future<void> _go(bool register) async {
     setState(() => busy = true);
     try {
-      final u = await Api.signIn(email.text.trim(), password.text,
-          register: register, name: email.text.split('@').first);
+      final u = await Api.signIn(email.text.trim(), password.text, register: register, name: email.text.split('@').first);
       if (!mounted) return;
       setState(() => who = u['email'] as String?);
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Signed in as ${u['email']}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Signed in as ${u['email']} — synced with website')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
     if (mounted) setState(() => busy = false);
   }
@@ -723,14 +1044,10 @@ class _AuthCardState extends State<_AuthCard> {
           child: ListTile(
         leading: Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: mint.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: mint.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
             child: const Icon(Icons.verified_user, color: mint)),
-        title: Text(who!,
-            style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: const Text('Linked — downloads & forums unlocked',
-            style: TextStyle(color: muted, fontSize: 12)),
+        title: Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
+        subtitle: const Text('Synced with the website database', style: TextStyle(color: muted, fontSize: 12)),
         trailing: TextButton(
             onPressed: () async {
               await Api.signOut();
@@ -742,280 +1059,25 @@ class _AuthCardState extends State<_AuthCard> {
     return Card(
         child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Website account',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                  const Text('Same permanent database as the site.',
-                      style: TextStyle(color: muted, fontSize: 12)),
-                  const SizedBox(height: 10),
-                  TextField(
-                      controller: email,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                          labelText: 'Email (Gmail / iCloud)',
-                          prefixIcon: Icon(Icons.email_outlined))),
-                  const SizedBox(height: 8),
-                  TextField(
-                      controller: password,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline))),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                        child: FilledButton(
-                            style: FilledButton.styleFrom(
-                                backgroundColor: amber,
-                                foregroundColor: Colors.black),
-                            onPressed:
-                                busy ? null : () => _go(false),
-                            child: Text(busy
-                                ? 'Please wait…'
-                                : 'Sign in'))),
-                    const SizedBox(width: 8),
-                    Expanded(
-                        child: OutlinedButton(
-                            onPressed:
-                                busy ? null : () => _go(true),
-                            child: const Text('Register'))),
-                  ]),
-                ])));
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Account (optional)', style: TextStyle(fontWeight: FontWeight.w800)),
+              const Text('Same permanent database as the site.', style: TextStyle(color: muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              TextField(
+                  controller: email, keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email (Gmail / iCloud)', prefixIcon: Icon(Icons.email_outlined))),
+              const SizedBox(height: 8),
+              TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password', prefixIcon: Icon(Icons.lock_outline))),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                    child: FilledButton(
+                        style: FilledButton.styleFrom(backgroundColor: amber, foregroundColor: Colors.black),
+                        onPressed: busy ? null : () => _go(false),
+                        child: Text(busy ? 'Please wait…' : 'Sign in'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton(onPressed: busy ? null : () => _go(true), child: const Text('Register'))),
+              ]),
+            ])));
   }
-}
-
-// ── Watch ──────────────────────────────────────────────
-class WatchScreen extends StatefulWidget {
-  final int animeId;
-  final int ep;
-  final String? heavenId;
-  const WatchScreen(
-      {super.key, required this.animeId, required this.ep, this.heavenId});
-  @override
-  State<WatchScreen> createState() => _WatchScreenState();
-}
-
-class _WatchScreenState extends State<WatchScreen> {
-  VideoPlayerController? vc;
-  ChewieController? cc;
-  List servers = [];
-  Map? active;
-  bool loading = true;
-  String audio = 'sub';
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    _resume();
-  }
-
-  Future<void> _resume() async {
-    final p = await SharedPreferences.getInstance();
-    await p.setInt('resume_${widget.animeId}', widget.ep);
-  }
-
-  Future<void> _load() async {
-    try {
-      final data = await Api.episodeSources(widget.animeId, widget.ep);
-      servers = (data['servers'] as List?) ?? [];
-      final subs = servers.where((s) => s['audio'] == audio).toList();
-      active = (subs.isNotEmpty ? subs : servers).isNotEmpty
-          ? (subs.isNotEmpty ? subs : servers).first
-          : null;
-      final url = active?['stream_url']?.toString() ?? '';
-      if (active?['playback_mode'] != 'iframe' && url.isNotEmpty) {
-        vc = VideoPlayerController.networkUrl(Uri.parse(url.startsWith('http')
-            ? url
-            : '${await Api.base()}$url'));
-        await vc!.initialize();
-        if (!mounted) return;
-        cc = ChewieController(
-            videoPlayerController: vc!, autoPlay: true, allowMuting: true);
-      }
-    } catch (_) {}
-    if (mounted) setState(() => loading = false);
-  }
-
-  Future<void> _pick(Map s) async {
-    setState(() {
-      active = s;
-      loading = true;
-    });
-    await vc?.dispose();
-    cc?.dispose();
-    vc = null;
-    cc = null;
-    try {
-      final url = s['stream_url']?.toString() ?? '';
-      if (s['playback_mode'] != 'iframe' && url.isNotEmpty) {
-        vc = VideoPlayerController.networkUrl(Uri.parse(url.startsWith('http')
-            ? url
-            : '${await Api.base()}$url'));
-        await vc!.initialize();
-        if (!mounted) return;
-        cc = ChewieController(
-            videoPlayerController: vc!, autoPlay: true, allowMuting: true);
-      }
-    } catch (_) {}
-    if (mounted) setState(() => loading = false);
-  }
-
-  Future<void> _downloadActive() async {
-    final tok = await Api.token();
-    if (tok == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Sign in first (You tab) — then downloads unlock.')));
-      }
-      return;
-    }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Download queued into hidden in-app library')));
-    }
-  }
-
-  @override
-  void dispose() {
-    vc?.dispose();
-    cc?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-            title: Text('Ep ${widget.ep} • ${audio.toUpperCase()}'),
-            backgroundColor: bg),
-        body: loading
-            ? const Center(
-                child: CircularProgressIndicator(color: amber))
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8))
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: cc != null
-                          ? Chewie(controller: cc!)
-                          : Container(
-                              color: card2,
-                              padding: const EdgeInsets.all(24),
-                              child: const Center(
-                                  child: Text(
-                                      'Embed-only server.\nPlays in webview on device builds.',
-                                      textAlign: TextAlign.center,
-                                      style:
-                                          TextStyle(color: muted)))),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                        color: card,
-                        borderRadius: BorderRadius.circular(999)),
-                    child: Row(children: [
-                      for (final v in ['sub', 'dub'])
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (audio == v) return;
-                              setState(() {
-                                audio = v;
-                                loading = true;
-                              });
-                              _load();
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10),
-                              decoration: BoxDecoration(
-                                gradient: audio == v
-                                    ? const LinearGradient(
-                                        colors: [amber, pink])
-                                    : null,
-                                borderRadius:
-                                    BorderRadius.circular(999),
-                              ),
-                              child: Text(v.toUpperCase(),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      color: audio == v
-                                          ? Colors.black
-                                          : muted)),
-                            ),
-                          ),
-                        ),
-                    ]),
-                  ),
-                  const SizedBox(height: 8),
-                  for (final s
-                      in servers.where((x) => x['audio'] == audio))
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      color: active == s ? const Color(0xFF1B2133) : card,
-                      child: ListTile(
-                        leading: Icon(
-                            active == s
-                                ? Icons.play_circle_fill
-                                : Icons.play_circle_outline,
-                            color: amber,
-                            size: 30),
-                        title: Text(s['name'] ?? 'Server',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700)),
-                        subtitle: Text(
-                            '${s['quality'] ?? ''} • ${s['playback_mode'] ?? ''}',
-                            style: const TextStyle(
-                                color: muted, fontSize: 12)),
-                        trailing: active == s
-                            ? const Icon(Icons.check_circle,
-                                color: mint)
-                            : null,
-                        onTap: () => _pick(s),
-                      ),
-                    ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: Container(
-                      decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                              colors: [amber, pink]),
-                          borderRadius:
-                              BorderRadius.circular(999)),
-                      child: FilledButton(
-                          style: FilledButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              foregroundColor: Colors.black),
-                          onPressed: _downloadActive,
-                          child: const Text('Download to hidden library',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w900))),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(APP_CREDIT,
-                      textAlign: TextAlign.center,
-                      style:
-                          TextStyle(color: muted, fontSize: 12)),
-                ],
-              ),
-      );
 }

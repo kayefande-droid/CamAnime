@@ -131,6 +131,14 @@ def _init() -> None:
           key TEXT PRIMARY KEY,
           value INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS announcements (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL DEFAULT '',
+          body TEXT NOT NULL DEFAULT '',
+          author TEXT NOT NULL DEFAULT '',
+          t INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ann_t ON announcements(t);
         """)
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('site_clicks', 0)")
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('plays', 0)")
@@ -225,7 +233,11 @@ def load_store() -> Dict:
                    "meta": {"anime_id": r["anime_id"], "ep": r["ep"]}}
                   for r in conn.execute("SELECT * FROM events ORDER BY id DESC LIMIT 2000")]
         counters = {r["key"]: r["value"] for r in conn.execute("SELECT * FROM counters")}
+        announcements = [{"id": r["id"], "title": r["title"], "body": r["body"],
+                          "author": r["author"], "t": r["t"]}
+                         for r in conn.execute("SELECT * FROM announcements ORDER BY t DESC LIMIT 20")]
         return {"users": users, "comments": comments[-1000:], "ratings": ratings,
+                "announcements": announcements,
                 "notifications": notifications[-200:],
                 "events": events,
                 "app_downloads": counters.get("app_downloads", 0),
@@ -235,6 +247,32 @@ def load_store() -> Dict:
 
 def save_store(data: Dict) -> None:
     """Compat shim — writes go straight to SQLite; snapshots are read-only."""
+
+
+# ─── CEO announcements ───────────────────────────────────────────────────────
+
+def list_announcements(limit: int = 10):
+    _init()
+    with _db() as conn:
+        return [{"id": r["id"], "title": r["title"], "body": r["body"],
+                 "author": r["author"], "t": r["t"]}
+                for r in conn.execute("SELECT * FROM announcements ORDER BY t DESC LIMIT ?",
+                                      (max(1, min(int(limit or 10), 20)),))]
+
+
+def post_announcement(title: str, body: str, author: str):
+    title = (title or "").strip()[:120]
+    body = (body or "").strip()[:2000]
+    if not title or not body:
+        raise ValueError("Title and message are required.")
+    _init()
+    aid = secrets.token_hex(6)
+    now = int(time.time())
+    with _db() as conn:
+        conn.execute("INSERT INTO announcements(id,title,body,author,t) VALUES (?,?,?,?,?)",
+                     (aid, title, body, author or "kayefande-droid & co.", now))
+        conn.execute("DELETE FROM announcements WHERE id NOT IN (SELECT id FROM announcements ORDER BY t DESC LIMIT 50)")
+    return {"id": aid, "title": title, "body": body, "author": author, "t": now}
 
 
 # ─── auth ────────────────────────────────────────────────────────────────────

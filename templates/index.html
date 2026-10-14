@@ -965,6 +965,12 @@
     {% endif %}
 
     <!-- ─── GENRE FILTER BAR ─── -->
+    {% if announcement %}
+    <div class="ca-announce" role="status">
+        <i class="fas fa-bullhorn" style="color:#FFB347"></i>
+        <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:#64708a">· {{ announcement.author }}</em></span></div>
+    </div>
+    {% endif %}
     <div class="filter-bar">
         <div class="genre-pills">
             <a href="/" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>

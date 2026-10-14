@@ -29,6 +29,22 @@ a{color:#FFB347}
 <div class="stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
 <div class="stat"><b>{{ stats.ratings }}</b><span>Ratings</span></div>
 </div>
+<h2>CEO announcements (website banner + app feed)</h2>
+<form id="annForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
+<input id="annTitle" placeholder="Announcement title" maxlength="120" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<textarea id="annBody" placeholder="Message to all users…" maxlength="2000" rows="3" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff"></textarea>
+<button style="background:linear-gradient(135deg,#FFB347,#FF5E62);border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer">Publish announcement</button>
+</form>
+<script>
+document.getElementById('annForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await fetch('/api/admin/announce', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value})});
+  const d = await r.json();
+  alert(d.status === 'success' ? 'Published to website + apps.' : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') location.reload();
+};
+</script>
 <h2>Most watched anime playlist</h2>
 <table><tr><th>Anime ID</th><th>Plays</th><th>Open</th></tr>
 {% for m in stats.most_watched %}<tr><td>{{ m.anime_id }}</td><td>{{ m.plays }}</td><td><a href="/anime/{{ m.anime_id }}">Open</a></td></tr>{% endfor %}

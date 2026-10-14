@@ -384,6 +384,7 @@ def home():
         active_genre="",
         active_format="",
         page_type="home",
+        announcement=(platform.list_announcements(1) or [None])[0],
     )
 
 
@@ -1190,6 +1191,7 @@ def download_page():
 
 RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.0.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
+APP_VERSION = "1.0.0"  # native app release line; bump with each store release
 
 
 def _serve_app_file(local_names, release_name, download_name):
@@ -1304,6 +1306,34 @@ def api_public_anime(anime_id: int):
     bundle = streaming_manager.get_full_episode_bundle(anime_id, int(request.args.get("ep", 1)), [t for t in titles if t], mal_id=raw.get("idMal"))
     store = platform.load_store()
     return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(store, anime_id)})
+
+
+@app.route("/api/version")
+def api_version():
+    """Update-check endpoint for native apps: current release + direct links."""
+    return jsonify({"status": "success", "app_version": APP_VERSION,
+                    "apk": "CamAnime.apk", "windows": "CamAnime-Windows.zip",
+                    "apk_url": "/get/android", "windows_url": "/get/windows"})
+
+
+@app.route("/api/announcements")
+def api_announcements():
+    """CEO announcements feed for website banner + native apps."""
+    return jsonify({"status": "success",
+                    "announcements": platform.list_announcements(10)})
+
+
+@app.route("/api/admin/announce", methods=["POST"])
+def api_admin_announce():
+    u = _current_user()
+    if not u or u.get("role") != "admin":
+        return jsonify({"status": "error", "error": "Admin only."}), 403
+    d = _post_data()
+    try:
+        a = platform.post_announcement(d.get("title", ""), d.get("body", ""), u.get("name") or u.get("email"))
+        return jsonify({"status": "success", "announcement": a})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
 
 
 @app.route("/sitemap.xml")
