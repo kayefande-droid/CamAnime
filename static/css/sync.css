@@ -70,11 +70,11 @@ body .search-form { min-width: 0; }
 body .search-input { flex: 1 1 auto; min-width: 0; }
 body .ep-search-box { max-width: 100%; }
 /* 3. Phone poster grids: 2 cols narrow / 3 cols wider */
-@media (max-width: 430px) {
+@media (max-width: 419px) {
   body .anime-grid, body .heaven-strip-grid, body .ep-grid,
   body .mini-grid, body .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (min-width: 431px) and (max-width: 768px) {
+@media (min-width: 420px) and (max-width: 768px) {
   body .anime-grid, body .heaven-strip-grid, body .ep-grid,
   body .mini-grid, body .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -92,3 +92,16 @@ body .transport-bar { flex-wrap: wrap; }
 body .card-title, body .catalog-card-title { min-width: 0; overflow-wrap: anywhere; }
 body .ep-rail-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body .breadcrumb-bar { overflow: hidden; }
+
+/* ── Spec round 2: desktop-mid nav, episode-name clamp ── */
+/* Desktop-mid (901-1150px): tighten header so links never crowd */
+@media (min-width: 901px) and (max-width: 1150px) {
+  body .header-inner { gap: 0.6rem; }
+  body .nav-links { gap: 0.15rem; }
+  body .nav-links .nav-link { padding: 0.5rem 0.6rem; font-size: 0.85rem; }
+  body .site-logo { font-size: 1.25rem; }
+  body .search-form { max-width: 260px; }
+}
+/* Episode names: 2-line clamp instead of single-line cut */
+body .ep-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; min-width: 0; }
+body .ep-card, body .ep-card-top { min-width: 0; }
