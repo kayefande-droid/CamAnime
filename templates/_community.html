@@ -1,0 +1,16 @@
+<section id="ca-community" data-anime="{{ anime.id }}" data-ep="{{ ep_num | default(1) }}" style="margin-top:2rem;background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:1.25rem">
+  <h2 style="font-size:1.15rem;margin-bottom:.25rem">Comments &amp; episode forum</h2>
+  <p style="color:#a0abc0;font-size:.85rem">Replies, likes, stickers + CamAnime originals (🍥⚔️🐉👺🌸🔥🍜⛩️👾💫🎴🍡). Honest anime ratings from users.</p>
+  <div style="display:flex;gap:.5rem;margin:.75rem 0;flex-wrap:wrap" id="ca-rate-row">
+    <span style="font-size:.85rem;color:#a0abc0">Rate this anime:</span>
+    {% for s in [10,9,8,7,6] %}<button class="ca-rate-btn" data-score="{{ s }}" style="background:#141926;color:#FFB347;border:1px solid rgba(255,179,71,.4);border-radius:8px;padding:.3rem .6rem;cursor:pointer">{{ s }}</button>{% endfor %}
+    <span id="ca-rating-out" style="font-size:.82rem;color:#a0abc0"></span>
+  </div>
+  <form id="ca-comment-form" style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <input id="ca-comment-text" placeholder="Join the discussion…" style="flex:1;min-width:200px;background:#141926;border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:.6rem .8rem">
+    <button type="submit" style="background:#FFB347;border:none;border-radius:10px;padding:.6rem 1rem;font-weight:700;cursor:pointer">Post</button>
+  </form>
+  <div id="ca-sticker-row" style="display:flex;gap:.35rem;margin:.6rem 0;flex-wrap:wrap"></div>
+  <div id="ca-comments" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem"></div>
+</section>
+<script src="/static/js/community.js" defer></script>

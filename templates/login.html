@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — CamAnime by kayefande-droid & co.</title>
+<meta name="description" content="Sign in to CamAnime to download episodes, sync your library, bookmarks and resume points across web and app.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
+body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.1),transparent 45%),radial-gradient(circle at 80% 20%,rgba(16,185,129,.08),transparent 40%)}
+.card{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:22px;max-width:460px;width:100%;padding:2.25rem;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:rise .5s ease}
+@keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+h1{font-family:'Syne',sans-serif;font-size:1.7rem;margin:.5rem 0 .25rem}
+p.sub{color:#a0abc0;font-size:.92rem;margin-bottom:1.25rem}
+label{display:block;font-size:.8rem;color:#a0abc0;margin:.7rem 0 .3rem}
+input{width:100%;background:#141926;border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:.7rem .9rem;font-size:.95rem;outline:none}
+input:focus{border-color:#FFB347;box-shadow:0 0 0 3px rgba(255,179,71,.15)}
+button.primary{width:100%;margin-top:1.1rem;background:linear-gradient(135deg,#FFB347,#FF5E62);border:none;color:#07080d;font-weight:800;padding:.85rem;border-radius:999px;cursor:pointer;font-size:.95rem}
+.err{background:rgba(255,94,98,.12);border:1px solid rgba(255,94,98,.4);color:#fda4af;border-radius:10px;padding:.6rem .8rem;font-size:.85rem;margin-bottom:.8rem}
+.socials{display:flex;gap:.6rem;margin-top:1rem}
+.socials a{flex:1;text-align:center;background:#141926;border:1px solid rgba(255,255,255,.12);color:#fff;text-decoration:none;border-radius:10px;padding:.6rem;font-size:.82rem;font-weight:600}
+a{color:#FFB347}.tabs{display:flex;gap:.5rem;margin:1rem 0}
+.tabs a{flex:1;text-align:center;padding:.55rem;border-radius:999px;text-decoration:none;font-weight:700;font-size:.85rem;background:#141926;color:#a0abc0;border:1px solid rgba(255,255,255,.1)}
+.tabs a.active{background:rgba(255,179,71,.16);color:#FFB347;border-color:#FFB347}
+.credit{margin-top:1.25rem;text-align:center;color:#64708a;font-size:.78rem}
+@media(max-width:414px){.card{padding:1.5rem}}
+</style>
+</head>
+<body>
+<div class="card">
+<div style="font-family:'Syne';font-weight:800;font-size:1.3rem">Cam<span style="color:#FFB347">Anime</span></div>
+<h1>{{ 'Admin sign in' if mode=='admin' else ('Create account' if mode=='signup' else 'Welcome back') }}</h1>
+<p class="sub">Downloads, bookmarks, resume points and forum identity sync between website and native app.</p>
+<div class="tabs">
+<a href="/login?mode=signin" class="{{ 'active' if mode!='signup' else '' }}">Sign in</a>
+<a href="/login?mode=signup" class="{{ 'active' if mode=='signup' else '' }}">Sign up</a>
+</div>
+{% if error %}<div class="err">{{ error }}</div>{% endif %}
+<form method="post">
+{% if mode=='signup' %}<label>Username</label><input name="name" placeholder="e.g. AnimeFan_CM">{% endif %}
+<label>Email (Gmail, iCloud or any email)</label><input name="email" type="email" required placeholder="you@gmail.com">
+<label>Password (stored hashed with PBKDF2)</label><input name="password" type="password" required minlength="6">
+<input type="hidden" name="action" value="{{ 'signup' if mode=='signup' else 'signin' }}">
+<button class="primary" type="submit">{{ 'Create free account' if mode=='signup' else 'Sign in securely' }}</button>
+</form>
+<div class="socials">
+<a href="/login?mode=signup"><i class="fab fa-google"></i> Gmail</a>
+<a href="/login?mode=signup"><i class="fab fa-apple"></i> iCloud</a>
+<a href="/login?mode=signup"><i class="fas fa-share-alt"></i> Socials</a>
+</div>
+<p class="sub" style="margin-top:1rem">Social buttons create the same hashed-password account; connect a real OAuth provider key in production.</p>
+<div class="credit">Made by <strong>kayefande-droid &amp; co.</strong> · Free anime streaming worldwide including Cameroon</div>
+</div>
+</body>
+</html>

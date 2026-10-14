@@ -18,10 +18,22 @@ from flask import (
 
 from streaming_providers import DEFAULT_UA, streaming_manager
 
+import hashlib
+import os
+
+from flask import session
+
+import camanime_platform as platform
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("CAMANIME_SECRET", "camanime-dev-secret-change-me")
+
+PLATFORM_STORE = platform.load_store()
+platform.ensure_admin(PLATFORM_STORE)
+PLATFORM_STORE = platform.load_store()
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: Dict[str, tuple] = {}
@@ -882,6 +894,10 @@ def proxy_video():
 @app.route("/api/download/video")
 def download_video():
     """Forces a direct browser file download (.mp4) of the anime episode."""
+    if not session.get("user_email"):
+        if "text/html" in (request.headers.get("Accept", "") or ""):
+            return redirect(url_for("login_page", next=request.full_path))
+        return jsonify({"error": "Sign in to download episodes.", "login": "/login"}), 401
     url = request.args.get("url", "").strip()
     title = request.args.get("title", "CamAnime_Episode").strip()
     ref = request.args.get("ref", "https://animeheaven.me/").strip()
@@ -952,6 +968,164 @@ def proxy_subtitle():
     except Exception as e:
         logger.error(f"Subtitle Proxy Error ({url}): {e}")
         return jsonify({"error": str(e)}), 502
+
+
+@app.after_request
+def apply_security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    csp = ("default-src 'self' https: data: blob:; " "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " "img-src 'self' https: data: blob:; " "media-src 'self' https: blob: data:; " "frame-src 'self' https:; " "connect-src 'self' https: blob:;")
+    resp.headers.setdefault("Content-Security-Policy", csp)
+    return resp
+
+
+def _current_user():
+    email = session.get("user_email", "")
+    if not email:
+        return None
+    store = platform.load_store()
+    u = store["users"].get(email.lower())
+    return platform.public_user(u) if u else None
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    from flask import session as _s
+    store = platform.load_store()
+    error = ""
+    mode = request.args.get("mode", "signin")
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "")
+        name = request.form.get("name", "").strip()
+        action = request.form.get("action", "signin")
+        try:
+            if action == "signup":
+                user = platform.register_user(store, email, name or email.split("@")[0], password)
+            else:
+                store = platform.load_store()
+                user = platform.verify_user(store, email, password)
+            _s["user_email"] = user["email"]
+            nxt = request.args.get("next", "/")
+            return redirect(nxt)
+        except Exception as e:
+            error = str(e)
+    return render_template("login.html", error=error, mode=mode, user=_current_user())
+
+
+@app.route("/logout")
+def logout_page():
+    session.pop("user_email", None)
+    return redirect(url_for("home"))
+
+
+@app.route("/admin")
+def admin_page():
+    u = _current_user()
+    if not u or u.get("role") != "admin":
+        return redirect(url_for("login_page", mode="admin", next="/admin"))
+    store = platform.load_store()
+    stats = platform.admin_stats(store)
+    return render_template("admin.html", user=u, stats=stats, schedule=platform.CLASSICS_SCHEDULE)
+
+
+@app.route("/schedule")
+def schedule_page():
+    return render_template("schedule.html", schedule=platform.CLASSICS_SCHEDULE, user=_current_user())
+
+
+@app.route("/promo")
+def promo_page():
+    return render_template("promo.html", user=_current_user())
+
+
+@app.route("/api/community/comments")
+def api_comments():
+    store = platform.load_store()
+    anime_id = request.args.get("anime_id", "")
+    ep = request.args.get("ep", "")
+    items = [c for c in store["comments"] if str(c["anime_id"]) == str(anime_id) and (not ep or str(c["ep"]) == str(ep))]
+    items = sorted(items, key=lambda x: x["t"])[-100:]
+    return jsonify({"status": "success", "comments": items, "stickers": platform.CAM_STICKERS})
+
+
+@app.route("/api/community/comment", methods=["POST"])
+def api_comment_post():
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "error": "Sign in to comment."}), 401
+    store = platform.load_store()
+    full = store["users"].get(u["email"], {})
+    try:
+        c = platform.add_comment(store, request.form.get("anime_id", ""), request.form.get("ep", ""), {**u, "email": u["email"]}, request.form.get("text", ""), request.form.get("parent", ""), request.form.get("sticker", ""))
+        return jsonify({"status": "success", "comment": c})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/community/like/<cid>", methods=["POST"])
+def api_comment_like(cid):
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "error": "Sign in to like."}), 401
+    store = platform.load_store()
+    try:
+        c = platform.like_comment(store, cid, u["email"])
+        return jsonify({"status": "success", "likes": c["likes"]})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 404
+
+
+@app.route("/api/community/rate", methods=["POST"])
+def api_rate():
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "error": "Sign in to rate."}), 401
+    store = platform.load_store()
+    r = platform.rate_anime(store, request.form.get("anime_id", ""), u["email"], request.form.get("score", 8))
+    return jsonify({"status": "success", "rating": r})
+
+
+@app.route("/api/community/notifications")
+def api_notifications():
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "notifications": []}), 401
+    store = platform.load_store()
+    items = [n for n in store["notifications"] if n["to"] == u["email"]][-20:]
+    unread = sum(1 for n in items if not n.get("read"))
+    return jsonify({"status": "success", "notifications": items, "unread": unread})
+
+
+@app.route("/api/track", methods=["POST"])
+def api_track():
+    store = platform.load_store()
+    platform.track(store, request.form.get("kind", "click"), {"anime_id": request.form.get("anime_id", ""), "ep": request.form.get("ep", "")})
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/public/anime/<int:anime_id>")
+def api_public_anime(anime_id: int):
+    """Public streaming API for the native apps."""
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw = data.get("Media") or {}
+    titles = [raw.get("title", {}).get("english"), raw.get("title", {}).get("romaji")] if raw.get("title") else []
+    bundle = streaming_manager.get_full_episode_bundle(anime_id, int(request.args.get("ep", 1)), [t for t in titles if t], mal_id=raw.get("idMal"))
+    store = platform.load_store()
+    return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(store, anime_id)})
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    xml = "<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>" + "".join(f"<url><loc>{request.host_url.rstrip('/')}{p}</loc></url>" for p in ["/", "/scraper", "/schedule", "/promo", "/login"]) + "</urlset>"
+    return Response(xml, mimetype="application/xml")
+
+
+@app.route("/robots.txt")
+def robots():
+    return Response("User-agent: *\nAllow: /\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n", mimetype="text/plain")
 
 
 if __name__ == "__main__":

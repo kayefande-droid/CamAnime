@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Release Schedule — CamAnime | New episodes, seasons & classics</title>
+<meta name="description" content="Organised anime release timetable: simulcast premieres, season drops and timeless classics, updated weekly on CamAnime.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
+body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto}
+h1{font-family:'Syne';font-size:2rem}a{color:#FFB347}
+.day{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1.1rem;margin:1rem 0}
+.slot{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-top:1px solid rgba(255,255,255,.06);font-size:.92rem;flex-wrap:wrap}
+@media(max-width:414px){body{padding:1rem}}
+</style>
+</head>
+<body>
+<p><a href="/">← CamAnime</a></p>
+<h1>Weekly release schedule</h1>
+<p style="color:#a0abc0">Premieres, season batches and classics. Times in UTC; Cameroon (WAT) is UTC+1.</p>
+{% for d in schedule %}<div class="day"><h2>{{ d.day }}</h2>
+{% for s in d.slots %}<div class="slot"><span><strong>{{ s.time }}</strong> — {{ s.title }}</span><span style="color:#34d399">{{ s.kind }}</span></div>{% endfor %}
+</div>{% endfor %}
+<p style="color:#64708a;margin-top:2rem">Made by kayefande-droid &amp; co. · Free anime streaming website worldwide.</p>
+</body>
+</html>

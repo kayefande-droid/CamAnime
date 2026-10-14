@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — CamAnime</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
+body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1100px;margin:0 auto}
+h1{font-family:'Syne';font-size:1.8rem;margin-bottom:.25rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:1rem;margin:1.5rem 0}
+.stat{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1.1rem}
+.stat b{font-size:1.5rem;display:block}.stat span{color:#a0abc0;font-size:.82rem}
+table{width:100%;border-collapse:collapse;background:#0e111a;border-radius:12px;overflow:hidden}
+td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);font-size:.86rem;text-align:left}
+a{color:#FFB347}
+@media(max-width:414px){body{padding:1rem}}
+</style>
+</head>
+<body>
+<p><a href="/">← Back to site</a> · Signed in as {{ user.name }} (admin)</p>
+<h1>Admin tools &amp; live analytics</h1>
+<p style="color:#a0abc0">Live app downloads, website clicks, plays and most-watched playlist feed the Trending classifier.</p>
+<div class="grid">
+<div class="stat"><b>{{ stats.app_downloads }}</b><span>App downloads</span></div>
+<div class="stat"><b>{{ stats.clicks }}</b><span>Website clicks</span></div>
+<div class="stat"><b>{{ stats.plays }}</b><span>Episode plays</span></div>
+<div class="stat"><b>{{ stats.users }}</b><span>Users</span></div>
+<div class="stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
+<div class="stat"><b>{{ stats.ratings }}</b><span>Ratings</span></div>
+</div>
+<h2>Most watched anime playlist</h2>
+<table><tr><th>Anime ID</th><th>Plays</th><th>Open</th></tr>
+{% for m in stats.most_watched %}<tr><td>{{ m.anime_id }}</td><td>{{ m.plays }}</td><td><a href="/anime/{{ m.anime_id }}">Open</a></td></tr>{% endfor %}
+</table>
+<h2 style="margin-top:2rem">Release schedule (organised premieres + classics)</h2>
+<table><tr><th>Day</th><th>Time</th><th>Title</th><th>Kind</th></tr>
+{% for d in schedule %}{% for s in d.slots %}<tr><td>{{ d.day }}</td><td>{{ s.time }}</td><td>{{ s.title }}</td><td>{{ s.kind }}</td></tr>{% endfor %}{% endfor %}
+</table>
+<p style="margin-top:2rem;color:#64708a">Made by kayefande-droid &amp; co.</p>
+</body>
+</html>

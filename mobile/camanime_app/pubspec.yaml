@@ -1,0 +1,18 @@
+name: camanime_app
+description: CamAnime native app (Android APK + Windows). Free 1080p SUB/DUB streaming, hidden in-app library, save-to-device downloads. Made by kayefande-droid & co.
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  video_player: ^2.9.1
+  chewie: ^1.8.1
+  shared_preferences: ^2.2.3
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  file_picker: ^8.0.0
+flutter:
+  uses-material-design: true
