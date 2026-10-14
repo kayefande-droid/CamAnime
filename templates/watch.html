@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+    <link href="/static/css/sync.css" rel="stylesheet">
     <style>
         :root {
             --bg-canvas: #06070c;
@@ -429,10 +430,30 @@
             filter: brightness(1.1);
         }
 
+        /* Responsive: collapse cinema rail, wrap header/transport, keep player 16:9 in-container */
+        .cinema-grid > *, .player-column, .episode-sidebar { min-width: 0; }
+        .header-inner { flex-wrap: wrap; }
+        .header-inner > div { min-width: 0; }
+        .breadcrumb-bar { min-width: 0; flex-wrap: wrap; }
+        .breadcrumb-bar a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; display: inline-block; vertical-align: bottom; }
         @media (max-width: 1080px) {
             .cinema-grid { grid-template-columns: 1fr; }
             .lower-panels { grid-template-columns: 1fr; }
             .watch-container { padding: 0 1rem; }
+            .header-inner > div:last-child { flex-wrap: wrap; }
+            .episode-sidebar { max-height: none; }
+        }
+        @media (max-width: 600px) {
+            header { padding: 0.7rem 1rem; }
+            .watch-container { padding: 0 0.75rem; margin-top: 1rem; }
+            .video-stage { border-radius: 12px; }
+            .transport-bar { flex-direction: column; align-items: stretch; }
+            .now-playing-info { flex-wrap: wrap; }
+            .transport-actions .ctrl-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+            .server-row-label { min-width: 0; }
+            .skip-intro-btn { right: 12px; bottom: 64px; padding: 0.5rem 0.9rem; }
+            .dl-row { flex-wrap: wrap; }
+            .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
         }
     </style>
 </head>

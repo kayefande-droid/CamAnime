@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/sync.css" rel="stylesheet">
     <style>
         :root {
             --bg-canvas: #07080d;
@@ -332,6 +333,7 @@
         /* ─── EPISODE GRID & SEARCH ─── */
         .ep-controls {
             display: flex;
+            flex-wrap: wrap;
             gap: 0.65rem;
             align-items: center;
         }
@@ -342,7 +344,10 @@
             padding: 0.45rem 0.85rem;
             border-radius: 8px;
             font-size: 0.85rem;
-            width: 150px;
+            flex: 1 1 140px;
+            min-width: 0;
+            max-width: 220px;
+            width: 100%;
             outline: none;
         }
         .ep-grid {
@@ -487,11 +492,27 @@
             text-overflow: ellipsis;
         }
 
+        /* Responsive: fluid grids, wrapping header, compact banner offset on phones */
+        .dossier-card > *, .info-col, .two-col-layout > * { min-width: 0; }
+        .header-inner { flex-wrap: wrap; }
+        .header-nav { flex-wrap: wrap; }
+        .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); }
+        .mini-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
         @media (max-width: 980px) {
             .dossier-card { grid-template-columns: 1fr; }
-            .poster-col { max-width: 240px; margin: 0 auto; }
+            .poster-col { max-width: 240px; margin: 0 auto; width: 100%; }
             .two-col-layout { grid-template-columns: 1fr; }
             .container { padding: 0 1rem; }
+        }
+        @media (max-width: 600px) {
+            header { padding: 0.7rem 1rem; }
+            .banner-wrap { height: 220px; }
+            .container { margin-top: -120px; }
+            .dossier-card { padding: 1.25rem; gap: 1.5rem; }
+            .ep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+            .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+            .action-bar .btn-watch, .action-bar a, .action-bar button { min-height: 44px; }
+            .ep-filter-input { max-width: none; }
         }
     </style>
 </head>

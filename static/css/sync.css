@@ -5,6 +5,14 @@
   --ca-font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 html, body { overflow-x: clip; }
+/* Global responsive guards (additive: page styles below keep precedence) */
+img, video, iframe { max-width: 100%; }
+img { height: auto; }
+body { overflow-wrap: break-word; padding-bottom: env(safe-area-inset-bottom, 0px); }
+:focus-visible { outline: 2px solid var(--accent, #FFB347); outline-offset: 2px; border-radius: 6px; }
+/* Scrollable tables on narrow screens (wrap table in .table-scroll) */
+.table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 12px; }
+.table-scroll table { min-width: 560px; }
 body { font-family: var(--ca-font-body); text-rendering: optimizeLegibility; }
 h1, h2, .hero-title, .anime-title, .section-title, .panel-title, .site-logo {
   font-family: var(--ca-font-display);

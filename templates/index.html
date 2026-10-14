@@ -44,6 +44,8 @@
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
+        img, video, iframe { max-width: 100%; }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
         body {
             background-color: var(--bg-canvas);
             background-image:
@@ -180,6 +182,7 @@
             color: var(--text-primary);
             font-size: 0.9rem;
             width: 100%;
+            min-width: 0;
             outline: none;
         }
         .search-input::placeholder { color: var(--text-muted); }
@@ -794,14 +797,73 @@
             font-size: 0.85rem;
         }
 
+        /* ─── MOBILE NAV TOGGLE (visible <=900px, panel drops under header) ─── */
+        .nav-toggle {
+            display: none;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .nav-toggle:hover { border-color: var(--accent); color: var(--accent); }
+        .mobile-nav {
+            display: none;
+            border-top: 1px solid var(--border-subtle);
+            padding: 0.75rem 1rem 1rem;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        .mobile-nav.open { display: flex; }
+        .mobile-nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            padding: 0.7rem 0.9rem;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .mobile-nav a:hover, .mobile-nav a.active { background: rgba(255, 179, 71, 0.12); color: var(--accent); }
+
         @media (max-width: 900px) {
             header { padding: 0.75rem 1rem; }
             .nav-links { display: none; }
+            .nav-toggle { display: inline-flex; }
+            .header-inner { flex-wrap: wrap; gap: 0.75rem; }
+            .brand-group { flex: 1; min-width: 0; gap: 1rem; }
+            .site-logo { font-size: 1.3rem; min-width: 0; }
+            .header-actions { flex: 1 1 100%; min-width: 0; }
+            .search-form { flex: 1; max-width: none; min-width: 0; }
             .main-wrap { padding: 1rem 1rem 3rem; }
             .hero-body { padding: 1.75rem 1.5rem; }
             .hero-spotlight, .hero-slide.active { min-height: 400px; }
             .anime-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+            .modal-backdrop { padding: 1rem; }
+            .modal-dialog { max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto; }
         }
+        /* Two-column poster grids on phones (explicit, not auto-fill) */
+        @media (max-width: 600px) {
+            .anime-grid, .heaven-strip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+            .card-body { padding: 0.65rem 0.7rem 0.8rem; }
+            .hero-dots { right: 1.25rem; bottom: 1.25rem; }
+            .section-head { flex-wrap: wrap; }
+            .hero-ctas .btn-primary, .hero-ctas .btn-secondary { min-height: 44px; }
+        }
+        /* Touch devices: hover-only card actions become always visible + keyboard */
+        @media (hover: none) {
+            .card-hover-actions { opacity: 1; }
+            .card-btn-play, .card-btn-trailer { min-height: 40px; }
+        }
+        .anime-card:focus-within .card-hover-actions { opacity: 1; }
     </style>
 </head>
 <body>
@@ -832,6 +894,9 @@
             </nav>
         </div>
 
+        <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()">
+            <i class="fas fa-bars"></i>
+        </button>
         <div class="header-actions">
             <form action="/search" method="get" class="search-form">
                 <input type="text" name="q" class="search-input" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." required>
@@ -843,6 +908,13 @@
             </button>
         </div>
     </div>
+    <nav class="mobile-nav" id="mobileNav" aria-label="Mobile">
+        <a href="/" class="{{ 'active' if page_type == 'home' and not active_format else '' }}" onclick="toggleMobileNav(false)"><i class="fas fa-compass"></i> Discover</a>
+        <a href="/?format=TV" class="{{ 'active' if active_format == 'TV' else '' }}" onclick="toggleMobileNav(false)"><i class="fas fa-tv"></i> TV Series</a>
+        <a href="/?format=MOVIE" class="{{ 'active' if active_format == 'MOVIE' else '' }}" onclick="toggleMobileNav(false)"><i class="fas fa-film"></i> Movies</a>
+        <a href="/scraper" onclick="toggleMobileNav(false)"><i class="fas fa-bolt"></i> AnimeHeaven Scraper & Downloader</a>
+        <a href="/download" onclick="toggleMobileNav(false)"><i class="fas fa-mobile-alt"></i> Apps</a>
+    </nav>
 </header>
 
 <main class="main-wrap">
@@ -1196,6 +1268,23 @@
         modal.classList.remove('open');
         box.innerHTML = '';
     }
+
+    // Mobile nav toggle + Escape closes menu and trailer modal
+    function toggleMobileNav(force) {
+        const nav = document.getElementById('mobileNav');
+        const btn = document.getElementById('navToggle');
+        if (!nav || !btn) return;
+        const open = force !== undefined ? force : !nav.classList.contains('open');
+        nav.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', open);
+        btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeTrailerModal();
+            toggleMobileNav(false);
+        }
+    });
 
     // Watchlist Management
     function loadWatchlist() {
