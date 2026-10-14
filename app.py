@@ -1152,6 +1152,21 @@ def get_windows():
                            "CamAnime-Windows.zip", "CamAnime-Windows.zip")
 
 
+def _post_data():
+    """Merges JSON body over form fields so website (FormData) and native
+    apps (JSON) use the same endpoints."""
+    data = {}
+    try:
+        j = request.get_json(silent=True)
+        if isinstance(j, dict):
+            data.update({str(k): v for k, v in j.items()})
+    except Exception:
+        pass
+    for k in request.form:
+        data.setdefault(k, request.form.get(k))
+    return data
+
+
 @app.route("/api/community/comments")
 def api_comments():
     store = platform.load_store()
@@ -1170,7 +1185,7 @@ def api_comment_post():
     store = platform.load_store()
     full = store["users"].get(u["email"], {})
     try:
-        c = platform.add_comment(store, request.form.get("anime_id", ""), request.form.get("ep", ""), {**u, "email": u["email"]}, request.form.get("text", ""), request.form.get("parent", ""), request.form.get("sticker", ""))
+        c = platform.add_comment(store, _post_data().get("anime_id", ""), _post_data().get("ep", ""), {**u, "email": u["email"]}, _post_data().get("text", ""), _post_data().get("parent", ""), _post_data().get("sticker", ""))
         return jsonify({"status": "success", "comment": c})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
@@ -1195,7 +1210,7 @@ def api_rate():
     if not u:
         return jsonify({"status": "error", "error": "Sign in to rate."}), 401
     store = platform.load_store()
-    r = platform.rate_anime(store, request.form.get("anime_id", ""), u["email"], request.form.get("score", 8))
+    r = platform.rate_anime(store, _post_data().get("anime_id", ""), u["email"], _post_data().get("score", 8))
     return jsonify({"status": "success", "rating": r})
 
 
@@ -1213,7 +1228,8 @@ def api_notifications():
 @app.route("/api/track", methods=["POST"])
 def api_track():
     store = platform.load_store()
-    platform.track(store, request.form.get("kind", "click"), {"anime_id": request.form.get("anime_id", ""), "ep": request.form.get("ep", "")})
+    d = _post_data()
+    platform.track(store, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
     return jsonify({"status": "ok"})
 
 

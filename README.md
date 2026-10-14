@@ -1,94 +1,60 @@
-# CamAnime - Watch Anime Online Free
+# CamAnime — Free Anime Streaming Website + Native Apps
 
-CamAnime is a free anime streaming website that allows users to watch their favorite anime series and movies online. The platform aggregates content from various legal streaming sources and provides a clean, user-friendly interface for discovering and watching anime.
+Watch anime online free in 1080p SUB/DUB. Free streaming website for Cameroon and worldwide fans, with **native Android + Windows apps** linked to the same account system. Made by **kayefande-droid & co.**
+
+- Website: `https://camanime.onrender.com` (auto-deploys from `main` via Render + `render.yaml`)
+- Apps: download from the site's **/download** page or **GitHub Releases** (`v1.0.0+`)
 
 ## Features
 
-- **Extensive Anime Library**: Access to thousands of anime titles from various genres
-- **High-Quality Streaming**: Multiple streaming options with different quality settings
-- **User-Friendly Interface**: Clean and intuitive design for easy navigation
-- **Search Functionality**: Quickly find your favorite anime by title or genre
-- **Anime Details**: View detailed information including synopsis, ratings, and episode lists
-- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile devices
+- **Streaming**: AnimeHeaven direct MP4 + Anikoto/MegaPlay 1080p HLS (SUB/DUB), multi-subtitles, skip-times, Kiwi/Pahe download links, YouTube trailers
+- **One-click app downloads**: `/get/android` and `/get/windows` start the download immediately (bundled file or GitHub Release asset)
+- **Accounts**: Gmail/iCloud/social-style email signup, PBKDF2-hashed passwords, 90-day Bearer tokens, admin seeded via env
+- **Community**: comments + replies, likes, stickers, honest anime ratings, read/unread notifications — same forum in app and website
+- **Library**: hidden in-app downloads, export only via per-episode/season **Save to device**; bookmarks, resume-where-you-left-off, watchlist
+- **Discovery**: trending/popular/top-rated rails, genre search, simulcast + classics schedule, recommendations, related anime
+- **Admin**: download counts, site clicks, plays, most-watched playlist driving Trending classification
+- **SEO**: anime-website Cameroon / free-streaming keywords, sitemap, robots, Google Search Console ready
+- **Responsive**: 2-col narrow phones / 3-col wider phones / fluid tablet-desktop, verified 0-overflow across 9 viewports × 9 pages
 
-## Technology Stack
+## App ↔ website link + permanent database
 
-- **Backend**: Python Flask
-- **Frontend**: HTML5, CSS3, JavaScript
-- **API Integration**: AniList for anime metadata
-- **Streaming Providers**: Multiple anime streaming sources with fallback mechanisms
+One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and counters — it survives restarts (persist the file/volume on your host). Legacy JSON auto-migrates once.
 
-## Installation
+- Website: session login at `/login`
+- Native apps: `POST /api/auth/register|login` → Bearer token (`Authorization: Bearer <token>`)
+- Community/track endpoints accept **both JSON (apps) and form posts (website)**: `/api/community/comment`, `/api/community/rate`, `/api/track`
 
-1. Clone the repository:
-   ```
-   git clone https://github.com/kayefande-droid/CamAnime.git
-   ```
+## Native apps
 
-2. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+| App | Source | Build |
+|---|---|---|
+| Android APK (Flutter, Material 3, dark anime theme) | `mobile/camanime_app/` | `powershell -ExecutionPolicy Bypass -File tools/build-android.ps1` |
+| Windows (.NET 8 + WebView2, ad-block, hidden library) | `windows/CamAnime.Windows/` | `powershell -ExecutionPolicy Bypass -File tools/build-windows.ps1` |
 
-3. Run the application:
-   ```
-   python app.py
-   ```
+Built binaries ship via **GitHub Releases** (recommended) or `static/downloads/` — the `/download` page and `/get/*` routes pick them up automatically. See `docs/APP_RELEASES.md`.
 
-4. Open your browser and visit: http://localhost:5000
+## Run the website locally
 
-## Project Structure
+```bash
+pip install -r requirements.txt
+python app.py  # http://localhost:5000 (dev) — production: gunicorn app:app
+```
 
-- `app.py` - Main Flask application
-- `streaming_providers.py` - Handles connections to various anime streaming providers
-- `/templates` - HTML templates for different pages
-- `requirements.txt` - Python dependencies
+Env: `CAMANIME_SECRET`, `CAMANIME_DB`, `CAMANIME_ADMIN_EMAIL`, `CAMANIME_ADMIN_PASSWORD`, `CAMANIME_RELEASE_TAG`.
 
-## Screenshots
+## Deploy (Render, auto-deploy on push)
 
-![Home Page](screenshots/home.png)
-*CamAnime home page showing featured anime*
+Repo ships `render.yaml` blueprint + `Procfile` + `runtime.txt` (Python 3.11.9): build `pip install -r requirements.txt`, start `gunicorn app:app`, health check `/`. Enable **Auto-Deploy** in the Render dashboard; keep bot protection off for Googlebot so Search Console verification passes.
 
-![Anime Details](screenshots/details.png)
-*Detailed view of an anime series*
+## API (for apps and integrations)
 
-![Watch Page](screenshots/watch.png)
-*Anime streaming player interface*
-
-*Note: Screenshots directory and images would be added as the project develops.*
-
-## API Integration
-
-CamAnime uses the AniList GraphQL API to fetch anime metadata including:
-- Titles (English and Japanese/Romaji)
-- Descriptions and synopses
-- Cover images and banners
-- Genres and formats
-- Ratings and popularity scores
-- Episode information and airing schedules
-
-## Streaming Providers
-
-The platform integrates with multiple anime streaming providers to ensure reliable content availability:
-- Primary providers (with fallback mechanisms)
-- Provider health checking and automatic failover
-- Multiple quality options per title
-- Subtitle support where available
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is open source and available under the MIT License.
+- `GET /api/public/anime/<id>?ep=<n>` — episode streaming bundle (servers, quality, subs)
+- `POST /api/auth/register|login|logout`, `GET /api/auth/me` — token auth
+- `GET/POST /api/community/*` — comments, likes, ratings, notifications
+- `GET /api/heaven/*` — AnimeHeaven search/catalog/resolve/season-pack
+- `GET /api/download/video` — forced MP4 episode download (login required)
 
 ## Disclaimer
 
-CamAnime does not host any content directly. All anime is streamed from official, legal sources. We comply with all copyright laws and regulations.
-## Recent Improvements
-
-- Added AnimeHeaven provider to expand anime library access and improve streaming reliability
-- Enhanced fallback mechanisms to ensure continuous service availability
-- Improved error handling and logging throughout the application
-- Optimized image loading with responsive design techniques
+CamAnime aggregates publicly available streams for discovery; it does not host video. Comply with local copyright law.
