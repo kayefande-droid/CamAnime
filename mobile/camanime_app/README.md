@@ -24,7 +24,11 @@ flutter build windows --release
 ## Link app to website
 1. Deploy the Flask site (Procfile: `gunicorn app:app`).
 2. In app → You tab → paste website URL (e.g. `https://camanime.example.com`) → Save.
-3. Sign in on the website (`/login`); downloads require the same session/token (PBKDF2-hashed passwords, admin role for `/admin`).
+3. In the app's You tab, sign in with the same email + password you use on the website
+   (`/login`). The app calls `POST /api/auth/login|register` and stores the API token,
+   sending it as `Authorization: Bearer <token>` on downloads, comments, ratings and
+   notifications — one permanent SQLite user database (`camanime.db`) shared by web and app.
+   Downloads still require sign-in (PBKDF2-hashed passwords, admin role for `/admin`).
 
 ## Security notes
 - No ads SDKs bundled (ad-block by omission); add platform blocklists only from user-controlled settings.

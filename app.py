@@ -894,7 +894,7 @@ def proxy_video():
 @app.route("/api/download/video")
 def download_video():
     """Forces a direct browser file download (.mp4) of the anime episode."""
-    if not session.get("user_email"):
+    if not _current_user():
         if "text/html" in (request.headers.get("Accept", "") or ""):
             return redirect(url_for("login_page", next=request.full_path))
         return jsonify({"error": "Sign in to download episodes.", "login": "/login"}), 401
@@ -981,13 +981,77 @@ def apply_security_headers(resp):
     return resp
 
 
+def _bearer_token():
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return (request.args.get("token", "") or "").strip() or None
+
+
 def _current_user():
+    token = _bearer_token()
+    if token:
+        u = platform.get_user_by_token(token)
+        return platform.public_user(u) if u else None
     email = session.get("user_email", "")
     if not email:
         return None
     store = platform.load_store()
     u = store["users"].get(email.lower())
     return platform.public_user(u) if u else None
+
+
+def _auth_payload():
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        return (body.get("email", ""), body.get("password", ""), body.get("name", ""))
+    return (request.form.get("email", ""), request.form.get("password", ""),
+            request.form.get("name", ""))
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def api_auth_register():
+    email, password, name = _auth_payload()
+    try:
+        user = platform.register_user(None, email, name or email.split("@")[0], password)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    tok = platform.issue_token(user["email"])
+    return jsonify({"status": "success", "token": tok["token"],
+                    "expires": tok["expires"], "user": platform.public_user(user)})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    email, password, _name = _auth_payload()
+    try:
+        user = platform.verify_user(None, email, password)
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 401
+    tok = platform.issue_token(user["email"])
+    return jsonify({"status": "success", "token": tok["token"],
+                    "expires": tok["expires"], "user": platform.public_user(user)})
+
+
+@app.route("/api/auth/me")
+def api_auth_me():
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "error": "Not signed in."}), 401
+    store = platform.load_store()
+    items = [n for n in store["notifications"] if n["to"] == u["email"]][-20:]
+    return jsonify({"status": "success", "user": u,
+                    "unread": sum(1 for n in items if not n.get("read")),
+                    "notifications": items})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    token = _bearer_token()
+    if token:
+        platform.revoke_token(token)
+    session.pop("user_email", None)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/login", methods=["GET", "POST"])

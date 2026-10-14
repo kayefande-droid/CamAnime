@@ -60,10 +60,41 @@ class Api {
     final p = await SharedPreferences.getInstance();
     return p.getString('api_base') ?? API_BASE_DEFAULT;
   }
+  static Future<String?> token() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString('api_token');
+  }
+  static Future<Map<String, String>> headers() async {
+    final t = await token();
+    return {if (t != null) 'Authorization': 'Bearer $t'};
+  }
   static Future<Map<String, dynamic>> episodeSources(int id, int ep) async {
     final b = await base();
-    final r = await http.get(Uri.parse('$b/api/public/anime/$id?ep=$ep'));
+    final r = await http.get(Uri.parse('$b/api/public/anime/$id?ep=$ep'), headers: await headers());
     return json.decode(r.body) as Map<String, dynamic>;
+  }
+  /// Sign in (or register) against the website's permanent user database.
+  /// Returns the user map on success, throws on failure.
+  static Future<Map<String, dynamic>> signIn(String email, String password, {bool register = false, String name = ''}) async {
+    final b = await base();
+    final path = register ? 'register' : 'login';
+    final r = await http.post(Uri.parse('$b/api/auth/$path'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'email': email, 'password': password, 'name': name}));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    if (d['status'] != 'success') throw Exception(d['error'] ?? 'Sign-in failed');
+    final p = await SharedPreferences.getInstance();
+    await p.setString('api_token', d['token']);
+    await p.setString('user_email', (d['user'] as Map)['email']);
+    await p.setString('username', (d['user'] as Map)['name']);
+    return d['user'];
+  }
+  static Future<void> signOut() async {
+    final b = await base();
+    try { await http.post(Uri.parse('$b/api/auth/logout'), headers: await headers()); } catch (_) {}
+    final p = await SharedPreferences.getInstance();
+    await p.remove('api_token');
+    await p.remove('user_email');
   }
 }
 
@@ -226,8 +257,66 @@ class _ProfileTabState extends State<ProfileTab> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Linked to website API')));
     }, child: const Text('Save & link app to website')),
     const SizedBox(height: 16),
+    const Text('Website account (same permanent database)', style: TextStyle(fontWeight: FontWeight.w800)),
+    const SizedBox(height: 8),
+    const _AuthCard(),
+    const SizedBox(height: 16),
     const Text(APP_CREDIT, textAlign: TextAlign.center),
   ]);
+}
+
+/// Email + password form bound to the website's permanent SQLite user database.
+/// On success the API token is stored and sent as `Authorization: Bearer` on
+/// every download, comment, rating and notification call.
+class _AuthCard extends StatefulWidget {
+  const _AuthCard();
+  @override
+  State<_AuthCard> createState() => _AuthCardState();
+}
+
+class _AuthCardState extends State<_AuthCard> {
+  final email = TextEditingController();
+  final password = TextEditingController();
+  bool busy = false;
+  String? who;
+  @override
+  void initState() { super.initState(); _who(); }
+  Future<void> _who() async {
+    final p = await SharedPreferences.getInstance();
+    setState(() => who = p.getString('user_email'));
+  }
+  Future<void> _go(bool register) async {
+    setState(() => busy = true);
+    try {
+      final u = await Api.signIn(email.text.trim(), password.text, register: register, name: email.text.split('@').first);
+      setState(() => who = u['email']);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Signed in as ${u['email']}')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+    setState(() => busy = false);
+  }
+  @override
+  Widget build(BuildContext context) {
+    if (who != null) {
+      return Card(child: ListTile(
+        leading: const Icon(Icons.verified_user),
+        title: Text(who!),
+        subtitle: const Text('Linked — downloads & forums unlocked'),
+        trailing: TextButton(onPressed: () async { await Api.signOut(); _who(); }, child: const Text('Sign out')),
+      ));
+    }
+    return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
+      TextField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email (Gmail / iCloud)')),
+      TextField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Password')),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: FilledButton(onPressed: busy ? null : () => _go(false), child: const Text('Sign in'))),
+        const SizedBox(width: 8),
+        Expanded(child: OutlinedButton(onPressed: busy ? null : () => _go(true), child: const Text('Register'))),
+      ]),
+    ])));
+  }
 }
 
 class WatchScreen extends StatefulWidget {
@@ -262,9 +351,8 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() => loading = false);
   }
   Future<void> _downloadActive() async {
-    final p = await SharedPreferences.getInstance();
-    final email = p.getString('user_email');
-    if (email == null) {
+    final tok = await Api.token();
+    if (tok == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in on the website first, then downloads unlock (hashed auth).')));
       return;
     }
