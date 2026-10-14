@@ -3,140 +3,1228 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Camanime | Watch Anime Online Free</title>
-    <meta name="google-site-verification" content="PLACEHOLDER_GOOGLE_VERIFICATION_CODE" />
+    <title>CamAnime — Stream & Download Anime in 1080p Free</title>
+    <meta name="description" content="Watch and download full anime episodes and seasons in 1080p Sub & Dub with direct AnimeHeaven MP4 and CamStream HLS scrapers.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background: #0a0c15; color: #eef2ff; line-height: 1.5; }
+        /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
+         * theme: Studio Obsidian · accent: warm-amber #FFB347 ~5% · studied: yes · DNA-source: user reference
+         */
+        :root {
+            --bg-canvas: #07080d;
+            --bg-elevated: #0e111a;
+            --bg-surface: #141926;
+            --bg-glass: rgba(14, 17, 26, 0.82);
+            --text-primary: #f3f5fa;
+            --text-secondary: #a0abc0;
+            --text-muted: #64708a;
+            --accent: #FFB347;
+            --accent-hover: #ffc266;
+            --accent-crimson: #FF5E62;
+            --emerald: #10B981;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(255, 179, 71, 0.35);
+            --radius-lg: 18px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+        }
 
-        header { background: rgba(10, 12, 21, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255, 180, 71, 0.2); position: sticky; top: 0; z-index: 1000; padding: 0.8rem 1.5rem; }
-        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-        .site-title { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; color: transparent; text-decoration: none; }
-        .search-form { display: flex; align-items: center; background: #1e263a; border: 1px solid rgba(255, 180, 71, 0.3); border-radius: 20px; padding-left: 10px; }
-        .search-input { background: transparent; border: none; padding: 0.5rem 1rem; color: white; width: 250px; outline: none; }
-        .search-btn { background: #FFB347; border: none; padding: 0.5rem 1rem; border-radius: 0 20px 20px 0; cursor: pointer; color: #0a0c15; font-weight: bold; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            background-color: var(--bg-canvas);
+            background-image:
+                radial-gradient(circle at 15% 0%, rgba(255, 179, 71, 0.07) 0%, transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(255, 94, 98, 0.05) 0%, transparent 40%);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.5;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
 
-        .container { max-width: 1400px; margin: 2rem auto; padding: 0 1.5rem; }
+        /* ─── STICKY GLASS HEADER ─── */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(7, 8, 13, 0.86);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0.85rem 2rem;
+        }
+        .header-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }
+        .brand-group {
+            display: flex;
+            align-items: center;
+            gap: 2.25rem;
+        }
+        .site-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.55rem;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+        }
+        .logo-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #07080d;
+            font-size: 1rem;
+            box-shadow: 0 4px 16px rgba(255, 179, 71, 0.35);
+        }
+        .logo-accent {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+            padding: 0.5rem 0.9rem;
+            border-radius: 999px;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+        .nav-link:hover, .nav-link.active {
+            color: var(--text-primary);
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .nav-link.scraper-pill {
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+        }
+        .nav-link.scraper-pill:hover {
+            background: rgba(16, 185, 129, 0.2);
+            transform: translateY(-1px);
+        }
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--emerald);
+            box-shadow: 0 0 8px var(--emerald);
+            animation: pulseDot 2s infinite;
+        }
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.45; transform: scale(1.25); }
+        }
 
-        .featured-hero {
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            flex: 1;
+            justify-content: flex-end;
+        }
+        .search-form {
+            display: flex;
+            align-items: center;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 999px;
+            padding: 0.25rem 0.3rem 0.25rem 1.1rem;
+            width: 100%;
+            max-width: 380px;
+            transition: all 0.25s ease;
+        }
+        .search-form:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.15);
+            background: #181e2e;
+        }
+        .search-input {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            width: 100%;
+            outline: none;
+        }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-btn {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: #07080d;
+            border: none;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            transition: transform 0.2s ease;
+            flex-shrink: 0;
+        }
+        .search-btn:hover { transform: scale(1.06); }
+
+        .btn-watchlist-Trigger {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 0.55rem 1rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-watchlist-Trigger:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .watchlist-count {
+            background: rgba(255, 179, 71, 0.2);
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 0.1rem 0.45rem;
+            border-radius: 999px;
+        }
+
+        /* ─── MAIN CONTAINER ─── */
+        .main-wrap {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 1.75rem 2rem 4rem;
+        }
+
+        /* ─── MARQUEE HERO SPOTLIGHT ─── */
+        .hero-spotlight {
             position: relative;
-            height: 400px;
-            background: #111;
-            border-radius: 20px;
+            min-height: 490px;
+            border-radius: 24px;
             overflow: hidden;
-            margin-bottom: 3rem;
+            margin-bottom: 2.25rem;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-elevated);
+            display: flex;
+            align-items: flex-end;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+        }
+        .hero-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.65s ease;
             display: flex;
             align-items: flex-end;
         }
-        .hero-bg {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover;
-            opacity: 0.6;
-            mask-image: linear-gradient(to bottom, rgba(0,0,0,1), rgba(0,0,0,0));
-        }
-        .hero-content {
+        .hero-slide.active {
+            opacity: 1;
+            pointer-events: auto;
             position: relative;
-            z-index: 2;
-            padding: 2rem;
-            background: linear-gradient(to top, #0a0c15 10%, transparent);
+            width: 100%;
+            min-height: 490px;
+        }
+        .hero-backdrop {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center 20%;
+            filter: saturate(1.1) contrast(1.05);
+            transform: scale(1.02);
+            transition: transform 6s ease;
+        }
+        .hero-slide.active .hero-backdrop {
+            transform: scale(1);
+        }
+        .hero-vignette {
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, rgba(7, 8, 13, 0.96) 0%, rgba(7, 8, 13, 0.78) 45%, rgba(7, 8, 13, 0.2) 100%),
+                linear-gradient(0deg, rgba(7, 8, 13, 0.98) 0%, rgba(7, 8, 13, 0.4) 45%, rgba(7, 8, 13, 0.15) 100%);
+        }
+        .hero-body {
+            position: relative;
+            z-index: 3;
+            padding: 3rem 3.25rem;
+            max-width: 760px;
             width: 100%;
         }
-        .hero-title { font-size: 3rem; font-weight: 800; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); line-height: 1.1; margin-bottom: 0.5rem; }
-        .hero-meta { color: #FFB347; font-weight: bold; margin-bottom: 1rem; }
-        .hero-btn {
-            display: inline-block;
-            background: #FFB347;
-            color: #0a0c15;
-            padding: 0.8rem 2rem;
-            border-radius: 30px;
-            text-decoration: none;
+        .hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.35rem 0.85rem;
+            border-radius: 999px;
+            background: rgba(255, 179, 71, 0.14);
+            border: 1px solid rgba(255, 179, 71, 0.35);
+            color: var(--accent);
+            font-size: 0.76rem;
             font-weight: 700;
-            transition: 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 1rem;
         }
-        .hero-btn:hover { background: #ffa01e; transform: scale(1.05); }
+        .hero-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(2.1rem, 4vw, 3.35rem);
+            font-weight: 800;
+            line-height: 1.06;
+            letter-spacing: -0.025em;
+            margin-bottom: 0.85rem;
+            color: #ffffff;
+            text-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+        }
+        .hero-meta-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .meta-pill {
+            background: rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 0.22rem 0.65rem;
+            border-radius: 6px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            color: var(--text-primary);
+        }
+        .meta-pill.gold {
+            background: rgba(255, 179, 71, 0.18);
+            border-color: rgba(255, 179, 71, 0.4);
+            color: var(--accent);
+        }
+        .meta-pill.subdub {
+            background: rgba(16, 185, 129, 0.16);
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+        .hero-desc {
+            color: var(--text-secondary);
+            font-size: 0.96rem;
+            line-height: 1.6;
+            margin-bottom: 1.65rem;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            max-width: 62ch;
+        }
+        .hero-ctas {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: #07080d;
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 0.85rem 1.75rem;
+            border-radius: 999px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 10px 25px rgba(255, 179, 71, 0.3);
+            transition: all 0.22s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 14px 32px rgba(255, 179, 71, 0.45);
+        }
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.09);
+            backdrop-filter: blur(10px);
+            color: var(--text-primary);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-weight: 600;
+            font-size: 0.92rem;
+            padding: 0.85rem 1.45rem;
+            border-radius: 999px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.16);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .hero-dots {
+            position: absolute;
+            right: 2.5rem;
+            bottom: 2.2rem;
+            z-index: 5;
+            display: flex;
+            gap: 0.5rem;
+        }
+        .hero-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.25);
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .hero-dot.active {
+            width: 28px;
+            background: var(--accent);
+        }
 
-        .grid-header { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.5rem; border-left: 5px solid #FFB347; padding-left: 10px; }
-        .anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1.5rem; }
-        .anime-card { position: relative; transition: 0.3s; cursor: pointer; border-radius: 12px; overflow: hidden; aspect-ratio: 2/3; text-decoration: none; display: block; }
-        .anime-card img { width: 100%; height: 100%; object-fit: cover; transition: 0.3s; }
-        .anime-card:hover img { transform: scale(1.05); }
-        .card-overlay {
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            padding: 1rem;
-            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+        /* ─── GENRE & FORMAT FILTER RIBBON ─── */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 2.5rem;
+            padding: 0.9rem 1.25rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow-x: auto;
         }
-        .card-title { font-weight: 700; font-size: 0.9rem; color: #fff; text-shadow: 1px 1px 2px black; }
+        .genre-pills {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            flex-wrap: nowrap;
+        }
+        .genre-pill {
+            color: var(--text-secondary);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            padding: 0.42rem 0.9rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+        }
+        .genre-pill:hover, .genre-pill.active {
+            background: rgba(255, 179, 71, 0.16);
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ─── SECTION HEADERS ─── */
+        .section-block {
+            margin-bottom: 3.25rem;
+        }
+        .section-head {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.35rem;
+        }
+        .section-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .section-accent-bar {
+            width: 5px;
+            height: 26px;
+            border-radius: 99px;
+            background: linear-gradient(180deg, var(--accent), var(--accent-crimson));
+        }
+        .section-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.45rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        .section-subtitle {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            margin-left: 0.25rem;
+        }
+        .section-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.86rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .section-link:hover { text-decoration: underline; }
+
+        /* ─── POSTER GRID & CARDS ─── */
+        .anime-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+            gap: 1.35rem;
+        }
+        .anime-card {
+            position: relative;
+            border-radius: var(--radius-md);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            overflow: hidden;
+            transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            color: inherit;
+        }
+        .anime-card:hover {
+            transform: translateY(-6px);
+            border-color: rgba(255, 179, 71, 0.45);
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+        }
+        .card-poster-wrap {
+            position: relative;
+            aspect-ratio: 2 / 2.85;
+            width: 100%;
+            overflow: hidden;
+            background: #101420;
+        }
+        .card-poster-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.4s ease;
+        }
+        .anime-card:hover .card-poster-wrap img {
+            transform: scale(1.07);
+        }
+        .card-badges-top {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            z-index: 3;
+            pointer-events: none;
+        }
         .ep-badge {
-            position: absolute; top: 10px; right: 10px;
-            background: rgba(0,0,0,0.7);
-            color: #FFB347;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.7rem;
-            font-weight: bold;
+            background: rgba(7, 8, 13, 0.85);
+            backdrop-filter: blur(6px);
+            color: var(--accent);
+            border: 1px solid rgba(255, 179, 71, 0.35);
+            padding: 0.22rem 0.55rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+        .score-badge {
+            background: rgba(7, 8, 13, 0.85);
+            backdrop-filter: blur(6px);
+            color: #facc15;
+            padding: 0.22rem 0.5rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .card-hover-actions {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(7, 8, 13, 0.95) 0%, rgba(7, 8, 13, 0.45) 55%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 1rem;
+            gap: 0.5rem;
+            z-index: 4;
+        }
+        .anime-card:hover .card-hover-actions {
+            opacity: 1;
+        }
+        .card-action-row {
+            display: flex;
+            gap: 0.45rem;
+        }
+        .card-btn-play {
+            flex: 1;
+            background: var(--accent);
+            color: #07080d;
+            border: none;
+            border-radius: 8px;
+            padding: 0.5rem 0.65rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.35rem;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .card-btn-trailer {
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.22);
+            border-radius: 8px;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .card-btn-trailer:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+        }
+        .card-body {
+            padding: 0.85rem 0.95rem 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            flex: 1;
+            justify-content: space-between;
+        }
+        .card-title {
+            font-weight: 700;
+            font-size: 0.92rem;
+            color: var(--text-primary);
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .card-submeta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.2rem;
         }
 
-        @media (max-width: 768px) {
-            .hero-title { font-size: 2rem; }
-            .search-input { width: 150px; }
+        /* ─── ANIMEHEAVEN LIVE SCRAPER STRIP ─── */
+        .scraper-banner-card {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(14, 17, 26, 0.95) 55%, rgba(255, 179, 71, 0.08) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        .heaven-strip-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 1rem;
+            margin-top: 1.15rem;
+        }
+        .heaven-mini-card {
+            background: rgba(7, 8, 13, 0.7);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.22s ease;
+            display: flex;
+            flex-direction: column;
+        }
+        .heaven-mini-card:hover {
+            border-color: var(--emerald);
+            transform: translateY(-4px);
+        }
+        .heaven-mini-card img {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            object-fit: cover;
+        }
+        .heaven-mini-info {
+            padding: 0.7rem 0.8rem;
+        }
+        .heaven-mini-title {
+            font-size: 0.83rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 0.25rem;
+        }
+        .heaven-mini-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: #34d399;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ─── YOUTUBE TRAILER MODAL ─── */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(4, 5, 10, 0.88);
+            backdrop-filter: blur(12px);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+        .modal-backdrop.open {
+            display: flex;
+        }
+        .modal-dialog {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-accent);
+            border-radius: 20px;
+            max-width: 960px;
+            width: 100%;
+            overflow: hidden;
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.85);
+        }
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.4rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+        .modal-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 700;
+            font-size: 1.05rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .modal-close {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            color: var(--text-primary);
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .modal-video-box {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #000;
+        }
+        .modal-video-box iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* ─── FOOTER ─── */
+        footer {
+            border-top: 1px solid var(--border-subtle);
+            background: #05060a;
+            padding: 3rem 2rem;
+            margin-top: 4rem;
+        }
+        .footer-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 900px) {
+            header { padding: 0.75rem 1rem; }
+            .nav-links { display: none; }
+            .main-wrap { padding: 1rem 1rem 3rem; }
+            .hero-body { padding: 1.75rem 1.5rem; }
+            .hero-spotlight, .hero-slide.active { min-height: 400px; }
+            .anime-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
         }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="header-content">
-        <a href="/" class="site-title">Camanime</a>
-        <form action="/search" method="get" class="search-form">
-            <input type="text" name="q" class="search-input" placeholder="Search anime..." required>
-            <button type="submit" class="search-btn"><i class="fas fa-search"></i></button>
-        </form>
+    <div class="header-inner">
+        <div class="brand-group">
+            <a href="/" class="site-logo">
+                <span class="logo-mark"><i class="fas fa-play"></i></span>
+                <span>Cam<span class="logo-accent">Anime</span></span>
+            </a>
+            <nav class="nav-links">
+                <a href="/" class="nav-link {{ 'active' if page_type == 'home' and not active_format else '' }}">
+                    <i class="fas fa-compass"></i> Discover
+                </a>
+                <a href="/?format=TV" class="nav-link {{ 'active' if active_format == 'TV' else '' }}">
+                    <i class="fas fa-tv"></i> TV Series
+                </a>
+                <a href="/?format=MOVIE" class="nav-link {{ 'active' if active_format == 'MOVIE' else '' }}">
+                    <i class="fas fa-film"></i> Movies
+                </a>
+                <a href="/scraper" class="nav-link scraper-pill">
+                    <span class="live-dot"></span> AnimeHeaven Scraper & Downloader
+                </a>
+            </nav>
+        </div>
+
+        <div class="header-actions">
+            <form action="/search" method="get" class="search-form">
+                <input type="text" name="q" class="search-input" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." required>
+                <button type="submit" class="search-btn" title="Search"><i class="fas fa-search"></i></button>
+            </form>
+            <button type="button" class="btn-watchlist-Trigger" onclick="toggleWatchlistModal()">
+                <i class="fas fa-bookmark"></i> Watchlist
+                <span class="watchlist-count" id="watchlistBadge">0</span>
+            </button>
+        </div>
     </div>
 </header>
 
-<div class="container">
-    {% if page_type == 'home' and featured %}
-    <div class="featured-hero">
-        <img src="{{ featured.image }}"
-     srcset="{{ featured.image }} 1x, {{ featured.image }} 2x"
-     sizes="(max-width: 768px) 100vw, 400px"
-     class="hero-bg"
-     alt="Hero Background"
-     fetchpriority="high">
-        <div class="hero-content">
-            <div class="hero-meta">Trending Now • {{ featured.episode }}</div>
-            <h1 class="hero-title">{{ featured.title }}</h1>
-            <a href="/anime/{{ featured.id }}" class="hero-btn"><i class="fas fa-play"></i> Watch Now</a>
+<main class="main-wrap">
+
+    {% if page_type == 'home' and hero_slides %}
+    <!-- ─── SPOTLIGHT HERO CAROUSEL ─── -->
+    <section class="hero-spotlight" id="heroCarousel">
+        {% for slide in hero_slides %}
+        <div class="hero-slide {{ 'active' if loop.first else '' }}" data-slide-index="{{ loop.index0 }}">
+            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" fetchpriority="{{ 'high' if loop.first else 'auto' }}">
+            <div class="hero-vignette"></div>
+            <div class="hero-body">
+                <div class="hero-kicker">
+                    <i class="fas fa-fire"></i> #{{ loop.index }} Spotlight • {{ slide.status }}
+                </div>
+                <h1 class="hero-title">{{ slide.title }}</h1>
+                <div class="hero-meta-row">
+                    <span class="meta-pill gold"><i class="fas fa-star"></i> {{ slide.rating }}</span>
+                    <span class="meta-pill">{{ slide.format }}</span>
+                    <span class="meta-pill">{{ slide.episode }}</span>
+                    <span class="meta-pill subdub">SUB & DUB • 1080p</span>
+                    {% for g in slide.genres[:3] %}
+                    <span class="meta-pill">{{ g }}</span>
+                    {% endfor %}
+                </div>
+                <p class="hero-desc">{{ slide.description }}</p>
+                <div class="hero-ctas">
+                    <a href="/watch/{{ slide.id }}/1" class="btn-primary">
+                        <i class="fas fa-play"></i> Watch Episode 1
+                    </a>
+                    <button type="button" class="btn-secondary" onclick="openTrailerModal('{{ slide.title | e }}', '{{ slide.trailer_id or '' }}', {{ slide.id }})">
+                        <i class="fab fa-youtube" style="color: #ff4e45;"></i> Watch Trailer
+                    </button>
+                    <a href="/anime/{{ slide.id }}" class="btn-secondary">
+                        <i class="fas fa-layer-group"></i> Episodes & Download
+                    </a>
+                </div>
+            </div>
         </div>
-    </div>
+        {% endfor %}
+
+        <div class="hero-dots">
+            {% for slide in hero_slides %}
+            <button type="button" class="hero-dot {{ 'active' if loop.first else '' }}" onclick="setHeroSlide({{ loop.index0 }})" aria-label="Slide {{ loop.index }}"></button>
+            {% endfor %}
+        </div>
+    </section>
     {% endif %}
 
-    <h2 class="grid-header">
-        {% if page_type == 'search' %}
-            Search Results for "{{ search_query }}"
-        {% else %}
-            Top Airing Anime
-        {% endif %}
-    </h2>
+    <!-- ─── GENRE FILTER BAR ─── -->
+    <div class="filter-bar">
+        <div class="genre-pills">
+            <a href="/" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>
+            {% for g in genres %}
+            <a href="/?genre={{ g | urlencode }}" class="genre-pill {{ 'active' if active_genre == g else '' }}">{{ g }}</a>
+            {% endfor %}
+        </div>
+    </div>
 
-    <div class="anime-grid">
-        {% for anime in trending %}
-        <a href="/anime/{{ anime.id }}" class="anime-card">
-            <span class="ep-badge">{{ anime.episode }}</span>
-            <img src="{{ anime.image }}"
-     srcset="{{ anime.image }} 1x, {{ anime.image }} 2x"
-     sizes="(max-width: 768px) calc(50vw - 2rem), (max-width: 1200px) calc(33.333vw - 2rem), 200px"
-     loading="lazy"
-     alt="{{ anime.title }}">
-            <div class="card-overlay">
-                <div class="card-title">{{ anime.title }}</div>
+    <!-- ─── CONTINUE WATCHING / SAVED WATCHLIST STRIP (Dynamic JS) ─── -->
+    <section class="section-block" id="watchlistSection" style="display: none;">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">Your Watchlist & Continue Watching</h2>
             </div>
-        </a>
-        {% endfor %}
+            <button type="button" onclick="clearWatchlist()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.82rem;">
+                <i class="fas fa-trash"></i> Clear List
+            </button>
+        </div>
+        <div class="anime-grid" id="watchlistGrid"></div>
+    </section>
+
+    <!-- ─── PRIMARY TRENDING / SEARCH RESULTS GRID ─── -->
+    <section class="section-block">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">
+                    {% if page_type == 'search' %}
+                        Search Results for "{{ search_query }}"
+                    {% elif active_genre %}
+                        Top {{ active_genre }} Anime
+                    {% elif active_format %}
+                        Popular {{ active_format }} Releases
+                    {% else %}
+                        Trending & Top Airing Now
+                    {% endif %}
+                </h2>
+                <span class="section-subtitle">Direct 1080p Stream + YouTube Previews</span>
+            </div>
+            <a href="/scraper" class="section-link">Open Direct MP4 Scraper <i class="fas fa-arrow-right"></i></a>
+        </div>
+
+        {% if trending %}
+        <div class="anime-grid">
+            {% for anime in trending %}
+            <div class="anime-card">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">{{ anime.episode }}</span>
+                        {% if anime.rating and anime.rating != 'N/A' %}
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                        {% endif %}
+                    </div>
+                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <div class="card-hover-actions">
+                        <div class="card-action-row">
+                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play">
+                                <i class="fas fa-play"></i> Stream
+                            </a>
+                            <button type="button" class="card-btn-trailer" title="Watch YouTube Trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                                <i class="fab fa-youtube"></i>
+                            </button>
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer" title="Episodes & Direct Download">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <a href="/anime/{{ anime.id }}" class="card-body" style="text-decoration:none;">
+                    <div class="card-title">{{ anime.title }}</div>
+                    <div class="card-submeta">
+                        <span>{{ anime.format or 'TV' }}</span>
+                        <span>{{ anime.season or anime.status or 'HD' }}</span>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="padding: 3rem; text-align: center; background: var(--bg-elevated); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">No AniList results matched your query. Try searching directly in the AnimeHeaven Engine below!</p>
+            <a href="/scraper?q={{ (search_query or '') | urlencode }}" class="btn-primary">Search AnimeHeaven Scraper</a>
+        </div>
+        {% endif %}
+    </section>
+
+    <!-- ─── LIVE ANIMEHEAVEN DIRECT SCRAPER FEED ─── -->
+    {% if heaven_recent %}
+    <section class="scraper-banner-card">
+        <div class="section-head" style="margin-bottom: 0.4rem;">
+            <div class="section-title-wrap">
+                <span class="live-dot"></span>
+                <h2 class="section-title" style="font-size: 1.25rem;">
+                    {% if page_type == 'search' %}
+                        AnimeHeaven Direct Scraper Matches
+                    {% else %}
+                        AnimeHeaven Live Feed — Direct MP4 Stream & Download Ready
+                    {% endif %}
+                </h2>
+            </div>
+            <a href="/scraper" class="section-link" style="color: #34d399;">
+                Launch Full AnimeHeaven Scraper <i class="fas fa-bolt"></i>
+            </a>
+        </div>
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">
+            Reverse-engineered live from <code style="color:#34d399;">animeheaven.me</code> — click any release to stream or download raw MP4 episodes directly.
+        </p>
+
+        <div class="heaven-strip-grid">
+            {% for item in heaven_recent %}
+            <a href="/scraper?id={{ item.id }}" class="heaven-mini-card">
+                <img src="{{ item.image }}" loading="lazy" alt="{{ item.title }}">
+                <div class="heaven-mini-info">
+                    <div class="heaven-mini-title">{{ item.title }}</div>
+                    <div class="heaven-mini-meta">
+                        <span>EP {{ item.episode or 'LIVE' }}</span>
+                        <span>{{ item.updated or 'MP4 Ready' }}</span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if popular_season %}
+    <!-- ─── POPULAR THIS SEASON ─── -->
+    <section class="section-block">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">Popular Simulcasts Airing Now</h2>
+                <span class="section-subtitle">Updated Hourly</span>
+            </div>
+        </div>
+        <div class="anime-grid">
+            {% for anime in popular_season %}
+            <div class="anime-card">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">{{ anime.episode }}</span>
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                    </div>
+                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <div class="card-hover-actions">
+                        <div class="card-action-row">
+                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
+                            <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                                <i class="fab fa-youtube"></i>
+                            </button>
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer"><i class="fas fa-download"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <a href="/anime/{{ anime.id }}" class="card-body" style="text-decoration:none;">
+                    <div class="card-title">{{ anime.title }}</div>
+                    <div class="card-submeta">
+                        <span>{{ anime.studio }}</span>
+                        <span>{{ anime.format }}</span>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if top_rated %}
+    <!-- ─── ALL-TIME HALL OF FAME ─── -->
+    <section class="section-block">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">All-Time Highest Rated Anime</h2>
+                <span class="section-subtitle">Full Seasons & Direct Batch Downloads</span>
+            </div>
+        </div>
+        <div class="anime-grid">
+            {% for anime in top_rated %}
+            <div class="anime-card">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">{{ anime.episode }}</span>
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                    </div>
+                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <div class="card-hover-actions">
+                        <div class="card-action-row">
+                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
+                            <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                                <i class="fab fa-youtube"></i>
+                            </button>
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer"><i class="fas fa-download"></i></a>
+                        </div>
+                    </div>
+                </div>
+                <a href="/anime/{{ anime.id }}" class="card-body" style="text-decoration:none;">
+                    <div class="card-title">{{ anime.title }}</div>
+                    <div class="card-submeta">
+                        <span>{{ anime.year }}</span>
+                        <span>{{ anime.format }}</span>
+                    </div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+</main>
+
+<!-- ─── YOUTUBE TRAILER PREVIEW MODAL ─── -->
+<div class="modal-backdrop" id="trailerModal" onclick="if(event.target===this) closeTrailerModal()">
+    <div class="modal-dialog">
+        <div class="modal-header">
+            <div class="modal-title">
+                <i class="fab fa-youtube" style="color: #ff4e45; font-size: 1.3rem;"></i>
+                <span id="trailerModalTitle">Official Anime Trailer Preview</span>
+            </div>
+            <button type="button" class="modal-close" onclick="closeTrailerModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-video-box" id="trailerVideoBox"></div>
     </div>
 </div>
+
+<footer>
+    <div class="footer-inner">
+        <div>
+            <strong style="color: var(--text-primary); font-family: 'Syne', sans-serif;">CamAnime Studio</strong> — Powered by AniList GraphQL, AnimeHeaven Direct MP4 Scraper, CamStream 1080p HLS & YouTube Trailer Previews.
+        </div>
+        <div style="display: flex; gap: 1.25rem;">
+            <a href="/" style="color: var(--text-secondary); text-decoration: none;">Home</a>
+            <a href="/scraper" style="color: #34d399; text-decoration: none;">AnimeHeaven Scraper</a>
+        </div>
+    </div>
+</footer>
+
+<script>
+    // Hero Carousel rotation
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.hero-slide');
+    const dots = document.querySelectorAll('.hero-dot');
+
+    function setHeroSlide(idx) {
+        if (!slides.length) return;
+        slides.forEach((s, i) => s.classList.toggle('active', i === idx));
+        dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+        currentSlide = idx;
+    }
+
+    if (slides.length > 1) {
+        setInterval(() => {
+            setHeroSlide((currentSlide + 1) % slides.length);
+        }, 7000);
+    }
+
+    // YouTube Trailer Modal
+    async function openTrailerModal(title, ytId, animeId) {
+        const modal = document.getElementById('trailerModal');
+        const titleEl = document.getElementById('trailerModalTitle');
+        const box = document.getElementById('trailerVideoBox');
+        titleEl.textContent = `${title} — Official Trailer Preview`;
+        modal.classList.add('open');
+
+        if (ytId) {
+            box.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+            return;
+        }
+
+        box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);gap:0.75rem;"><i class="fas fa-circle-notch fa-spin"></i> Fetching official YouTube trailer...</div>`;
+        try {
+            const resp = await fetch(`/api/trailer?title=${encodeURIComponent(title)}&anime_id=${animeId || ''}`);
+            const data = await resp.json();
+            if (data.youtube_id) {
+                box.innerHTML = `<iframe src="https://www.youtube.com/embed/${data.youtube_id}?autoplay=1&rel=0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+            } else {
+                box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);">Trailer unavailable for this title.</div>`;
+            }
+        } catch (err) {
+            box.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);">Could not load trailer preview.</div>`;
+        }
+    }
+
+    function closeTrailerModal() {
+        const modal = document.getElementById('trailerModal');
+        const box = document.getElementById('trailerVideoBox');
+        modal.classList.remove('open');
+        box.innerHTML = '';
+    }
+
+    // Watchlist Management
+    function loadWatchlist() {
+        try {
+            const list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+            const badge = document.getElementById('watchlistBadge');
+            const section = document.getElementById('watchlistSection');
+            const grid = document.getElementById('watchlistGrid');
+            if (badge) badge.textContent = list.length;
+            if (!section || !grid) return;
+
+            if (list.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            grid.innerHTML = list.map(item => `
+                <div class="anime-card">
+                    <div class="card-poster-wrap">
+                        <div class="card-badges-top">
+                            <span class="ep-badge">EP ${item.ep || 1}</span>
+                        </div>
+                        <img src="${item.image}" alt="${item.title}" loading="lazy">
+                        <div class="card-hover-actions">
+                            <div class="card-action-row">
+                                <a href="/watch/${item.id}/${item.ep || 1}" class="card-btn-play"><i class="fas fa-play"></i> Resume</a>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="/anime/${item.id}" class="card-body" style="text-decoration:none;">
+                        <div class="card-title">${item.title}</div>
+                        <div class="card-submeta"><span>Saved</span><span>Resume Ep ${item.ep || 1}</span></div>
+                    </a>
+                </div>
+            `).join('');
+        } catch (e) {}
+    }
+
+    function toggleWatchlistModal() {
+        const section = document.getElementById('watchlistSection');
+        if (section && section.style.display !== 'none') {
+            section.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            alert('Your watchlist is currently empty. Bookmark any anime on its details or watch page!');
+        }
+    }
+
+    function clearWatchlist() {
+        localStorage.removeItem('camanime_watchlist');
+        loadWatchlist();
+    }
+
+    document.addEventListener('DOMContentLoaded', loadWatchlist);
+</script>
 
 </body>
 </html>

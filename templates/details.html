@@ -3,102 +3,775 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ anime.title }} - Camanime</title>
+    <title>{{ anime.title }} — Stream & Download Full Season | CamAnime</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background: #0a0c15; color: #eef2ff; line-height: 1.5; }
-
-        header { background: rgba(10, 12, 21, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255, 180, 71, 0.2); position: sticky; top: 0; z-index: 1000; padding: 0.8rem 1.5rem; }
-        .site-title { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; color: transparent; text-decoration: none; }
-
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
-
-        .anime-header { display: flex; gap: 2rem; margin-bottom: 3rem; background: rgba(255,255,255,0.05); padding: 2rem; border-radius: 20px; }
-        .anime-poster { width: 300px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .anime-info { flex: 1; }
-        .anime-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; color: #FFB347; line-height: 1.1; }
-        .anime-meta { display: flex; gap: 1rem; color: #b9c3e6; margin-bottom: 1.5rem; font-size: 0.9rem; flex-wrap: wrap; }
-        .tag { background: rgba(255, 255, 255, 0.1); padding: 0.2rem 0.6rem; border-radius: 4px; }
-        .rating { color: #FFB347; font-weight: bold; }
-
-        .desc { color: #cbd5e1; margin-bottom: 2rem; max-height: 150px; overflow-y: auto; line-height: 1.6; }
-
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.8rem; }
-        .ep-btn {
-            background: #1e263a;
-            color: white;
-            padding: 0.8rem;
-            border-radius: 8px;
-            text-align: center;
-            text-decoration: none;
-            font-weight: 600;
-            transition: 0.2s;
-            border: 1px solid rgba(255,255,255,0.1);
+        :root {
+            --bg-canvas: #07080d;
+            --bg-elevated: #0e111a;
+            --bg-surface: #141926;
+            --text-primary: #f3f5fa;
+            --text-secondary: #a0abc0;
+            --text-muted: #64708a;
+            --accent: #FFB347;
+            --accent-crimson: #FF5E62;
+            --emerald: #10B981;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(255, 179, 71, 0.35);
+            --radius-lg: 18px;
+            --radius-md: 12px;
         }
-        .ep-btn:hover { background: #FFB347; color: #0a0c15; border-color: #FFB347; transform: translateY(-3px); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.55;
+            min-height: 100vh;
+        }
 
-        .btn-action {
-            display: inline-block;
-            background: #FFB347;
-            color: #000;
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(7, 8, 13, 0.88);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0.85rem 2rem;
+        }
+        .header-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }
+        .site-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.5rem;
+            color: var(--text-primary);
+        }
+        .logo-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #07080d;
+        }
+        .logo-accent {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .nav-pill {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.88rem;
+            font-weight: 600;
             padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: bold;
-            margin-right: 1rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-surface);
+            transition: all 0.2s;
+        }
+        .nav-pill:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ─── BANNER BACKDROP ─── */
+        .banner-wrap {
+            position: relative;
+            height: 340px;
+            width: 100%;
+            overflow: hidden;
+            background: #0c0f18;
+        }
+        .banner-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center 25%;
+            opacity: 0.45;
+            filter: blur(2px) saturate(1.2);
+            transform: scale(1.04);
+        }
+        .banner-gradient {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, rgba(7,8,13,0.3) 0%, rgba(7,8,13,0.85) 70%, var(--bg-canvas) 100%);
+        }
+
+        .container {
+            max-width: 1380px;
+            margin: -180px auto 4rem;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 5;
+        }
+
+        /* ─── HERO DOSSIER ─── */
+        .dossier-card {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 2.5rem;
+            background: rgba(14, 17, 26, 0.92);
+            backdrop-filter: blur(18px);
+            border: 1px solid var(--border-subtle);
+            border-radius: 24px;
+            padding: 2.25rem;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+            margin-bottom: 2.5rem;
+        }
+        .poster-col {
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
+        }
+        .anime-poster {
+            width: 100%;
+            aspect-ratio: 2 / 2.9;
+            object-fit: cover;
+            border-radius: 16px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .scraper-status-box {
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 12px;
+            padding: 0.75rem 0.9rem;
+            font-size: 0.78rem;
+            color: #34d399;
+        }
+        .scraper-status-box strong {
+            display: block;
+            color: #fff;
+            margin-bottom: 0.2rem;
+        }
+
+        .info-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .kicker-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .badge {
+            padding: 0.25rem 0.7rem;
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+        }
+        .badge.gold {
+            background: rgba(255, 179, 71, 0.18);
+            border-color: var(--border-accent);
+            color: var(--accent);
+        }
+        .badge.emerald {
+            background: rgba(16, 185, 129, 0.16);
+            border-color: rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+
+        .anime-title {
+            font-family: 'Syne', sans-serif;
+            font-size: clamp(1.9rem, 3.5vw, 2.85rem);
+            font-weight: 800;
+            line-height: 1.08;
+            margin-bottom: 0.35rem;
+            color: #fff;
+        }
+        .anime-subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .genre-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            margin-bottom: 1.35rem;
+        }
+        .genre-tag {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.3rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .genre-tag:hover {
+            background: var(--accent);
+            color: #07080d;
+        }
+
+        .synopsis {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.68;
+            margin-bottom: 1.75rem;
+            max-height: 165px;
+            overflow-y: auto;
+            padding-right: 0.5rem;
+            white-space: pre-line;
+        }
+
+        .action-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.85rem;
+            align-items: center;
+        }
+        .btn-watch {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: #07080d;
+            font-weight: 700;
+            font-size: 0.95rem;
+            padding: 0.85rem 1.8rem;
+            border-radius: 999px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            border: none;
             cursor: pointer;
+            box-shadow: 0 10px 25px rgba(255, 179, 71, 0.3);
+            transition: all 0.2s;
+        }
+        .btn-watch:hover { transform: translateY(-2px); }
+
+        .btn-outline {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.82rem 1.35rem;
+            border-radius: 999px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-outline:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .btn-outline.emerald:hover {
+            border-color: var(--emerald);
+            color: #34d399;
+        }
+
+        /* ─── YOUTUBE TRAILER PREVIEW SECTION ─── */
+        .two-col-layout {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        .panel-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 1.6rem;
+        }
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+        .panel-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
+        .accent-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        /* ─── EPISODE GRID & SEARCH ─── */
+        .ep-controls {
+            display: flex;
+            gap: 0.65rem;
+            align-items: center;
+        }
+        .ep-filter-input {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 0.45rem 0.85rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            width: 150px;
+            outline: none;
+        }
+        .ep-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 0.8rem;
+            max-height: 520px;
+            overflow-y: auto;
+            padding-right: 0.35rem;
+        }
+        .ep-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 0.35rem;
+            transition: all 0.2s ease;
+        }
+        .ep-card:hover {
+            border-color: var(--accent);
+            background: rgba(255, 179, 71, 0.1);
+            transform: translateY(-2px);
+        }
+        .ep-card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .ep-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 0.88rem;
+            color: var(--accent);
+        }
+        .ep-dl-tag {
+            font-size: 0.68rem;
+            background: rgba(16, 185, 129, 0.16);
+            color: #34d399;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .ep-name {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ─── TRAILER & SEASON DOWNLOAD SIDEBAR ─── */
+        .trailer-embed-wrap {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            border: 1px solid var(--border-subtle);
+            margin-bottom: 1.25rem;
+        }
+        .trailer-embed-wrap iframe {
+            width: 100%;
+            height: 100%;
             border: none;
         }
 
-        @media (max-width: 768px) {
-            .anime-header { flex-direction: column; align-items: center; text-align: center; padding: 1rem; }
-            .anime-poster { width: 200px; }
-            .anime-title { font-size: 1.8rem; }
+        .season-pack-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+            margin-top: 1rem;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        .pack-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 0.85rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            font-size: 0.82rem;
+        }
+        .pack-dl-btn {
+            background: var(--emerald);
+            color: #052e16;
+            text-decoration: none;
+            padding: 0.3rem 0.7rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.75rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+
+        /* ─── RELATIONS & RECOMMENDATIONS ─── */
+        .mini-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 1.15rem;
+        }
+        .mini-poster-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.22s;
+        }
+        .mini-poster-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-4px);
+        }
+        .mini-poster-card img {
+            width: 100%;
+            aspect-ratio: 2 / 2.8;
+            object-fit: cover;
+        }
+        .mini-poster-body {
+            padding: 0.7rem;
+        }
+        .mini-poster-rel {
+            font-size: 0.68rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+        .mini-poster-title {
+            font-size: 0.84rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        @media (max-width: 980px) {
+            .dossier-card { grid-template-columns: 1fr; }
+            .poster-col { max-width: 240px; margin: 0 auto; }
+            .two-col-layout { grid-template-columns: 1fr; }
+            .container { padding: 0 1rem; }
         }
     </style>
 </head>
 <body>
 
 <header>
-    <div style="max-width: 1400px; margin: 0 auto;">
-        <a href="/" class="site-title">Camanime</a>
+    <div class="header-inner">
+        <a href="/" class="site-logo">
+            <span class="logo-mark"><i class="fas fa-play"></i></span>
+            <span>Cam<span class="logo-accent">Anime</span></span>
+        </a>
+        <div class="header-nav">
+            <a href="/" class="nav-pill"><i class="fas fa-arrow-left"></i> Back to Browse</a>
+            <a href="/scraper" class="nav-pill" style="border-color: rgba(16,185,129,0.4); color: #34d399;">
+                <i class="fas fa-bolt"></i> AnimeHeaven Scraper
+            </a>
+        </div>
     </div>
 </header>
 
+<div class="banner-wrap">
+    <img src="{{ anime.banner or anime.image }}" class="banner-img" alt="{{ anime.title }}">
+    <div class="banner-gradient"></div>
+</div>
+
 <div class="container">
-    <div class="anime-header">
-        <img src="{{ anime.image }}"
-     srcset="{{ anime.image }} 1x, {{ anime.image }} 2x"
-     sizes="(max-width: 768px) 90vw, 300px"
-     class="anime-poster"
-     alt="{{ anime.title }} Poster">
-        <div class="anime-info">
-            <h1 class="anime-title">{{ anime.title }}</h1>
-            <div class="anime-meta">
-                <span class="tag">Anime</span>
-                <span class="tag">{{ anime.episodes | length }} Eps</span>
+    <div class="dossier-card">
+        <div class="poster-col">
+            <img src="{{ anime.image }}" class="anime-poster" alt="{{ anime.title }}">
+            <div class="scraper-status-box">
+                <strong><i class="fas fa-check-circle"></i> Multi-Source Verified</strong>
+                {% if anime.heaven_id %}
+                    AnimeHeaven ID: <code>{{ anime.heaven_id }}</code> (Direct MP4 Ready)
+                {% else %}
+                    CamStream 1080p HLS & Embed Mirrors Ready
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="info-col">
+            <div>
+                <div class="kicker-row">
+                    <span class="badge gold"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                    <span class="badge">{{ anime.format }}</span>
+                    <span class="badge">{{ anime.status }}</span>
+                    <span class="badge">{{ anime.episodes | length }} Episodes</span>
+                    <span class="badge emerald">SUB & DUB • 1080p</span>
+                    {% if anime.season %}
+                    <span class="badge">{{ anime.season }}</span>
+                    {% endif %}
+                </div>
+
+                <h1 class="anime-title">{{ anime.title }}</h1>
+                <div class="anime-subtitle">
+                    {{ anime.title_romaji }} {% if anime.title_native %}• {{ anime.title_native }}{% endif %} • Studio: {{ anime.studio }}
+                </div>
+
+                <div class="genre-tags">
+                    {% for tag in anime.tags %}
+                    <a href="/?genre={{ tag | urlencode }}" class="genre-tag">{{ tag }}</a>
+                    {% endfor %}
+                </div>
+
+                <div class="synopsis">{{ anime.description }}</div>
             </div>
 
-            <div class="desc" style="white-space: pre-line;">{{ anime.description | safe }}</div>
-
-            <button class="btn-action" onclick="toggleBookmark()"><i class="fas fa-bookmark"></i> Bookmark</button>
+            <div class="action-bar">
+                <a href="/watch/{{ anime.id }}/1?audio=sub" class="btn-watch">
+                    <i class="fas fa-play"></i> Watch Ep 1 (SUB)
+                </a>
+                <a href="/watch/{{ anime.id }}/1?audio=dub" class="btn-outline">
+                    <i class="fas fa-headphones"></i> Watch Ep 1 (DUB)
+                </a>
+                {% if anime.heaven_id %}
+                <button type="button" class="btn-outline emerald" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')">
+                    <i class="fas fa-cloud-download-alt"></i> Direct Season MP4 Pack
+                </button>
+                {% endif %}
+                <button type="button" class="btn-outline" id="bookmarkBtn" onclick="toggleBookmark()">
+                    <i class="fas fa-bookmark"></i> <span id="bookmarkText">Add to Watchlist</span>
+                </button>
+            </div>
         </div>
     </div>
 
-    <h2 style="border-left: 5px solid #FFB347; padding-left: 10px; margin-bottom: 1.5rem;">Episodes</h2>
-    <div class="ep-grid">
-        {% for ep in anime.episodes %}
-        <a href="/watch/{{ anime.id }}/{{ ep.id }}" class="ep-btn">
-            EP {{ ep.num }}
-        </a>
-        {% endfor %}
+    <div class="two-col-layout">
+        <!-- ─── EPISODE GUIDE & STREAM / DOWNLOAD SELECTOR ─── -->
+        <div class="panel-card">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="accent-dot"></span>
+                    Episodes ({{ anime.episodes | length }})
+                </div>
+                <div class="ep-controls">
+                    <input type="text" id="epSearchInput" class="ep-filter-input" placeholder="Jump to episode #..." oninput="filterEpisodes(this.value)">
+                    <button type="button" class="nav-pill" onclick="reverseEpisodes()" style="cursor:pointer;">
+                        <i class="fas fa-sort"></i> Reverse Order
+                    </button>
+                </div>
+            </div>
+
+            <div class="ep-grid" id="epGrid">
+                {% for ep in anime.episodes %}
+                <a href="/watch/{{ anime.id }}/{{ ep.num }}" class="ep-card" data-ep="{{ ep.num }}">
+                    <div class="ep-card-top">
+                        <span class="ep-num">EP {{ ep.num }}</span>
+                        <span class="ep-dl-tag">{% if ep.heaven_key %}MP4 + HLS{% else %}1080p{% endif %}</span>
+                    </div>
+                    <div class="ep-name" title="{{ ep.title }}">{{ ep.title }}</div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ─── YOUTUBE OFFICIAL TRAILER PREVIEW & DIRECT SEASON DOWNLOADER ─── -->
+        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="panel-card">
+                <div class="panel-header" style="margin-bottom: 0.85rem;">
+                    <div class="panel-title" style="font-size: 1.1rem;">
+                        <i class="fab fa-youtube" style="color: #ff4e45;"></i> Official YouTube Trailer
+                    </div>
+                </div>
+                <div class="trailer-embed-wrap" id="detailsTrailerBox">
+                    {% if anime.trailer_id %}
+                    <iframe src="https://www.youtube.com/embed/{{ anime.trailer_id }}?rel=0" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                    {% else %}
+                    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:0.85rem;">
+                        Trailer preview unavailable
+                    </div>
+                    {% endif %}
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted);">
+                    Previewed via YouTube Official PV feed. Full episodes stream ad-free via CamAnime's multi-scraper engine.
+                </p>
+            </div>
+
+            <div class="panel-card" id="seasonDownloadPanel">
+                <div class="panel-header" style="margin-bottom: 0.5rem;">
+                    <div class="panel-title" style="font-size: 1.1rem;">
+                        <i class="fas fa-download" style="color: var(--emerald);"></i> Direct Season Downloader
+                    </div>
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-secondary);">
+                    {% if anime.heaven_id %}
+                        AnimeHeaven Scraper matched <code>{{ anime.heaven_id }}</code>. Click below to resolve direct MP4 download links for episodes in this season.
+                    {% else %}
+                        Open any episode in the Watch Player to access multi-resolution (360p / 720p / 1080p) Sub & Dub downloads.
+                    {% endif %}
+                </p>
+                {% if anime.heaven_id %}
+                <button type="button" class="btn-outline emerald" style="width:100%;justify-content:center;margin-top:0.85rem;" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')">
+                    <i class="fas fa-bolt"></i> Resolve Direct MP4 Season Links
+                </button>
+                {% endif %}
+                <div class="season-pack-list" id="seasonPackList"></div>
+            </div>
+        </div>
     </div>
+
+    {% if anime.relations %}
+    <!-- ─── SEASONS, SEQUELS & MOVIES ─── -->
+    <div class="panel-card" style="margin-bottom: 2.5rem;">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="accent-dot"></span> Seasons, Sequels & Related Releases
+            </div>
+        </div>
+        <div class="mini-grid">
+            {% for rel in anime.relations %}
+            <a href="/anime/{{ rel.id }}" class="mini-poster-card">
+                <img src="{{ rel.image }}" loading="lazy" alt="{{ rel.title }}">
+                <div class="mini-poster-body">
+                    <div class="mini-poster-rel">{{ rel.relation }} • {{ rel.format }}</div>
+                    <div class="mini-poster-title">{{ rel.title }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if anime.recommendations %}
+    <!-- ─── RECOMMENDED ANIME ─── -->
+    <div class="panel-card">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="accent-dot"></span> Recommended Similar Anime
+            </div>
+        </div>
+        <div class="mini-grid">
+            {% for rec in anime.recommendations %}
+            <a href="/anime/{{ rec.id }}" class="mini-poster-card">
+                <img src="{{ rec.image }}" loading="lazy" alt="{{ rec.title }}">
+                <div class="mini-poster-body">
+                    <div class="mini-poster-rel">★ {{ rec.rating }} • {{ rec.episode }}</div>
+                    <div class="mini-poster-title">{{ rec.title }}</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>
-    function toggleBookmark() {
-        alert("Added to Bookmarks! (Local Storage)");
+    const ANIME_META = {
+        id: {{ anime.id }},
+        title: {{ anime.title | tojson }},
+        image: {{ anime.image | tojson }},
+        ep: 1
+    };
+
+    function filterEpisodes(q) {
+        const clean = q.trim().toLowerCase();
+        document.querySelectorAll('#epGrid .ep-card').forEach(card => {
+            const ep = card.getAttribute('data-ep') || '';
+            const text = card.textContent.toLowerCase();
+            card.style.display = (!clean || ep.includes(clean) || text.includes(clean)) ? 'flex' : 'none';
+        });
     }
+
+    function reverseEpisodes() {
+        const grid = document.getElementById('epGrid');
+        const cards = Array.from(grid.children);
+        cards.reverse().forEach(c => grid.appendChild(c));
+    }
+
+    async function loadSeasonDownloads(siteId) {
+        const listEl = document.getElementById('seasonPackList');
+        listEl.innerHTML = `<div style="padding:0.8rem;color:var(--text-secondary);font-size:0.85rem;"><i class="fas fa-circle-notch fa-spin"></i> Scraping direct MP4 links from AnimeHeaven gate.php...</div>`;
+        document.getElementById('seasonDownloadPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        try {
+            const resp = await fetch(`/api/heaven/season-pack/${encodeURIComponent(siteId)}?limit=12`);
+            const data = await resp.json();
+            if (data.status === 'success' && data.episodes && data.episodes.length) {
+                listEl.innerHTML = data.episodes.map(ep => `
+                    <div class="pack-item">
+                        <span><strong>Episode ${ep.num}</strong> • Direct MP4</span>
+                        <a href="${ep.download_url}" class="pack-dl-btn" download>
+                            <i class="fas fa-download"></i> Download MP4
+                        </a>
+                    </div>
+                `).join('');
+            } else {
+                listEl.innerHTML = `<div style="padding:0.8rem;color:var(--text-muted);">No direct batch MP4s resolved. Open individual episodes to download.</div>`;
+            }
+        } catch (err) {
+            listEl.innerHTML = `<div style="padding:0.8rem;color:#f87171;">Failed to resolve batch links.</div>`;
+        }
+    }
+
+    function updateBookmarkUI() {
+        const list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+        const exists = list.some(x => x.id === ANIME_META.id);
+        const txt = document.getElementById('bookmarkText');
+        const btn = document.getElementById('bookmarkBtn');
+        if (exists) {
+            txt.textContent = 'In Watchlist ✓';
+            btn.style.borderColor = 'var(--accent)';
+            btn.style.color = 'var(--accent)';
+        } else {
+            txt.textContent = 'Add to Watchlist';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+        }
+    }
+
+    function toggleBookmark() {
+        let list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+        if (list.some(x => x.id === ANIME_META.id)) {
+            list = list.filter(x => x.id !== ANIME_META.id);
+        } else {
+            list.unshift(ANIME_META);
+        }
+        localStorage.setItem('camanime_watchlist', JSON.stringify(list.slice(0, 30)));
+        updateBookmarkUI();
+    }
+
+    document.addEventListener('DOMContentLoaded', updateBookmarkUI);
 </script>
 
 </body>

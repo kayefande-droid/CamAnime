@@ -1,211 +1,958 @@
-import requests
 import logging
 import re
+import time
+from typing import Dict, List, Optional
+from urllib.parse import quote, urljoin, urlparse
 
-# Configure logging
+import requests
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    stream_with_context,
+    url_for,
+)
+
+from streaming_providers import DEFAULT_UA, streaming_manager
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from flask import Flask, render_template, request, redirect, url_for
-from streaming_providers import streaming_manager
-
 app = Flask(__name__)
 
-# --- CONFIGURATION ---
-ANILIST_API_URL = 'https://graphql.anilist.co'
-CONSUMET_API_URL = 'https://api.consumet.org/meta/anilist' 
+ANILIST_API_URL = "https://graphql.anilist.co"
+_anilist_cache: Dict[str, tuple] = {}
+ANILIST_CACHE_TTL = 900  # 15 minutes
 
-# --- GRAPHQL QUERIES ---
-TRENDING_QUERY = '''
-query ($page: Int, $perPage: Int) {
-  Page (page: $page, perPage: $perPage) {
-    media (sort: TRENDING_DESC, type: ANIME) {
-      id
-      title { romaji english }
-      coverImage { large extraLarge }
-      bannerImage
-      episodes
-      status
-      format
-      averageScore
-      nextAiringEpisode { episode }
-    }
-  }
-}
-'''
+MEDIA_FRAGMENT = """
+  id
+  idMal
+  title { romaji english native }
+  description(asHtml: false)
+  coverImage { large extraLarge color }
+  bannerImage
+  episodes
+  duration
+  status
+  format
+  season
+  seasonYear
+  averageScore
+  popularity
+  genres
+  studios(isMain: true) { nodes { name } }
+  trailer { id site thumbnail }
+  nextAiringEpisode { episode airingAt timeUntilAiring }
+"""
 
-SEARCH_QUERY = '''
-query ($search: String, $page: Int, $perPage: Int) {
-  Page (page: $page, perPage: $perPage) {
-    media (search: $search, sort: POPULARITY_DESC, type: ANIME) {
-      id
-      title { romaji english }
-      coverImage { large extraLarge }
-      episodes
-      status
-      averageScore
-    }
-  }
-}
-'''
+HOME_DASHBOARD_QUERY = f"""
+query {{
+  trending: Page(page: 1, perPage: 16) {{
+    media(sort: TRENDING_DESC, type: ANIME, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+  popularSeason: Page(page: 1, perPage: 12) {{
+    media(sort: POPULARITY_DESC, type: ANIME, status: RELEASING, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+  topRated: Page(page: 1, perPage: 12) {{
+    media(sort: SCORE_DESC, type: ANIME, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+}}
+"""
 
-DETAILS_QUERY = '''
-query ($id: Int) {
-  Media (id: $id, type: ANIME) {
-    id
-    title { romaji english }
-    description
-    coverImage { extraLarge }
-    bannerImage
-    episodes
-    status
-    format
-    genres
-    averageScore
-    nextAiringEpisode { episode }
-  }
-}
-'''
+SEARCH_FILTER_QUERY = f"""
+query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int) {{
+  Page(page: $page, perPage: $perPage) {{
+    media(search: $search, genre: $genre, format: $format, sort: $sort, type: ANIME, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+}}
+"""
 
-def fetch_anilist(query, variables):
-    """Fetches data from AniList GraphQL API."""
+DETAILS_QUERY = f"""
+query ($id: Int) {{
+  Media(id: $id, type: ANIME) {{
+    {MEDIA_FRAGMENT}
+    streamingEpisodes {{ title thumbnail url site }}
+    relations {{
+      edges {{
+        relationType(version: 2)
+        node {{
+          id
+          idMal
+          type
+          title {{ romaji english }}
+          coverImage {{ large extraLarge }}
+          episodes
+          format
+          status
+          seasonYear
+          averageScore
+        }}
+      }}
+    }}
+    recommendations(perPage: 10, sort: RATING_DESC) {{
+      nodes {{
+        mediaRecommendation {{
+          id
+          idMal
+          title {{ romaji english }}
+          coverImage {{ large extraLarge }}
+          episodes
+          format
+          status
+          seasonYear
+          averageScore
+        }}
+      }}
+    }}
+    characters(perPage: 8, sort: [ROLE, RELEVANCE]) {{
+      edges {{
+        role
+        node {{
+          name {{ full }}
+          image {{ large }}
+        }}
+      }}
+    }}
+  }}
+}}
+"""
+
+POPULAR_GENRES = [
+    "Action",
+    "Adventure",
+    "Comedy",
+    "Drama",
+    "Fantasy",
+    "Horror",
+    "Mystery",
+    "Psychological",
+    "Romance",
+    "Sci-Fi",
+    "Slice of Life",
+    "Sports",
+    "Supernatural",
+    "Thriller",
+]
+
+
+def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
+    """Fetches data from AniList GraphQL API with in-memory caching."""
+    cache_key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
+    now = time.time()
+    if cache_key in _anilist_cache:
+        data, ts = _anilist_cache[cache_key]
+        if now - ts < ANILIST_CACHE_TTL:
+            return data
+
     try:
-        response = requests.post(ANILIST_API_URL, json={'query': query, 'variables': variables})
-        response.raise_for_status()  # Raise an exception for bad status codes
-        return response.json().get('data', {})
-    except requests.exceptions.RequestException as e:
+        response = requests.post(
+            ANILIST_API_URL,
+            json={"query": query, "variables": variables or {}},
+            headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        data = response.json().get("data", {})
+        if data:
+            _anilist_cache[cache_key] = (data, now)
+        return data
+    except Exception as e:
         logger.error(f"AniList API Error: {e}")
         return {}
-    except ValueError as e:  # JSON decode error
-        logger.error(f"AniList JSON Decode Error: {e}")
+
+
+def clean_html_description(desc: Optional[str]) -> str:
+    if not desc:
+        return "No synopsis available."
+    text = re.sub(r"<br\s*/?>", "\n", desc, flags=re.I)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def format_anime_card(anime: Dict) -> Dict:
+    if not anime:
         return {}
+    title_obj = anime.get("title") or {}
+    title_en = title_obj.get("english")
+    title_ro = title_obj.get("romaji")
+    title = title_en or title_ro or "Unknown Anime"
+    cover = anime.get("coverImage") or {}
+    image_url = cover.get("extraLarge") or cover.get("large") or ""
 
-
-@app.route('/')
-def home():
-    data = fetch_anilist(TRENDING_QUERY, {'page': 1, 'perPage': 20})
-    trending = data.get('Page', {}).get('media', [])
-    featured = trending[0] if trending else None
-    
-    # Process data for template
-    processed_trending = []
-    for anime in trending:
-        # Use extraLarge if available, otherwise fall back to large
-        cover_image = anime['coverImage']
-        image_url = cover_image.get('extraLarge') or cover_image.get('large')
-        processed_trending.append({
-            "id": anime['id'],
-            "title": anime['title']['english'] or anime['title']['romaji'],
-            "image": image_url,
-            "episode": f"Ep {anime.get('nextAiringEpisode', {}).get('episode', 0) - 1}" if anime.get('nextAiringEpisode') else f"{anime.get('episodes')} Eps"
-        })
-        
-    processed_featured = None
-    if featured:
-        processed_featured = {
-            "id": featured['id'],
-            "title": featured['title']['english'] or featured['title']['romaji'],
-            "image": featured['bannerImage'] or featured['coverImage']['extraLarge'],
-            "format": featured['format'],
-            "episode": f"Ep {featured.get('nextAiringEpisode', {}).get('episode', 0) - 1}" if featured.get('nextAiringEpisode') else f"{featured.get('episodes')} Eps"
-        }
-
-    return render_template('index.html', trending=processed_trending, featured=processed_featured, page_type="home")
-
-@app.route('/search')
-def search():
-    query = request.args.get('q')
-    if not query:
-        return redirect(url_for('home'))
-        
-    data = fetch_anilist(SEARCH_QUERY, {'search': query, 'page': 1, 'perPage': 24})
-    raw_results = data.get('Page', {}).get('media', [])
-    
-    results = []
-    for anime in raw_results:
-        # Use extraLarge if available, otherwise fall back to large
-        cover_image = anime['coverImage']
-        image_url = cover_image.get('extraLarge') or cover_image.get('large')
-
-        results.append({
-            "id": anime['id'],
-            "title": anime['title']['english'] or anime['title']['romaji'],
-            "image": image_url,
-            "episode": f"{anime.get('episodes') or '?'} Eps"
-        })
-        
-    return render_template('index.html', trending=results, search_query=query, page_type="search")
-
-@app.route('/anime/<int:anime_id>')
-def details(anime_id):
-    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
-    raw_anime = data.get('Media')
-    
-    if not raw_anime:
-        return "Anime not found", 404
-
-    # Calculate episodes
-    total_episodes = raw_anime.get('episodes') or 0
-    if raw_anime.get('status') == 'RELEASING' and raw_anime.get('nextAiringEpisode'):
-        total_episodes = raw_anime['nextAiringEpisode']['episode'] - 1
-    elif total_episodes == 0:
-         total_episodes = None  # Unknown episode count
-    
-    episode_list = []
-    if total_episodes is not None:
-        for i in range(1, total_episodes + 1):
-            episode_list.append({"id": i, "num": i})
-        episode_list.reverse()
+    next_ep = anime.get("nextAiringEpisode")
+    total_eps = anime.get("episodes")
+    if next_ep and next_ep.get("episode"):
+        aired_eps = max(1, next_ep["episode"] - 1)
+        ep_badge = f"EP {aired_eps}" + (f" / {total_eps}" if total_eps else "")
+        latest_ep = aired_eps
+    elif total_eps:
+        ep_badge = f"{total_eps} EPS"
+        latest_ep = total_eps
     else:
-        # If episode count is unknown, show a reasonable default or leave empty
-        # For now, we'll show first 20 episodes as placeholder
-        for i in range(1, 21):
-            episode_list.append({"id": i, "num": i})
-        episode_list.reverse()
+        ep_badge = "AIRING" if anime.get("status") == "RELEASING" else "EPS ?"
+        latest_ep = 12
 
-    anime = {
-        "id": raw_anime['id'],
-        "title": raw_anime['title']['english'] or raw_anime['title']['romaji'],
-        "description": raw_anime['description'],
-        "image": raw_anime['coverImage']['extraLarge'],
-        "rating": raw_anime['averageScore'] / 10 if raw_anime.get('averageScore') else "N/A",
-        "tags": raw_anime['genres'],
-        "format": raw_anime['format'],
-        "status": raw_anime['status'],
-        "episodes": episode_list
+    trailer = anime.get("trailer") or {}
+    yt_id = (
+        trailer.get("id")
+        if (trailer.get("site") or "").lower() == "youtube"
+        else None
+    )
+
+    studios = ((anime.get("studios") or {}).get("nodes") or [])
+    studio_name = studios[0].get("name") if studios else "Anime Studio"
+
+    score = anime.get("averageScore")
+    rating = f"{score / 10:.1f}" if score else "N/A"
+
+    return {
+        "id": anime.get("id"),
+        "mal_id": anime.get("idMal"),
+        "title": title,
+        "title_romaji": title_ro or title,
+        "title_native": title_obj.get("native") or "",
+        "description": clean_html_description(anime.get("description")),
+        "image": image_url,
+        "banner": anime.get("bannerImage") or image_url,
+        "color": cover.get("color") or "#f59e0b",
+        "episode": ep_badge,
+        "latest_ep": latest_ep,
+        "total_episodes": total_eps,
+        "format": anime.get("format") or "TV",
+        "status": (anime.get("status") or "FINISHED").replace("_", " ").title(),
+        "season": f"{(anime.get('season') or '').title()} {anime.get('seasonYear') or ''}".strip(),
+        "year": anime.get("seasonYear") or "",
+        "duration": f"{anime.get('duration')}m" if anime.get("duration") else "24m",
+        "rating": rating,
+        "score": score or 0,
+        "genres": (anime.get("genres") or [])[:4],
+        "studio": studio_name,
+        "trailer_id": yt_id,
     }
 
-    return render_template('details.html', anime=anime)
 
-@app.route('/watch/<int:anime_id>/<int:ep_num>')
-def watch(anime_id, ep_num):
-    data = fetch_anilist(DETAILS_QUERY, {'id': anime_id})
-    raw_anime = data.get('Media')
-    
-    anime_title = "Unknown Anime"
-    if raw_anime:
-        anime_title = raw_anime['title']['english'] or raw_anime['title']['romaji']
-    
-    # Get streaming sources using our manager with fallback
-    # Try to get streaming sources from any available provider
-    streaming_result = streaming_manager.get_streaming_sources(str(anime_id), provider=None)
+def rewrite_hls_playlist(body: str, source_url: str, ref: Optional[str] = None) -> str:
+    """Rewrites all segment/variant/key/audio/subtitle URIs in an M3U8 playlist to route through /api/proxy/hls."""
+    ref_param = f"&ref={quote(ref, safe='')}" if ref else ""
 
-    # Extract the best available stream URL
-    stream_url = None
-    if streaming_result.get('sources') and len(streaming_result['sources']) > 0:
-        # Use the first available source
-        stream_url = streaming_result['sources'][0].get('url')
+    def proxy_uri(uri: str) -> str:
+        full_url = urljoin(source_url, uri.strip())
+        return f"/api/proxy/hls?url={quote(full_url, safe='')}{ref_param}"
 
-    # Fallback Embed
-    backup_embed = f"https://vidsrc.cc/v2/embed/anime/{anime_id}/{ep_num}"
+    lines = body.splitlines()
+    has_default_audio = any(
+        "#EXT-X-MEDIA:TYPE=AUDIO" in ln and "DEFAULT=YES" in ln for ln in lines
+    )
+    first_audio_marked = False
+    out_lines = []
 
-    return render_template('watch.html', 
-                         anime={"id": anime_id, "title": anime_title, "bannerImage": raw_anime.get('bannerImage') if raw_anime else ""}, 
-                         ep_num=ep_num, 
-                         stream_url=stream_url,
-                         backup_embed=backup_embed,
-                         prev_ep=ep_num - 1 if ep_num > 1 else None, 
-                         next_ep=ep_num + 1)
+    for line in lines:
+        trimmed = line.strip()
+        if not trimmed:
+            out_lines.append(line)
+            continue
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+        processed = line
+        if (
+            not has_default_audio
+            and not first_audio_marked
+            and "#EXT-X-MEDIA:TYPE=AUDIO" in trimmed
+        ):
+            processed = processed.replace("DEFAULT=NO", "DEFAULT=YES").replace(
+                "AUTOSELECT=NO", "AUTOSELECT=YES"
+            )
+            first_audio_marked = True
+
+        if processed.lstrip().startswith("#"):
+            if "URI=" in processed:
+                processed = re.sub(
+                    r'URI="([^"]+)"',
+                    lambda m: f'URI="{proxy_uri(m.group(1))}"',
+                    processed,
+                )
+            out_lines.append(processed)
+        else:
+            out_lines.append(proxy_uri(trimmed))
+
+    return "\n".join(out_lines)
+
+
+# ─── WEB PAGES ───────────────────────────────────────────────────────────────
+
+
+@app.route("/")
+def home():
+    genre = request.args.get("genre", "").strip()
+    fmt = request.args.get("format", "").strip()
+
+    if genre or fmt:
+        variables: Dict = {"page": 1, "perPage": 24, "sort": ["POPULARITY_DESC"]}
+        if genre:
+            variables["genre"] = genre
+        if fmt in ("TV", "MOVIE", "OVA", "ONA", "SPECIAL"):
+            variables["format"] = fmt
+        data = fetch_anilist(SEARCH_FILTER_QUERY, variables)
+        raw_list = data.get("Page", {}).get("media", [])
+        filtered_cards = [format_anime_card(a) for a in raw_list if a]
+        featured = filtered_cards[0] if filtered_cards else None
+        return render_template(
+            "index.html",
+            trending=filtered_cards,
+            popular_season=[],
+            top_rated=[],
+            heaven_recent=[],
+            featured=featured,
+            hero_slides=filtered_cards[:5],
+            genres=POPULAR_GENRES,
+            active_genre=genre,
+            active_format=fmt,
+            page_type="filter",
+        )
+
+    data = fetch_anilist(HOME_DASHBOARD_QUERY)
+    trending_raw = data.get("trending", {}).get("media", [])
+    season_raw = data.get("popularSeason", {}).get("media", [])
+    top_raw = data.get("topRated", {}).get("media", [])
+
+    trending = [format_anime_card(a) for a in trending_raw if a]
+    popular_season = [format_anime_card(a) for a in season_raw if a]
+    top_rated = [format_anime_card(a) for a in top_raw if a]
+
+    hero_slides = [a for a in trending if a.get("banner")][:6] or trending[:5]
+    featured = hero_slides[0] if hero_slides else None
+
+    # Fetch live AnimeHeaven latest releases for the homepage live scraper strip
+    heaven_recent = streaming_manager.animeheaven.browse_catalog("new")[:12]
+
+    return render_template(
+        "index.html",
+        trending=trending,
+        popular_season=popular_season,
+        top_rated=top_rated,
+        heaven_recent=heaven_recent,
+        featured=featured,
+        hero_slides=hero_slides,
+        genres=POPULAR_GENRES,
+        active_genre="",
+        active_format="",
+        page_type="home",
+    )
+
+
+@app.route("/search")
+def search():
+    query = (request.args.get("q") or "").strip()
+    if not query:
+        return redirect(url_for("home"))
+
+    data = fetch_anilist(
+        SEARCH_FILTER_QUERY,
+        {"search": query, "page": 1, "perPage": 24, "sort": ["POPULARITY_DESC"]},
+    )
+    raw_results = data.get("Page", {}).get("media", [])
+    results = [format_anime_card(a) for a in raw_results if a]
+
+    # Also search AnimeHeaven directly so niche / scraper-only shows appear
+    heaven_matches = streaming_manager.animeheaven.search(query)[:12]
+
+    return render_template(
+        "index.html",
+        trending=results,
+        heaven_recent=heaven_matches,
+        popular_season=[],
+        top_rated=[],
+        featured=results[0] if results else None,
+        hero_slides=[],
+        search_query=query,
+        genres=POPULAR_GENRES,
+        active_genre="",
+        active_format="",
+        page_type="search",
+    )
+
+
+@app.route("/anime/<int:anime_id>")
+def details(anime_id: int):
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw_anime = data.get("Media")
+    if not raw_anime:
+        return render_template("index.html", trending=[], page_type="error", error_msg="Anime not found"), 404
+
+    card = format_anime_card(raw_anime)
+    titles = [
+        raw_anime["title"].get("english"),
+        raw_anime["title"].get("romaji"),
+    ]
+
+    # Resolve YouTube Trailer (AniList trailer or live YouTube search fallback)
+    trailer_id = streaming_manager.youtube.get_trailer_id(
+        card["title"], raw_anime.get("trailer")
+    )
+    card["trailer_id"] = trailer_id
+
+    # Map to AnimeHeaven & Anikoto to verify real available episodes
+    mapping = streaming_manager.resolve_anime_mapping(
+        anime_id, titles, mal_id=raw_anime.get("idMal")
+    )
+    heaven_info = (
+        streaming_manager.animeheaven.get_anime_info(mapping["heaven_id"])
+        if mapping.get("heaven_id")
+        else None
+    )
+
+    # Calculate episodes
+    total_episodes = raw_anime.get("episodes") or 0
+    if raw_anime.get("status") == "RELEASING" and raw_anime.get("nextAiringEpisode"):
+        total_episodes = max(total_episodes, raw_anime["nextAiringEpisode"]["episode"] - 1)
+    if heaven_info and heaven_info.get("total_episodes"):
+        total_episodes = max(total_episodes, heaven_info["total_episodes"])
+    if total_episodes <= 0:
+        total_episodes = 12
+
+    # Build rich episode metadata from AniList streamingEpisodes if available
+    st_eps = raw_anime.get("streamingEpisodes") or []
+    ep_meta_by_num: Dict[int, Dict] = {}
+    for se in st_eps:
+        m = re.search(r"Episode\s*(\d+)", se.get("title") or "", re.I)
+        if m:
+            ep_meta_by_num[int(m.group(1))] = {
+                "title": se.get("title"),
+                "thumbnail": se.get("thumbnail"),
+            }
+
+    heaven_eps_by_num: Dict[int, Dict] = {}
+    if heaven_info and heaven_info.get("episodes"):
+        for he in heaven_info["episodes"]:
+            try:
+                heaven_eps_by_num[int(round(float(he["num"])))] = he
+            except Exception:
+                pass
+
+    episode_list = []
+    for i in range(1, total_episodes + 1):
+        meta = ep_meta_by_num.get(i, {})
+        h_ep = heaven_eps_by_num.get(i)
+        episode_list.append({
+            "id": i,
+            "num": i,
+            "title": meta.get("title") or f"Episode {i}",
+            "thumbnail": meta.get("thumbnail") or card["banner"] or card["image"],
+            "heaven_key": h_ep["key"] if h_ep else None,
+            "added": h_ep.get("added", "") if h_ep else "",
+        })
+
+    # Related seasons / sequels / prequels
+    relations = []
+    for edge in (raw_anime.get("relations") or {}).get("edges") or []:
+        node = edge.get("node") or {}
+        if node.get("type") == "ANIME" and node.get("id"):
+            rel_card = format_anime_card(node)
+            rel_card["relation"] = (edge.get("relationType") or "RELATED").replace("_", " ")
+            relations.append(rel_card)
+
+    # Recommendations
+    recommendations = []
+    for rec in (raw_anime.get("recommendations") or {}).get("nodes") or []:
+        mr = rec.get("mediaRecommendation")
+        if mr and mr.get("id"):
+            recommendations.append(format_anime_card(mr))
+
+    # Characters
+    characters = []
+    for ch_edge in (raw_anime.get("characters") or {}).get("edges") or []:
+        c_node = ch_edge.get("node") or {}
+        if c_node.get("name", {}).get("full"):
+            characters.append({
+                "name": c_node["name"]["full"],
+                "role": (ch_edge.get("role") or "MAIN").title(),
+                "image": (c_node.get("image") or {}).get("large") or "",
+            })
+
+    anime_payload = {
+        **card,
+        "tags": raw_anime.get("genres") or [],
+        "episodes": episode_list,
+        "relations": relations[:8],
+        "recommendations": recommendations[:8],
+        "characters": characters[:8],
+        "heaven_id": mapping.get("heaven_id"),
+        "anikoto_slug": mapping.get("anikoto_slug"),
+        "heaven_info": heaven_info,
+    }
+
+    return render_template("details.html", anime=anime_payload)
+
+
+@app.route("/watch/<int:anime_id>/<int:ep_num>")
+def watch(anime_id: int, ep_num: int):
+    preferred_audio = request.args.get("audio", "sub").lower()
+    if preferred_audio not in ("sub", "dub"):
+        preferred_audio = "sub"
+    heaven_override = request.args.get("heaven_id")
+
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw_anime = data.get("Media") or {}
+    card = format_anime_card(raw_anime) if raw_anime else {
+        "id": anime_id,
+        "mal_id": None,
+        "title": f"Anime #{anime_id}",
+        "title_romaji": f"Anime #{anime_id}",
+        "image": "",
+        "banner": "",
+        "description": "",
+        "rating": "N/A",
+        "format": "TV",
+        "status": "Releasing",
+        "genres": [],
+        "trailer_id": None,
+    }
+
+    titles = []
+    if raw_anime.get("title"):
+        titles = [
+            raw_anime["title"].get("english"),
+            raw_anime["title"].get("romaji"),
+        ]
+    else:
+        titles = [card["title"]]
+
+    trailer_id = streaming_manager.youtube.get_trailer_id(
+        card["title"], raw_anime.get("trailer")
+    )
+    card["trailer_id"] = trailer_id
+
+    bundle = streaming_manager.get_full_episode_bundle(
+        anilist_id=anime_id,
+        ep_num=ep_num,
+        titles=titles,
+        mal_id=raw_anime.get("idMal"),
+        preferred_audio=preferred_audio,
+        heaven_override=heaven_override,
+    )
+
+    # Calculate episode list
+    total_episodes = raw_anime.get("episodes") or 0
+    if raw_anime.get("status") == "RELEASING" and raw_anime.get("nextAiringEpisode"):
+        total_episodes = max(total_episodes, raw_anime["nextAiringEpisode"]["episode"] - 1)
+    if bundle.get("heaven_id"):
+        h_info = streaming_manager.animeheaven.get_anime_info(bundle["heaven_id"])
+        if h_info and h_info.get("total_episodes"):
+            total_episodes = max(total_episodes, h_info["total_episodes"])
+    if total_episodes < ep_num:
+        total_episodes = max(ep_num, 12)
+
+    episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in range(1, total_episodes + 1)]
+
+    active_server = bundle.get("active_server") or {
+        "id": "embed-vidsrc-sub",
+        "name": "VidSrc Pro (SUB)",
+        "playback_mode": "iframe",
+        "stream_url": f"https://vidsrc.cc/v2/embed/anime/ani{anime_id}/{ep_num}/sub",
+        "subtitles": [],
+    }
+    backup_embed = f"https://vidsrc.cc/v2/embed/anime/ani{anime_id}/{ep_num}/sub"
+
+    # Related seasons for quick switching
+    relations = []
+    for edge in (raw_anime.get("relations") or {}).get("edges") or []:
+        node = edge.get("node") or {}
+        if node.get("type") == "ANIME" and node.get("id"):
+            rel_card = format_anime_card(node)
+            rel_card["relation"] = (edge.get("relationType") or "RELATED").replace("_", " ")
+            relations.append(rel_card)
+
+    return render_template(
+        "watch.html",
+        anime={
+            **card,
+            "bannerImage": card.get("banner") or "",
+            "episodes": episodes,
+            "relations": relations[:6],
+        },
+        ep_num=ep_num,
+        total_episodes=total_episodes,
+        stream_url=active_server.get("stream_url") or backup_embed,
+        backup_embed=backup_embed,
+        bundle=bundle,
+        servers=bundle.get("servers", []),
+        downloads=bundle.get("downloads", []),
+        active_server=active_server,
+        preferred_audio=preferred_audio,
+        prev_ep={"id": ep_num - 1, "num": ep_num - 1} if ep_num > 1 else None,
+        next_ep={"id": ep_num + 1, "num": ep_num + 1} if ep_num < total_episodes else None,
+    )
+
+
+@app.route("/scraper")
+def scraper_hub():
+    """
+    Dedicated AnimeHeaven Reverse-Engineered Scraper & Direct Downloader Hub
+    (Upgraded version of the attached AnimeHeaven-Scraper test frontend integrated into CamAnime)
+    """
+    feed = request.args.get("feed", "new")
+    query = (request.args.get("q") or "").strip()
+    site_id = (request.args.get("id") or "").strip()
+
+    selected_anime = None
+    if site_id:
+        selected_anime = streaming_manager.animeheaven.get_anime_info(site_id)
+
+    if query:
+        items = streaming_manager.animeheaven.search(query)
+    else:
+        items = streaming_manager.animeheaven.browse_catalog(feed)
+
+    return render_template(
+        "scraper.html",
+        items=items,
+        feed=feed,
+        query=query,
+        selected_anime=selected_anime,
+    )
+
+
+@app.route("/heaven/<site_id>")
+def heaven_direct_watch(site_id: str):
+    """Watch or download any show directly by its AnimeHeaven site_id"""
+    ep_num = int(request.args.get("ep", 1))
+    info = streaming_manager.animeheaven.get_anime_info(site_id)
+    if not info:
+        return redirect(url_for("scraper_hub"))
+
+    # Try to find matching AniList entry for rich metadata, or render watch directly
+    data = fetch_anilist(
+        SEARCH_FILTER_QUERY,
+        {"search": info["title"], "page": 1, "perPage": 5, "sort": ["POPULARITY_DESC"]},
+    )
+    media_list = data.get("Page", {}).get("media", [])
+    if media_list:
+        return redirect(
+            url_for("watch", anime_id=media_list[0]["id"], ep_num=ep_num, heaven_id=site_id)
+        )
+
+    return redirect(url_for("scraper_hub", id=site_id))
+
+
+# ─── JSON API & STREAMING / DOWNLOAD PROXIES ─────────────────────────────────
+
+
+@app.route("/api/trailer")
+def api_trailer():
+    title = request.args.get("title", "").strip()
+    anime_id = request.args.get("anime_id", type=int)
+    anilist_trailer = None
+    if anime_id:
+        data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+        media = data.get("Media") or {}
+        anilist_trailer = media.get("trailer")
+        if not title and media.get("title"):
+            title = media["title"].get("english") or media["title"].get("romaji") or ""
+
+    yt_id = streaming_manager.youtube.get_trailer_id(title, anilist_trailer)
+    if not yt_id:
+        return jsonify({"status": "error", "error": "Trailer not found"}), 404
+    return jsonify({
+        "status": "success",
+        "youtube_id": yt_id,
+        "embed_url": f"https://www.youtube.com/embed/{yt_id}?autoplay=1&rel=0",
+        "watch_url": f"https://www.youtube.com/watch?v={yt_id}",
+    })
+
+
+@app.route("/api/episode-sources/<int:anime_id>/<int:ep_num>")
+def api_episode_sources(anime_id: int, ep_num: int):
+    audio = request.args.get("audio", "sub").lower()
+    heaven_id = request.args.get("heaven_id")
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw_anime = data.get("Media") or {}
+    titles = []
+    if raw_anime.get("title"):
+        titles = [raw_anime["title"].get("english"), raw_anime["title"].get("romaji")]
+    bundle = streaming_manager.get_full_episode_bundle(
+        anilist_id=anime_id,
+        ep_num=ep_num,
+        titles=titles or [f"Anime {anime_id}"],
+        mal_id=raw_anime.get("idMal"),
+        preferred_audio=audio,
+        heaven_override=heaven_id,
+    )
+    return jsonify(bundle)
+
+
+@app.route("/api/heaven/search")
+def api_heaven_search():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"status": "error", "results": []}), 400
+    results = streaming_manager.animeheaven.search(q)
+    return jsonify({"status": "success", "count": len(results), "results": results})
+
+
+@app.route("/api/heaven/catalog")
+def api_heaven_catalog():
+    feed = request.args.get("feed", "new")
+    results = streaming_manager.animeheaven.browse_catalog(feed)
+    return jsonify({"status": "success", "feed": feed, "count": len(results), "results": results})
+
+
+@app.route("/api/heaven/anime/<site_id>")
+def api_heaven_anime(site_id: str):
+    info = streaming_manager.animeheaven.get_anime_info(site_id)
+    if not info:
+        return jsonify({"status": "error", "error": "Anime not found on AnimeHeaven"}), 404
+    return jsonify({"status": "success", "anime": info})
+
+
+@app.route("/api/heaven/random")
+def api_heaven_random():
+    info = streaming_manager.animeheaven.get_random_anime()
+    if not info:
+        return jsonify({"status": "error", "error": "Failed to fetch random anime"}), 502
+    return jsonify({"status": "success", "anime": info})
+
+
+@app.route("/api/heaven/resolve/<episode_key>")
+def api_heaven_resolve(episode_key: str):
+    site_id = request.args.get("site_id")
+    res = streaming_manager.animeheaven.get_streaming_sources(episode_key, referer_site_id=site_id)
+    if not res.get("sources"):
+        return jsonify({"status": "error", "error": "Could not resolve MP4 stream"}), 404
+    sources = []
+    for s in res["sources"]:
+        u = s["url"]
+        sources.append({
+            **s,
+            "proxy_url": f"/api/proxy/video?url={quote(u, safe='')}",
+            "download_url": f"/api/download/video?url={quote(u, safe='')}&title={quote(request.args.get('title', f'AnimeHeaven_{episode_key[:8]}'), safe='')}",
+        })
+    return jsonify({"status": "success", "episode_key": episode_key, "sources": sources})
+
+
+@app.route("/api/heaven/season-pack/<site_id>")
+def api_heaven_season_pack(site_id: str):
+    """Resolves direct MP4 download links for episodes in an AnimeHeaven season/series."""
+    info = streaming_manager.animeheaven.get_anime_info(site_id)
+    if not info:
+        return jsonify({"status": "error", "error": "Show not found"}), 404
+
+    limit = min(int(request.args.get("limit", 12)), 25)
+    episodes = info.get("episodes", [])[:limit]
+    resolved_pack = []
+    for ep in episodes:
+        st = streaming_manager.animeheaven.get_streaming_sources(ep["key"], referer_site_id=site_id)
+        primary = (st.get("sources") or [None])[0]
+        if primary:
+            ep_title = f"{info['title']} - Episode {ep['num']}"
+            resolved_pack.append({
+                "num": ep["num"],
+                "key": ep["key"],
+                "raw_mp4": primary["url"],
+                "stream_url": f"/api/proxy/video?url={quote(primary['url'], safe='')}",
+                "download_url": f"/api/download/video?url={quote(primary['url'], safe='')}&title={quote(ep_title, safe='')}",
+            })
+    return jsonify({
+        "status": "success",
+        "site_id": site_id,
+        "title": info["title"],
+        "total_episodes": info["total_episodes"],
+        "resolved_count": len(resolved_pack),
+        "episodes": resolved_pack,
+    })
+
+
+@app.route("/api/proxy/hls")
+def proxy_hls():
+    """CORS-clean HLS playlist & segment proxy that rewrites M3U8 internal URIs."""
+    url = request.args.get("url", "").strip()
+    ref = request.args.get("ref", "").strip()
+    if not url or not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid url"}), 400
+
+    headers = {
+        "User-Agent": DEFAULT_UA,
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    if ref and ref.startswith(("http://", "https://")):
+        headers["Referer"] = ref
+        parsed_ref = urlparse(ref)
+        headers["Origin"] = f"{parsed_ref.scheme}://{parsed_ref.netloc}"
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers["Range"]
+
+    try:
+        upstream = requests.get(
+            url, headers=headers, stream=True, timeout=15, verify=False
+        )
+        content_type = upstream.headers.get("Content-Type", "")
+
+        is_m3u8 = ".m3u8" in url.lower() or "mpegurl" in content_type.lower()
+        if is_m3u8:
+            text = upstream.text
+            if text.lstrip().startswith("#EXTM3U"):
+                rewritten = rewrite_hls_playlist(text, url, ref)
+                resp = Response(
+                    rewritten,
+                    status=upstream.status_code,
+                    content_type="application/vnd.apple.mpegurl; charset=utf-8",
+                )
+                resp.headers["Access-Control-Allow-Origin"] = "*"
+                resp.headers["Cache-Control"] = "public, max-age=30"
+                return resp
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=65536):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        resp = Response(
+            generate(),
+            status=upstream.status_code,
+            content_type=content_type or "video/mp2t",
+        )
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        for h in ("Accept-Ranges", "Content-Range", "Content-Length", "Cache-Control"):
+            if h in upstream.headers:
+                resp.headers[h] = upstream.headers[h]
+        return resp
+    except Exception as e:
+        logger.error(f"HLS Proxy Error ({url}): {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/proxy/video")
+def proxy_video():
+    """Streams direct MP4 video with full HTTP Range support for instant seeking."""
+    url = request.args.get("url", "").strip()
+    ref = request.args.get("ref", "https://animeheaven.me/").strip()
+    if not url or not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid url"}), 400
+
+    headers = {
+        "User-Agent": DEFAULT_UA,
+        "Accept": "*/*",
+        "Referer": ref,
+    }
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers["Range"]
+
+    try:
+        upstream = requests.get(url, headers=headers, stream=True, timeout=20)
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=131072):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        resp = Response(
+            generate(),
+            status=upstream.status_code,
+            content_type=upstream.headers.get("Content-Type", "video/mp4"),
+        )
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        for h in ("Accept-Ranges", "Content-Range", "Content-Length", "ETag", "Last-Modified"):
+            if h in upstream.headers:
+                resp.headers[h] = upstream.headers[h]
+        if "Accept-Ranges" not in resp.headers:
+            resp.headers["Accept-Ranges"] = "bytes"
+        return resp
+    except Exception as e:
+        logger.error(f"Video Proxy Error ({url}): {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/download/video")
+def download_video():
+    """Forces a direct browser file download (.mp4) of the anime episode."""
+    url = request.args.get("url", "").strip()
+    title = request.args.get("title", "CamAnime_Episode").strip()
+    ref = request.args.get("ref", "https://animeheaven.me/").strip()
+    if not url or not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid url"}), 400
+
+    safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
+    if not safe_filename.lower().endswith(".mp4"):
+        safe_filename += ".mp4"
+
+    headers = {
+        "User-Agent": DEFAULT_UA,
+        "Accept": "*/*",
+        "Referer": ref,
+    }
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers["Range"]
+
+    try:
+        upstream = requests.get(url, headers=headers, stream=True, timeout=25)
+
+        def generate():
+            try:
+                for chunk in upstream.iter_content(chunk_size=131072):
+                    if chunk:
+                        yield chunk
+            finally:
+                upstream.close()
+
+        resp = Response(
+            generate(),
+            status=upstream.status_code,
+            content_type="video/mp4",
+        )
+        resp.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
+            if h in upstream.headers:
+                resp.headers[h] = upstream.headers[h]
+        return resp
+    except Exception as e:
+        logger.error(f"Video Download Error ({url}): {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/proxy/subtitle")
+def proxy_subtitle():
+    """Proxies WebVTT / SRT subtitle tracks with open CORS and automatic SRT->VTT conversion."""
+    url = request.args.get("url", "").strip()
+    ref = request.args.get("ref", "https://megaplay.buzz/").strip()
+    if not url or not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid url"}), 400
+
+    try:
+        resp = requests.get(
+            url,
+            headers={"User-Agent": DEFAULT_UA, "Referer": ref},
+            timeout=10,
+        )
+        text = resp.text
+        if not text.lstrip().startswith("WEBVTT"):
+            converted = re.sub(r"(\d{2}:\d{2}:\d{2}),(\d{3})", r"\1.\2", text)
+            text = f"WEBVTT\n\n{converted}"
+        out = Response(text, status=200, content_type="text/vtt; charset=utf-8")
+        out.headers["Access-Control-Allow-Origin"] = "*"
+        out.headers["Cache-Control"] = "public, max-age=3600"
+        return out
+    except Exception as e:
+        logger.error(f"Subtitle Proxy Error ({url}): {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=3000)

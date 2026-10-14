@@ -3,79 +3,759 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch {{ anime.title }} | Camanime</title>
+    <title>Watch {{ anime.title }} Episode {{ ep_num }} (1080p SUB/DUB) | CamAnime</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-        body { background: #0a0c15; color: #eef2ff; line-height: 1.5; }
-
-        header { background: rgba(10, 12, 21, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(255, 180, 71, 0.2); position: sticky; top: 0; z-index: 1000; padding: 0.8rem 1.5rem; }
-        .site-title { font-size: 1.5rem; font-weight: 800; background: linear-gradient(135deg, #FFB347, #FF6B6B); -webkit-background-clip: text; color: transparent; text-decoration: none; }
-
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 1.5rem; }
-
-        .video-wrapper {
-            position: relative; width: 100%; aspect-ratio: 16/9;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-            margin-bottom: 1rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        :root {
+            --bg-canvas: #06070c;
+            --bg-elevated: #0d1018;
+            --bg-surface: #141926;
+            --text-primary: #f3f5fa;
+            --text-secondary: #a0abc0;
+            --text-muted: #64708a;
+            --accent: #FFB347;
+            --accent-crimson: #FF5E62;
+            --emerald: #10B981;
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-accent: rgba(255, 179, 71, 0.38);
+            --radius-lg: 18px;
+            --radius-md: 12px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.5;
+            min-height: 100vh;
+            transition: background-color 0.3s ease;
+        }
+        body.lights-off {
+            background-color: #000000;
+        }
+        body.lights-off header,
+        body.lights-off .episode-sidebar,
+        body.lights-off .lower-panels {
+            opacity: 0.12;
+            transition: opacity 0.3s ease;
+        }
+        body.lights-off header:hover,
+        body.lights-off .episode-sidebar:hover,
+        body.lights-off .lower-panels:hover {
+            opacity: 1;
         }
 
-        iframe { width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0; }
-
-        .controls { display: flex; justify-content: space-between; align-items: center; background: #1e263a; padding: 1rem; border-radius: 12px; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-        .ep-badge { background: #FFB347; color: #0a0c15; padding: 0.2rem 0.6rem; border-radius: 4px; font-weight: 700; font-size: 0.9rem; margin-right: 0.5rem; }
-
-        .nav-btn {
-            background: rgba(255,255,255,0.1);
-            color: white;
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: rgba(6, 7, 12, 0.9);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0.8rem 2rem;
+        }
+        .header-inner {
+            max-width: 1520px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .site-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
             text-decoration: none;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            transition: 0.2s;
-            font-size: 0.9rem;
-            display: inline-flex; align-items: center; gap: 0.5rem;
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.45rem;
+            color: var(--text-primary);
         }
-        .nav-btn:hover { background: #FFB347; color: #0a0c15; }
-        .nav-btn.disabled { opacity: 0.5; pointer-events: none; }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #07080d;
+        }
+        .logo-accent {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .breadcrumb-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+        .breadcrumb-bar a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        .breadcrumb-bar a:hover { color: var(--accent); }
 
-        .info { margin-bottom: 2rem; }
+        .watch-container {
+            max-width: 1520px;
+            margin: 1.5rem auto 4rem;
+            padding: 0 2rem;
+        }
+
+        /* ─── CINEMA GRID: PLAYER + EPISODE RAIL ─── */
+        .cinema-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1.5rem;
+            align-items: start;
+            margin-bottom: 1.75rem;
+        }
+
+        .player-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .video-stage {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 179, 71, 0.22);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85);
+        }
+        .video-stage video,
+        .video-stage iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background: #000;
+        }
+
+        .skip-intro-btn {
+            position: absolute;
+            right: 24px;
+            bottom: 72px;
+            z-index: 30;
+            background: rgba(7, 8, 13, 0.9);
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            padding: 0.55rem 1.2rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 0.45rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+        }
+        .skip-intro-btn:hover {
+            background: var(--accent);
+            color: #07080d;
+        }
+
+        /* ─── PLAYER TRANSPORT & CONTROLS BAR ─── */
+        .transport-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 0.9rem 1.25rem;
+        }
+        .now-playing-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .ep-pill {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: #07080d;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
+            font-size: 0.82rem;
+            padding: 0.3rem 0.75rem;
+            border-radius: 8px;
+        }
+        .mode-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.74rem;
+            padding: 0.22rem 0.6rem;
+            border-radius: 6px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+        .transport-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+        .ctrl-btn {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 0.95rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ctrl-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .ctrl-btn.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        .ctrl-btn.download-cta {
+            background: rgba(16, 185, 129, 0.16);
+            border-color: rgba(16, 185, 129, 0.45);
+            color: #34d399;
+        }
+        .ctrl-btn.download-cta:hover {
+            background: var(--emerald);
+            color: #052e16;
+        }
+
+        /* ─── SERVER & SUB/DUB SWITCHER DECK ─── */
+        .server-deck {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.25rem 1.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .server-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .server-row-label {
+            min-width: 130px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .server-btn {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 0.95rem;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+        .server-btn:hover {
+            border-color: var(--accent);
+        }
+        .server-btn.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: #07080d;
+            border-color: transparent;
+            font-weight: 700;
+            box-shadow: 0 6px 18px rgba(255, 179, 71, 0.3);
+        }
+        .server-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        /* ─── EPISODE SIDEBAR RAIL ─── */
+        .episode-sidebar {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.15rem;
+            display: flex;
+            flex-direction: column;
+            max-height: 680px;
+        }
+        .sidebar-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.85rem;
+        }
+        .sidebar-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 1.05rem;
+        }
+        .ep-search-box {
+            width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 0.5rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.83rem;
+            margin-bottom: 0.85rem;
+            outline: none;
+        }
+        .ep-rail-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+            gap: 0.5rem;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+        .ep-rail-item {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            text-decoration: none;
+            text-align: center;
+            padding: 0.55rem 0.3rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.18s;
+        }
+        .ep-rail-item:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+        .ep-rail-item.current {
+            background: var(--accent);
+            color: #07080d;
+            border-color: var(--accent);
+            font-weight: 800;
+        }
+
+        /* ─── LOWER PANELS: DIRECT DOWNLOAD MANAGER & YOUTUBE TRAILER ─── */
+        .lower-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        .panel-box {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.4rem;
+        }
+        .panel-box-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin-bottom: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .dl-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+        .dl-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+        }
+        .dl-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .dl-name {
+            font-weight: 700;
+            font-size: 0.88rem;
+        }
+        .dl-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .dl-action {
+            background: var(--emerald);
+            color: #052e16;
+            text-decoration: none;
+            padding: 0.48rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            white-space: nowrap;
+        }
+        .dl-action:hover {
+            filter: brightness(1.1);
+        }
+
+        @media (max-width: 1080px) {
+            .cinema-grid { grid-template-columns: 1fr; }
+            .lower-panels { grid-template-columns: 1fr; }
+            .watch-container { padding: 0 1rem; }
+        }
     </style>
 </head>
 <body>
 
 <header>
-    <div style="max-width: 1400px; margin: 0 auto;">
-        <a href="/" class="site-title">Camanime</a>
+    <div class="header-inner">
+        <div style="display:flex;align-items:center;gap:1.5rem;">
+            <a href="/" class="site-logo">
+                <span class="logo-mark"><i class="fas fa-play"></i></span>
+                <span>Cam<span class="logo-accent">Anime</span></span>
+            </a>
+            <div class="breadcrumb-bar">
+                <a href="/anime/{{ anime.id }}"><i class="fas fa-arrow-left"></i> {{ anime.title }}</a>
+                <span>/</span>
+                <strong style="color: var(--accent);">Episode {{ ep_num }}</strong>
+            </div>
+        </div>
+        <div style="display:flex;gap:0.65rem;">
+            <a href="/scraper?id={{ bundle.heaven_id or '' }}" class="ctrl-btn" style="border-color:rgba(16,185,129,0.4);color:#34d399;">
+                <i class="fas fa-bolt"></i> AnimeHeaven Engine
+            </a>
+            <a href="/anime/{{ anime.id }}" class="ctrl-btn">
+                <i class="fas fa-info-circle"></i> Anime Details
+            </a>
+        </div>
     </div>
 </header>
 
-<div class="container">
-    <div class="video-wrapper">
-        <iframe src="{{ stream_url }}" allowfullscreen></iframe>
-    </div>
+<div class="watch-container">
+    <div class="cinema-grid">
+        <div class="player-column">
+            <!-- ─── VIDEO PLAYER STAGE (Supports Native MP4, HLS.js M3U8 + WebVTT Subtitles, and Iframe Fallback) ─── -->
+            <div class="video-stage" id="videoStage">
+                <video id="nativeVideo" controls playsinline preload="metadata" crossorigin="anonymous" style="display: none;"></video>
+                <iframe id="embedIframe" src="{{ stream_url }}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="display: none;"></iframe>
+                <button type="button" id="skipIntroBtn" class="skip-intro-btn" onclick="skipIntro()">
+                    <i class="fas fa-forward"></i> Skip Intro
+                </button>
+            </div>
 
-    <div class="controls">
-        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep.id if prev_ep else '#' }}" class="nav-btn {{ 'disabled' if not prev_ep else '' }}">
-            <i class="fas fa-chevron-left"></i> Prev
-        </a>
+            <!-- ─── TRANSPORT CONTROLS ─── -->
+            <div class="transport-bar">
+                <div class="now-playing-info">
+                    <span class="ep-pill">EPISODE {{ ep_num }}</span>
+                    <div>
+                        <div style="font-weight: 700; font-size: 0.98rem;">{{ anime.title }}</div>
+                        <div style="font-size: 0.78rem; color: var(--text-muted);" id="activeServerStatus">
+                            Active Server: {{ active_server.name }}
+                        </div>
+                    </div>
+                    <span class="mode-badge" id="playbackBadge">{{ (active_server.playback_mode or 'STREAM') | upper }}</span>
+                </div>
 
-        <div style="text-align: center;">
-            <span class="ep-badge">{{ ep_num }}</span>
-            <span style="font-weight: bold;">{{ anime.title }}</span>
+                <div class="transport-actions">
+                    <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep.id if prev_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not prev_ep else '' }}">
+                        <i class="fas fa-step-backward"></i> Prev Ep
+                    </a>
+                    <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not next_ep else '' }}">
+                        Next Ep <i class="fas fa-step-forward"></i>
+                    </a>
+                    <button type="button" class="ctrl-btn" onclick="toggleLights()">
+                        <i class="fas fa-lightbulb"></i> Focus Mode
+                    </button>
+                    <button type="button" class="ctrl-btn download-cta" onclick="document.getElementById('downloadPanel').scrollIntoView({behavior:'smooth'})">
+                        <i class="fas fa-download"></i> Download Episode
+                    </button>
+                </div>
+            </div>
+
+            <!-- ─── MULTI-SERVER SWITCHER (ANIMEHEAVEN DIRECT MP4 + CAMSTREAM 1080P HLS SUB/DUB + EMBEDS) ─── -->
+            <div class="server-deck">
+                <div class="server-row">
+                    <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> SUB SERVERS:</span>
+                    {% for srv in servers if srv.audio == 'sub' %}
+                    <button type="button"
+                            class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
+                            data-server-id="{{ srv.id }}"
+                            onclick='switchServer({{ srv | tojson }})'>
+                        <i class="fas {{ 'fa-bolt' if srv.playback_mode in ['mp4', 'hls'] else 'fa-play-circle' }}"></i>
+                        <span>{{ srv.name }}</span>
+                        <span class="server-tag">{{ srv.badge or srv.playback_mode | upper }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="server-row">
+                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> DUB SERVERS:</span>
+                    {% for srv in servers if srv.audio == 'dub' %}
+                    <button type="button"
+                            class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
+                            data-server-id="{{ srv.id }}"
+                            onclick='switchServer({{ srv | tojson }})'>
+                        <i class="fas {{ 'fa-bolt' if srv.playback_mode in ['mp4', 'hls'] else 'fa-play-circle' }}"></i>
+                        <span>{{ srv.name }}</span>
+                        <span class="server-tag">{{ srv.badge or srv.playback_mode | upper }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
 
-        <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="nav-btn {{ 'disabled' if not next_ep else '' }}">
-            Next <i class="fas fa-chevron-right"></i>
-        </a>
+        <!-- ─── EPISODE SELECTOR SIDEBAR ─── -->
+        <aside class="episode-sidebar">
+            <div class="sidebar-head">
+                <span class="sidebar-title">Episodes (1–{{ total_episodes }})</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">{{ preferred_audio | upper }}</span>
+            </div>
+            <input type="text" class="ep-search-box" placeholder="Filter episode number..." oninput="filterRailEpisodes(this.value)">
+            <div class="ep-rail-list" id="epRailList">
+                {% for ep in anime.episodes %}
+                <a href="/watch/{{ anime.id }}/{{ ep.num }}?audio={{ preferred_audio }}"
+                   class="ep-rail-item {{ 'current' if ep.num == ep_num else '' }}"
+                   data-ep="{{ ep.num }}">
+                    {{ ep.num }}
+                </a>
+                {% endfor %}
+            </div>
+        </aside>
     </div>
 
-    <div class="info">
-         <a href="/anime/{{ anime.id }}" class="nav-btn"><i class="fas fa-list"></i> View All Episodes</a>
+    <!-- ─── LOWER PANELS: DIRECT DOWNLOAD MANAGER & YOUTUBE TRAILER PREVIEW ─── -->
+    <div class="lower-panels">
+        <div class="panel-box" id="downloadPanel">
+            <div class="panel-box-title">
+                <i class="fas fa-cloud-download-alt" style="color: var(--emerald);"></i>
+                Direct Episode {{ ep_num }} Download Manager
+            </div>
+            <p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                Download this episode directly as an MP4 file from our AnimeHeaven scraper or select 360p / 720p / 1080p Sub & Dub mirrors.
+            </p>
+            <div class="dl-grid">
+                {% if downloads %}
+                    {% for dl in downloads %}
+                    <div class="dl-row">
+                        <div class="dl-meta">
+                            <span class="dl-name">{{ dl.label }}</span>
+                            <span class="dl-sub">{{ dl.provider }} • {{ dl.quality }} • {{ dl.audio }}</span>
+                        </div>
+                        <a href="{{ dl.url }}" class="dl-action" {% if dl.direct %}download{% else %}target="_blank" rel="noopener"{% endif %}>
+                            <i class="fas fa-download"></i> {{ 'Direct MP4 Download' if dl.direct else 'Open Mirror' }}
+                        </a>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="dl-row">
+                        <div class="dl-meta">
+                            <span class="dl-name">Search AnimeHeaven Direct MP4 Scraper</span>
+                            <span class="dl-sub">Extract raw MP4 for {{ anime.title }}</span>
+                        </div>
+                        <a href="/scraper?q={{ anime.title | urlencode }}" class="dl-action">
+                            <i class="fas fa-bolt"></i> Open Scraper
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="panel-box">
+            <div class="panel-box-title">
+                <i class="fab fa-youtube" style="color: #ff4e45;"></i>
+                Official YouTube Trailer Preview & Related Seasons
+            </div>
+            {% if anime.trailer_id %}
+            <div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000;margin-bottom:1rem;">
+                <iframe src="https://www.youtube.com/embed/{{ anime.trailer_id }}?rel=0" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>
+            </div>
+            {% endif %}
+            {% if anime.relations %}
+            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+                {% for rel in anime.relations %}
+                <a href="/anime/{{ rel.id }}" class="ctrl-btn" style="font-size:0.78rem;">
+                    <i class="fas fa-layer-group"></i> {{ rel.title }} ({{ rel.relation }})
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
     </div>
 </div>
+
+<script>
+    const INITIAL_SERVER = {{ active_server | tojson }};
+    const ALL_SERVERS = {{ servers | tojson }};
+    let hlsInstance = null;
+    let currentIntro = null;
+
+    function switchServer(srv) {
+        if (!srv) return;
+        document.querySelectorAll('.server-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.getAttribute('data-server-id') === srv.id);
+        });
+        document.getElementById('activeServerStatus').textContent = `Active Server: ${srv.name} (${(srv.quality || '1080p')})`;
+        document.getElementById('playbackBadge').textContent = (srv.playback_mode || 'STREAM').toUpperCase();
+
+        const video = document.getElementById('nativeVideo');
+        const iframe = document.getElementById('embedIframe');
+        const skipBtn = document.getElementById('skipIntroBtn');
+
+        // Clean up previous HLS instance
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+        video.pause();
+        video.removeAttribute('src');
+        video.innerHTML = '';
+        skipBtn.style.display = 'none';
+        currentIntro = srv.intro || null;
+
+        if (srv.playback_mode === 'mp4') {
+            iframe.style.display = 'none';
+            iframe.src = 'about:blank';
+            video.style.display = 'block';
+            video.src = srv.stream_url;
+            video.load();
+            video.play().catch(() => {});
+        } else if (srv.playback_mode === 'hls') {
+            iframe.style.display = 'none';
+            iframe.src = 'about:blank';
+            video.style.display = 'block';
+
+            // Attach subtitle tracks
+            (srv.subtitles || []).forEach(sub => {
+                const track = document.createElement('track');
+                track.kind = 'subtitles';
+                track.label = sub.lang || 'English';
+                track.srclang = (sub.lang || 'en').slice(0, 2).toLowerCase();
+                track.src = sub.url;
+                if (sub.default) track.default = true;
+                video.appendChild(track);
+            });
+
+            if (window.Hls && Hls.isSupported()) {
+                hlsInstance = new Hls({
+                    enableWorker: true,
+                    maxBufferLength: 30,
+                });
+                hlsInstance.loadSource(srv.stream_url);
+                hlsInstance.attachMedia(video);
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {});
+                });
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal && srv.embed_url) {
+                        // Automatic fallback to server embed url if HLS stream fails
+                        video.style.display = 'none';
+                        iframe.style.display = 'block';
+                        iframe.src = srv.embed_url;
+                    }
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = srv.stream_url;
+                video.addEventListener('loadedmetadata', () => video.play().catch(() => {}), { once: true });
+            } else if (srv.embed_url) {
+                video.style.display = 'none';
+                iframe.style.display = 'block';
+                iframe.src = srv.embed_url;
+            }
+        } else {
+            video.style.display = 'none';
+            iframe.style.display = 'block';
+            iframe.src = srv.stream_url;
+        }
+    }
+
+    // Intro skip button handler
+    const nativeVideo = document.getElementById('nativeVideo');
+    nativeVideo.addEventListener('timeupdate', () => {
+        const skipBtn = document.getElementById('skipIntroBtn');
+        if (!currentIntro) {
+            skipBtn.style.display = 'none';
+            return;
+        }
+        const start = Array.isArray(currentIntro) ? currentIntro[0] : currentIntro.start;
+        const end = Array.isArray(currentIntro) ? currentIntro[1] : currentIntro.end;
+        if (end > start && nativeVideo.currentTime >= start && nativeVideo.currentTime <= end) {
+            skipBtn.style.display = 'inline-flex';
+        } else {
+            skipBtn.style.display = 'none';
+        }
+    });
+
+    function skipIntro() {
+        if (!currentIntro) return;
+        const end = Array.isArray(currentIntro) ? currentIntro[1] : currentIntro.end;
+        if (end) nativeVideo.currentTime = end;
+    }
+
+    function toggleLights() {
+        document.body.classList.toggle('lights-off');
+    }
+
+    function filterRailEpisodes(q) {
+        const clean = q.trim();
+        document.querySelectorAll('#epRailList .ep-rail-item').forEach(el => {
+            const ep = el.getAttribute('data-ep') || '';
+            el.style.display = (!clean || ep.includes(clean)) ? 'block' : 'none';
+        });
+    }
+
+    // Save watch progress to localStorage
+    function recordWatchHistory() {
+        try {
+            let list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+            const entry = {
+                id: {{ anime.id }},
+                title: {{ anime.title | tojson }},
+                image: {{ anime.image | tojson }},
+                ep: {{ ep_num }}
+            };
+            list = [entry, ...list.filter(x => x.id !== entry.id)].slice(0, 30);
+            localStorage.setItem('camanime_watchlist', JSON.stringify(list));
+        } catch (e) {}
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        switchServer(INITIAL_SERVER);
+        recordWatchHistory();
+        const activeEp = document.querySelector('#epRailList .ep-rail-item.current');
+        if (activeEp) activeEp.scrollIntoView({ block: 'nearest' });
+    });
+</script>
 
 </body>
 </html>
