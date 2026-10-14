@@ -1,0 +1,11 @@
+<Application x:Class="CamAnime.Windows.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <ResourceDictionary>
+      <SolidColorBrush x:Key="BrandBg" Color="#07080D" />
+      <SolidColorBrush x:Key="BrandAccent" Color="#FFB347" />
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

@@ -1105,6 +1105,26 @@ def promo_page():
     return render_template("promo.html", user=_current_user())
 
 
+def _app_file_info(filename: str):
+    import datetime
+    path = os.path.join(app.static_folder or "static", "downloads", filename)
+    if not os.path.isfile(path):
+        return None
+    st = os.stat(path)
+    size_mb = st.st_size / (1024 * 1024)
+    size = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{st.st_size // 1024} KB"
+    return {"url": f"/static/downloads/{filename}",
+            "name": filename, "size": size,
+            "updated": datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d")}
+
+
+@app.route("/download")
+def download_page():
+    apk = _app_file_info("CamAnime.apk")
+    winapp = _app_file_info("CamAnime-Windows.zip") or _app_file_info("CamAnime.exe")
+    return render_template("download.html", user=_current_user(), apk=apk, winapp=winapp)
+
+
 @app.route("/api/community/comments")
 def api_comments():
     store = platform.load_store()
@@ -1183,7 +1203,7 @@ def api_public_anime(anime_id: int):
 
 @app.route("/sitemap.xml")
 def sitemap():
-    xml = "<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>" + "".join(f"<url><loc>{request.host_url.rstrip('/')}{p}</loc></url>" for p in ["/", "/scraper", "/schedule", "/promo", "/login"]) + "</urlset>"
+    xml = "<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>" + "".join(f"<url><loc>{request.host_url.rstrip('/')}{p}</loc></url>" for p in ["/", "/scraper", "/schedule", "/promo", "/download", "/login"]) + "</urlset>"
     return Response(xml, mimetype="application/xml")
 
 

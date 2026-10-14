@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Download the Free CamAnime App — Android APK & Windows | CamAnime</title>
+<meta name="description" content="Download the free CamAnime app for Android (APK) and Windows. 1080p SUB/DUB streaming, hidden in-app library, save-to-device downloads. Made by kayefande-droid & co.">
+<meta name="keywords" content="camanime app download, free anime app android apk, anime app windows, free anime streaming website">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
+body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.08),transparent 45%)}
+h1{font-family:'Syne';font-size:clamp(1.6rem,1.3rem + 2vw,2.4rem);margin:.5rem 0}
+p.sub{color:#a0abc0;margin-bottom:1.5rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1.1rem}
+.card{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:1.6rem;display:flex;flex-direction:column;gap:.7rem}
+.card h2{font-family:'Syne';font-size:1.25rem;display:flex;align-items:center;gap:.6rem}
+.badge{font-size:.72rem;font-family:monospace;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#34d399;border-radius:6px;padding:.15rem .5rem}
+.meta{font-size:.8rem;color:#64708a;font-family:monospace}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;background:linear-gradient(135deg,#FFB347,#FF5E62);color:#07080d;font-weight:800;text-decoration:none;border-radius:999px;padding:.85rem 1.4rem;margin-top:.4rem}
+.btn.ghost{background:#141926;color:#fff;border:1px solid rgba(255,255,255,.15)}
+ol{margin:1rem 0 0 1.2rem;color:#a0abc0;line-height:1.9;font-size:.9rem}
+a{color:#FFB347}
+@media(max-width:414px){body{padding:1rem}}
+</style>
+</head>
+<body>
+<p><a href="/">← CamAnime</a> · <a href="/promo">Promo kit</a></p>
+<h1><i class="fas fa-download" style="color:#FFB347"></i> Download the free CamAnime app</h1>
+<p class="sub">Same account as the website. Hidden in-app library — files only leave the app when you tap <strong>Save to device</strong>. Made by kayefande-droid &amp; co.</p>
+<div class="cards">
+  <div class="card">
+    <h2><i class="fab fa-android" style="color:#34d399"></i> Android <span class="badge">APK</span></h2>
+    {% if apk %}
+    <div class="meta">CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
+    <a class="btn" href="{{ apk.url }}"><i class="fas fa-download"></i> Direct download APK</a>
+    {% else %}
+    <div class="meta">APK builds on every release — grab the latest below.</div>
+    <a class="btn" href="https://github.com/kayefande-droid/CamAnime/releases/latest"><i class="fas fa-download"></i> Get APK from Releases</a>
+    {% endif %}
+    <a class="btn ghost" href="https://github.com/kayefande-droid/CamAnime/blob/main/mobile/camanime_app/README.md">Build it yourself (Flutter)</a>
+  </div>
+  <div class="card">
+    <h2><i class="fab fa-windows" style="color:#7C61D4"></i> Windows <span class="badge">.NET</span></h2>
+    {% if winapp %}
+    <div class="meta">{{ winapp.name }} · {{ winapp.size }} · updated {{ winapp.updated }}</div>
+    <a class="btn" href="{{ winapp.url }}"><i class="fas fa-download"></i> Direct download Windows app</a>
+    {% else %}
+    <div class="meta">Windows builds ship with every release — grab the latest below.</div>
+    <a class="btn" href="https://github.com/kayefande-droid/CamAnime/releases/latest"><i class="fas fa-download"></i> Get Windows app from Releases</a>
+    {% endif %}
+    <a class="btn ghost" href="https://github.com/kayefande-droid/CamAnime/blob/main/windows/README.md">Build it yourself (.NET 8)</a>
+  </div>
+</div>
+<h2 style="font-family:'Syne';margin-top:2rem">Build on your own PC in minutes</h2>
+<ol>
+  <li><strong>Android:</strong> install Flutter → <code>cd mobile/camanime_app &amp;&amp; flutter pub get &amp;&amp; flutter build apk --release</code> → file lands in <code>build/app/outputs/flutter-apk/app-release.apk</code>.</li>
+  <li><strong>Windows:</strong> install .NET 8 SDK → <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code> → <code>CamAnime.exe</code>.</li>
+  <li>Point the app at your site URL, sign in with your website account — one shared user database.</li>
+</ol>
+<p style="margin-top:1.5rem;color:#64708a;font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
+</body>
+</html>
