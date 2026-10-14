@@ -12,6 +12,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     stream_with_context,
     url_for,
 )
@@ -1123,6 +1124,32 @@ def download_page():
     apk = _app_file_info("CamAnime.apk")
     winapp = _app_file_info("CamAnime-Windows.zip") or _app_file_info("CamAnime.exe")
     return render_template("download.html", user=_current_user(), apk=apk, winapp=winapp)
+
+
+RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.0.0")
+RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
+
+
+def _serve_app_file(local_names, release_name, download_name):
+    """One-click app download: serves the bundled file if present, else
+    redirects straight to the GitHub Release asset (starts downloading
+    immediately via Content-Disposition: attachment)."""
+    for fn in local_names:
+        path = os.path.join(app.static_folder or "static", "downloads", fn)
+        if os.path.isfile(path):
+            return send_file(path, as_attachment=True, download_name=download_name)
+    return redirect(f"{RELEASE_DL}/{RELEASE_TAG}/{release_name}", code=302)
+
+
+@app.route("/get/android")
+def get_android():
+    return _serve_app_file(["CamAnime.apk"], "CamAnime.apk", "CamAnime.apk")
+
+
+@app.route("/get/windows")
+def get_windows():
+    return _serve_app_file(["CamAnime-Windows.zip", "CamAnime.exe"],
+                           "CamAnime-Windows.zip", "CamAnime-Windows.zip")
 
 
 @app.route("/api/community/comments")

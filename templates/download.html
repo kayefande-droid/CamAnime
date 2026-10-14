@@ -33,10 +33,10 @@ a{color:#FFB347}
     <h2><i class="fab fa-android" style="color:#34d399"></i> Android <span class="badge">APK</span></h2>
     {% if apk %}
     <div class="meta">CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
-    <a class="btn" href="{{ apk.url }}"><i class="fas fa-download"></i> Direct download APK</a>
+    <a class="btn" href="/get/android" download="CamAnime.apk"><i class="fas fa-download"></i> Download APK now</a>
     {% else %}
     <div class="meta">APK builds on every release — grab the latest below.</div>
-    <a class="btn" href="https://github.com/kayefande-droid/CamAnime/releases/latest"><i class="fas fa-download"></i> Get APK from Releases</a>
+    <a class="btn" href="/get/android"><i class="fas fa-download"></i> Get APK from Releases</a>
     {% endif %}
     <a class="btn ghost" href="https://github.com/kayefande-droid/CamAnime/blob/main/mobile/camanime_app/README.md">Build it yourself (Flutter)</a>
   </div>
@@ -44,10 +44,10 @@ a{color:#FFB347}
     <h2><i class="fab fa-windows" style="color:#7C61D4"></i> Windows <span class="badge">.NET</span></h2>
     {% if winapp %}
     <div class="meta">{{ winapp.name }} · {{ winapp.size }} · updated {{ winapp.updated }}</div>
-    <a class="btn" href="{{ winapp.url }}"><i class="fas fa-download"></i> Direct download Windows app</a>
+    <a class="btn" href="/get/windows" download="CamAnime-Windows.zip"><i class="fas fa-download"></i> Download Windows app now</a>
     {% else %}
     <div class="meta">Windows builds ship with every release — grab the latest below.</div>
-    <a class="btn" href="https://github.com/kayefande-droid/CamAnime/releases/latest"><i class="fas fa-download"></i> Get Windows app from Releases</a>
+    <a class="btn" href="/get/windows"><i class="fas fa-download"></i> Get Windows app from Releases</a>
     {% endif %}
     <a class="btn ghost" href="https://github.com/kayefande-droid/CamAnime/blob/main/windows/README.md">Build it yourself (.NET 8)</a>
   </div>
