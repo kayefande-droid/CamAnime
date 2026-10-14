@@ -57,3 +57,38 @@ body { font-size: clamp(0.92rem, 0.88rem + 0.25vw, 1rem); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── Mobile polish: filters, search, grids, banners, player, titles ── */
+/* 1. Filter ribbon scrolls instead of wrapping awkwardly */
+body .filter-bar { flex-wrap: nowrap; }
+body .genre-pills { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+body .genre-pills::-webkit-scrollbar { display: none; }
+body .genre-pill { flex-shrink: 0; }
+body .section-head { flex-wrap: wrap; }
+/* 2. Search controls always fit the screen */
+body .search-form { min-width: 0; }
+body .search-input { flex: 1 1 auto; min-width: 0; }
+body .ep-search-box { max-width: 100%; }
+/* 3. Phone poster grids: 2 cols narrow / 3 cols wider */
+@media (max-width: 430px) {
+  body .anime-grid, body .heaven-strip-grid, body .ep-grid,
+  body .mini-grid, body .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 431px) and (max-width: 768px) {
+  body .anime-grid, body .heaven-strip-grid, body .ep-grid,
+  body .mini-grid, body .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* 4. Banners + detail panels scale proportionally */
+body .banner-wrap { height: clamp(200px, 30vw, 340px); }
+body .container { margin-top: clamp(-140px, -12vw, -60px); }
+body .hero-spotlight, body .hero-slide.active { min-height: clamp(320px, 55vw, 560px); }
+body .scraper-banner-card { padding: clamp(1rem, 4vw, 1.5rem); }
+/* 5. Players stay inside the viewport */
+body .player-column, body .video-stage, body .inspector-player-box { max-width: 100%; min-width: 0; }
+body .video-stage video, body .video-stage iframe,
+body .inspector-player-box video, body .inspector-player-box iframe { width: 100%; max-width: 100%; aspect-ratio: 16 / 9; height: auto; }
+body .transport-bar { flex-wrap: wrap; }
+/* 6. Long titles / episode names never stretch cards */
+body .card-title, body .catalog-card-title { min-width: 0; overflow-wrap: anywhere; }
+body .ep-rail-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+body .breadcrumb-bar { overflow: hidden; }
