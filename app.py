@@ -812,13 +812,48 @@ def api_heaven_season_pack(site_id: str):
     })
 
 
+def _safe_upstream_url(url):
+    """SSRF guard for the media proxies: allows only public http(s) hosts.
+
+    Blocks credentials in URL, localhost/internal names, and any host that
+    resolves to a private, loopback, link-local, multicast, reserved, or
+    unspecified IP (incl. cloud metadata endpoints like 169.254.169.254).
+    """
+    import ipaddress
+    import socket
+    try:
+        from urllib.parse import urlparse as _up
+        par = _up((url or "").strip())
+        if par.scheme not in ("http", "https") or not par.hostname:
+            return None
+        if par.username or par.password or "@" in (par.netloc or ""):
+            return None
+        host = par.hostname.lower()
+        if host == "localhost" or host.endswith((".localhost", ".internal", ".local", ".lan")):
+            return None
+        try:
+            infos = socket.getaddrinfo(host, None)
+        except Exception:
+            return None
+        for _fam, _t, _p, _c, sockaddr in infos:
+            try:
+                ip = ipaddress.ip_address(sockaddr[0])
+            except ValueError:
+                return None
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+                return None
+        return par.geturl()
+    except Exception:
+        return None
+
+
 @app.route("/api/proxy/hls")
 def proxy_hls():
     """CORS-clean HLS playlist & segment proxy that rewrites M3U8 internal URIs."""
-    url = request.args.get("url", "").strip()
+    url = _safe_upstream_url(request.args.get("url", ""))
     ref = request.args.get("ref", "").strip()
-    if not url or not url.startswith(("http://", "https://")):
-        return jsonify({"error": "Invalid url"}), 400
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -834,7 +869,7 @@ def proxy_hls():
 
     try:
         upstream = requests.get(
-            url, headers=headers, stream=True, timeout=15, verify=False
+            url, headers=headers, stream=True, timeout=15
         )
         content_type = upstream.headers.get("Content-Type", "")
 
@@ -878,10 +913,10 @@ def proxy_hls():
 @app.route("/api/proxy/video")
 def proxy_video():
     """Streams direct MP4 video with full HTTP Range support for instant seeking."""
-    url = request.args.get("url", "").strip()
+    url = _safe_upstream_url(request.args.get("url", ""))
     ref = request.args.get("ref", "https://animeheaven.me/").strip()
-    if not url or not url.startswith(("http://", "https://")):
-        return jsonify({"error": "Invalid url"}), 400
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -926,11 +961,11 @@ def download_video():
         if "text/html" in (request.headers.get("Accept", "") or ""):
             return redirect(url_for("login_page", next=request.full_path))
         return jsonify({"error": "Sign in to download episodes.", "login": "/login"}), 401
-    url = request.args.get("url", "").strip()
+    url = _safe_upstream_url(request.args.get("url", ""))
     title = request.args.get("title", "CamAnime_Episode").strip()
     ref = request.args.get("ref", "https://animeheaven.me/").strip()
-    if not url or not url.startswith(("http://", "https://")):
-        return jsonify({"error": "Invalid url"}), 400
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
 
     safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
     if not safe_filename.lower().endswith(".mp4"):
@@ -974,10 +1009,10 @@ def download_video():
 @app.route("/api/proxy/subtitle")
 def proxy_subtitle():
     """Proxies WebVTT / SRT subtitle tracks with open CORS and automatic SRT->VTT conversion."""
-    url = request.args.get("url", "").strip()
+    url = _safe_upstream_url(request.args.get("url", ""))
     ref = request.args.get("ref", "https://megaplay.buzz/").strip()
-    if not url or not url.startswith(("http://", "https://")):
-        return jsonify({"error": "Invalid url"}), 400
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
 
     try:
         resp = requests.get(
