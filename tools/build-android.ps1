@@ -17,5 +17,7 @@ flutter build apk --release
 $apk = "build\app\outputs\flutter-apk\app-release.apk"
 Write-Host "== APK ready: $apk ==" -ForegroundColor Green
 Get-Item $apk | Format-List Name, @{n="MB";e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime
-Write-Host "Copy it as static\downloads\CamAnime.apk for the website direct-download button,"
-Write-Host "or attach it to a GitHub Release (see docs/APP_RELEASES.md)."
+New-Item -ItemType Directory -Force -Path "..\..\static\downloads" | Out-Null
+Copy-Item $apk "..\..\static\downloads\CamAnime.apk" -Force
+Write-Host "== Copied to static\downloads\CamAnime.apk — the website /download direct button is now live. ==" -ForegroundColor Green
+Write-Host "Also attach it to a GitHub Release for the fallback link (see docs/APP_RELEASES.md)."

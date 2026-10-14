@@ -21,5 +21,7 @@ flutter build apk --release
 APK="build/app/outputs/flutter-apk/app-release.apk"
 echo "== APK ready: $APK =="
 ls -lh "$APK"
-echo "Copy it as static/downloads/CamAnime.apk to enable the website's direct-download button,"
-echo "or attach it to a GitHub Release (see docs/APP_RELEASES.md)."
+mkdir -p ../../static/downloads
+cp "$APK" ../../static/downloads/CamAnime.apk
+echo "== Copied to static/downloads/CamAnime.apk — the website's /download direct button is now live. =="
+echo "Also attach it to a GitHub Release for the fallback link (see docs/APP_RELEASES.md)."
