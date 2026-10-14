@@ -73,7 +73,7 @@ public partial class MainWindow : Window
             if (item.State == CoreWebView2DownloadState.Completed)
                 Dispatcher.Invoke(() => StatusText.Text = $"Saved to in-app library: {name} — use Library → Save to device to export.");
         };
-        StatusText.Text = $"Downloading into hidden library: {name} ({(item.TotalBytesToReceive > 0 ? (item.BytesReceived * 100 / item.TotalBytesToReceive) + "%" : "…")})";
+        StatusText.Text = $"Downloading into hidden library: {name} ({(item.TotalBytesToReceive > 0 ? ((long)item.BytesReceived * 100 / (long)(item.TotalBytesToReceive ?? 1)) + "%" : "…")})";
     }
 
     private void Library_Click(object sender, RoutedEventArgs e)
