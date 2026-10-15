@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watch {{ anime.title }} Episode {{ ep_num }} (1080p SUB/DUB) | CamAnime</title>
+    <meta name="theme-color" content="#087BFF">
+    <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -67,31 +70,10 @@
             justify-content: space-between;
             gap: 1rem;
         }
-        .site-logo {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.6rem;
-            text-decoration: none;
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 1.45rem;
-            color: var(--text-primary);
-        }
-        .logo-mark {
-            width: 32px;
-            height: 32px;
-            border-radius: 9px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: #07080d;
-        }
-        .logo-accent {
-            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+        .site-logo { display:inline-flex; align-items:center; text-decoration:none; flex:0 0 auto; }
+        .site-logo img { display:block; width:clamp(172px,16vw,228px); height:auto; max-height:54px; object-fit:contain; }
+        .site-logo:focus-visible { outline:2px solid #12CDE8; outline-offset:5px; border-radius:5px; }
+        @media (max-width:600px) { .site-logo img { width:clamp(150px,36vw,205px); max-height:46px; } }
         .breadcrumb-bar {
             display: flex;
             align-items: center;
@@ -462,9 +444,8 @@
 <header>
     <div class="header-inner">
         <div style="display:flex;align-items:center;gap:1.5rem;">
-            <a href="/" class="site-logo">
-                <span class="logo-mark"><i class="fas fa-play"></i></span>
-                <span>Cam<span class="logo-accent">Anime</span></span>
+            <a href="/" class="site-logo" aria-label="CamAnime — Watch, discover, enjoy">
+                <img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" fetchpriority="high">
             </a>
             <div class="breadcrumb-bar">
                 <a href="/anime/{{ anime.id }}"><i class="fas fa-arrow-left"></i> {{ anime.title }}</a>

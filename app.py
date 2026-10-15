@@ -30,7 +30,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("CAMANIME_SECRET", "camanime-dev-secret-change-me")
+# Never ship a predictable session secret. Configure CAMANIME_SECRET in production
+# so sessions remain valid across worker restarts; the process-local fallback is
+# intentionally ephemeral for local development only.
+app.secret_key = os.environ.get("CAMANIME_SECRET") or os.urandom(32)
 
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400  # /static cached 1 day
 
@@ -98,6 +101,21 @@ query {{
   }}
   topRated: Page(page: 1, perPage: 12) {{
     media(sort: SCORE_DESC, type: ANIME, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+  recentlyAdded: Page(page: 1, perPage: 16) {{
+    media(sort: ID_DESC, type: ANIME, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+  featuredMovie: Page(page: 1, perPage: 8) {{
+    media(sort: POPULARITY_DESC, type: ANIME, format: MOVIE, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+  series: Page(page: 1, perPage: 12) {{
+    media(sort: POPULARITY_DESC, type: ANIME, format_in: [TV, TV_SHORT], isAdult: false) {{
       {MEDIA_FRAGMENT}
     }}
   }}
@@ -183,7 +201,7 @@ POPULAR_GENRES = [
 
 
 def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
-    """Fetches data from AniList GraphQL API with in-memory caching."""
+    """Fetch AniList data with per-process TTL caching; not durable catalogue storage."""
     cache_key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
     now = time.time()
     if cache_key in _anilist_cache:
@@ -248,7 +266,7 @@ def format_anime_card(anime: Dict) -> Dict:
     )
 
     studios = ((anime.get("studios") or {}).get("nodes") or [])
-    studio_name = studios[0].get("name") if studios else "Anime Studio"
+    studio_name = studios[0].get("name") if studios else ""
 
     score = anime.get("averageScore")
     rating = f"{score / 10:.1f}" if score else "N/A"
@@ -270,7 +288,7 @@ def format_anime_card(anime: Dict) -> Dict:
         "status": (anime.get("status") or "FINISHED").replace("_", " ").title(),
         "season": f"{(anime.get('season') or '').title()} {anime.get('seasonYear') or ''}".strip(),
         "year": anime.get("seasonYear") or "",
-        "duration": f"{anime.get('duration')}m" if anime.get("duration") else "24m",
+        "duration": f"{anime.get('duration')}m" if anime.get("duration") else "",
         "rating": rating,
         "score": score or 0,
         "genres": (anime.get("genres") or [])[:4],
@@ -1189,9 +1207,9 @@ def download_page():
     return render_template("download.html", user=_current_user(), apk=apk, winapp=winapp)
 
 
-RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.0.0")
+RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.1.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
-APP_VERSION = "1.0.0"  # native app release line; bump with each store release
+APP_VERSION = "1.1.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
 
 
 def _serve_app_file(local_names, release_name, download_name):
@@ -1295,6 +1313,171 @@ def api_track():
     d = _post_data()
     platform.track(store, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
     return jsonify({"status": "ok"})
+
+
+# ─── Versioned shared catalogue API ─────────────────────────────────────────
+# Website templates and the Flutter app share the same AniList-backed
+# normalization (format_anime_card); this API is the native client's contract.
+# Contract documentation: README.md, "Versioned catalogue API" section.
+CATALOG_FORMATS = {"TV", "TV_SHORT", "MOVIE", "OVA", "ONA", "SPECIAL"}
+CATALOG_SORTS = {
+    "popular": "POPULARITY_DESC",
+    "trending": "TRENDING_DESC",
+    "rating": "SCORE_DESC",
+    "recent": "ID_DESC",
+    "alphabetical": "TITLE_ROMAJI",
+}
+
+
+def _catalog_error(message: str, status: int):
+    return jsonify({"status": "error", "error": {"message": message}}), status
+
+
+def _catalog_media(data: Dict) -> List[Dict]:
+    return [format_anime_card(item) for item in (data.get("Page", {}).get("media") or []) if item]
+
+
+@app.route("/api/v1/health")
+def api_v1_health():
+    return jsonify({"status": "ok", "api_version": "v1", "catalog_source": "AniList",
+                    "persistence": "SQLite for user/community records; catalogue metadata is provider-cached"})
+
+
+@app.route("/api/v1/catalog/home")
+def api_v1_catalog_home():
+    data = fetch_anilist(HOME_DASHBOARD_QUERY)
+    if not data:
+        return _catalog_error("Catalogue provider is temporarily unavailable.", 503)
+    cards = {
+        "trending": [format_anime_card(a) for a in (data.get("trending", {}).get("media") or []) if a],
+        "popular": [format_anime_card(a) for a in (data.get("popularSeason", {}).get("media") or []) if a],
+        "top_rated": [format_anime_card(a) for a in (data.get("topRated", {}).get("media") or []) if a],
+        "recently_added": [format_anime_card(a) for a in (data.get("recentlyAdded", {}).get("media") or []) if a],
+        "movies": [format_anime_card(a) for a in (data.get("featuredMovie", {}).get("media") or []) if a],
+        "series": [format_anime_card(a) for a in (data.get("series", {}).get("media") or []) if a],
+    }
+    cards["featured"] = (cards["trending"] or cards["popular"] or [None])[0]
+    response = jsonify({"status": "success", "catalog_source": "AniList", "catalog": cards})
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    return response
+
+
+@app.route("/api/v1/anime")
+def api_v1_anime_list(genre_override: Optional[str] = None):
+    query = (request.args.get("q") or request.args.get("search") or "").strip()
+    genre = genre_override or request.args.get("genre", "").strip()
+    media_format = request.args.get("format", "").strip().upper()
+    sort_key = request.args.get("sort", "popular").strip().lower()
+    page = request.args.get("page", default=1, type=int)
+    limit = request.args.get("limit", default=24, type=int)
+    if len(query) > 100:
+        return _catalog_error("Search query must be 100 characters or fewer.", 400)
+    if genre and genre not in POPULAR_GENRES:
+        return _catalog_error("Unsupported genre filter.", 400)
+    if media_format and media_format not in CATALOG_FORMATS:
+        return _catalog_error("Unsupported media format.", 400)
+    if sort_key not in CATALOG_SORTS:
+        return _catalog_error("Unsupported sort order.", 400)
+    if page < 1 or page > 10000 or limit < 1 or limit > 50:
+        return _catalog_error("Page must be positive and limit must be between 1 and 50.", 400)
+    variables = {"page": page, "perPage": limit, "sort": [CATALOG_SORTS[sort_key]]}
+    if query:
+        variables["search"] = query
+    if genre:
+        variables["genre"] = genre
+    if media_format:
+        variables["format"] = media_format
+    data = fetch_anilist(SEARCH_FILTER_QUERY, variables)
+    if not data:
+        return _catalog_error("Catalogue provider is temporarily unavailable.", 503)
+    result = jsonify({"status": "success", "catalog_source": "AniList",
+                      "results": _catalog_media(data), "page": page, "limit": limit})
+    result.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
+    return result
+
+
+@app.route("/api/v1/search")
+def api_v1_search():
+    if not (request.args.get("q") or "").strip():
+        return _catalog_error("A non-empty q parameter is required.", 400)
+    return api_v1_anime_list()
+
+
+@app.route("/api/v1/genres")
+def api_v1_genres():
+    return jsonify({"status": "success", "genres": POPULAR_GENRES})
+
+
+@app.route("/api/v1/genres/<slug>/anime")
+def api_v1_genre_anime(slug: str):
+    genre = next((g for g in POPULAR_GENRES if g.lower().replace(" ", "-") == slug.lower()), None)
+    if not genre:
+        return _catalog_error("Genre not found.", 404)
+    # Route through the same validated, paginated catalogue query.
+    return api_v1_anime_list(genre_override=genre)
+
+
+def _anime_metadata(anime_id: int):
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw = data.get("Media") if data else None
+    if not raw:
+        return None
+    card = format_anime_card(raw)
+    count = raw.get("episodes") if isinstance(raw.get("episodes"), int) else None
+    known_streaming = raw.get("streamingEpisodes") or []
+    return {"id": raw.get("id"), "mal_id": raw.get("idMal"), **card,
+            "title_alternates": [t for t in ((raw.get("title") or {}).get("english"),
+                                               (raw.get("title") or {}).get("romaji"),
+                                               (raw.get("title") or {}).get("native")) if t],
+            "episode_count": count, "streaming_metadata_count": len(known_streaming),
+            "streaming_metadata_available": bool(known_streaming),
+            "streaming_metadata": [{"title": x.get("title", ""),
+                                    "thumbnail": x.get("thumbnail", ""),
+                                    "provider": x.get("site", "")}
+                                   for x in known_streaming if x],
+            "catalog_source": "AniList"}
+
+
+@app.route("/api/v1/anime/<int:anime_id>")
+def api_v1_anime_detail(anime_id: int):
+    if anime_id <= 0:
+        return _catalog_error("Anime ID must be positive.", 400)
+    anime = _anime_metadata(anime_id)
+    if anime is None:
+        return _catalog_error("Anime not found.", 404)
+    response = jsonify({"status": "success", "anime": anime})
+    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=1800"
+    return response
+
+
+@app.route("/api/v1/anime/<int:anime_id>/episodes")
+def api_v1_anime_episodes(anime_id: int):
+    data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
+    raw = (data.get("Media") or {}) if data else {}
+    if not raw:
+        return _catalog_error("Anime not found.", 404)
+    page = request.args.get("page", default=1, type=int)
+    limit = request.args.get("limit", default=50, type=int)
+    if page < 1 or limit < 1 or limit > 100:
+        return _catalog_error("Page must be positive and limit must be between 1 and 100.", 400)
+    # AniList supplies episode preview metadata, not a complete authorized source
+    # manifest. Only expose this endpoint when the metadata exists; it must never
+    # claim playback rights or fabricate missing episode rows.
+    episodes = []
+    for item in raw.get("streamingEpisodes") or []:
+        if not item:
+            continue
+        episodes.append({"title": item.get("title", ""),
+                         "thumbnail": item.get("thumbnail", ""),
+                         "provider": item.get("site", ""),
+                         "metadata_url": item.get("url", ""),
+                         "playable": False, "download_allowed": False})
+    start = (page - 1) * limit
+    rows = episodes[start:start + limit]
+    return jsonify({"status": "success", "anime_id": anime_id, "episodes": rows,
+                    "known_count": len(episodes), "page": page, "limit": limit,
+                    "has_more": start + limit < len(episodes),
+                    "playback_available": False, "download_available": False})
 
 
 @app.route("/api/public/anime/<int:anime_id>")

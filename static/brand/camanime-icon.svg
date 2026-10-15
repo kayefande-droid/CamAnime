@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">CamAnime</title>
+  <defs>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#04E2EE"/>
+      <stop offset=".52" stop-color="#087BFF"/>
+      <stop offset="1" stop-color="#8438F4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#050817"/>
+  <g transform="translate(56.32 56.32) scale(.78)">
+    <path d="M101 62Q84 52 84 77V435Q84 460 107 447L433 274Q462 256 433 239Z" fill="url(#mark)"/>
+    <path d="M164 175V337L311 256Z" fill="#050817"/>
+  </g>
+</svg>

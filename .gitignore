@@ -4,3 +4,4 @@ camanime_store.json
 camanime.db*
 .env
 *.log
+mobile/camanime_app/android/.kotlin/

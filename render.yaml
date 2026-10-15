@@ -10,3 +10,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: CAMANIME_SECRET
+        generateValue: true
+      # Set CAMANIME_ADMIN_EMAIL and CAMANIME_ADMIN_PASSWORD together in the Render dashboard.
+      # A Render free instance has ephemeral storage; attach a paid persistent disk
+      # or use a managed database before expecting SQLite records to survive redeploys.

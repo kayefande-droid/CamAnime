@@ -20,7 +20,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 DB_PATH = os.environ.get("CAMANIME_DB", "camanime.db")
 LEGACY_JSON = os.environ.get("CAMANIME_STORE", "camanime_store.json")
 ADMIN_EMAIL = os.environ.get("CAMANIME_ADMIN_EMAIL", "admin@camanime.local")
-ADMIN_PASSWORD = os.environ.get("CAMANIME_ADMIN_PASSWORD", "CamAnime-Admin-2026!")
+ADMIN_PASSWORD = os.environ.get("CAMANIME_ADMIN_PASSWORD")
+if os.environ.get("CAMANIME_ADMIN_EMAIL") and not ADMIN_PASSWORD:
+    raise RuntimeError("CAMANIME_ADMIN_PASSWORD is required when CAMANIME_ADMIN_EMAIL is configured.")
 TOKEN_TTL = 60 * 60 * 24 * 90  # 90 days
 
 SEO_KEYWORDS = (
@@ -277,14 +279,17 @@ def post_announcement(title: str, body: str, author: str):
 
 # ─── auth ────────────────────────────────────────────────────────────────────
 
-def ensure_admin(data: Dict = None) -> Dict:
+def ensure_admin(data: Dict = None) -> Optional[Dict]:
+    if not ADMIN_PASSWORD:
+        # Do not seed a known or unreachable password into the database.
+        return None
     with _db() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?",
                            (ADMIN_EMAIL.lower(),)).fetchone()
         if not row:
             conn.execute(
                 "INSERT INTO users(email,name,pw,role,avatar,created) VALUES (?,?,?,?,?,?)",
-                (ADMIN_EMAIL.lower(), "Kayefande (Admin)",
+                (ADMIN_EMAIL.lower(), "CamAnime Admin",
                  generate_password_hash(ADMIN_PASSWORD), "admin", "", int(time.time())),
             )
             row = conn.execute("SELECT * FROM users WHERE email = ?",

@@ -1,6 +1,6 @@
 # Publishing CamAnime app binaries (direct download links)
 
-The `/download` page shows **direct download buttons** automatically:
+The `/download` page shows **direct download buttons** automatically and a copyable absolute URL for the Android APK (`/get/android`):
 
 | File you provide | Button it enables |
 |---|---|
@@ -25,8 +25,8 @@ git add static/downloads && git commit -m "Ship app binaries" && git push
 ## Option B — GitHub Releases (recommended for large files)
 
 1. Build the APK / Windows zip on your PC (see `tools/` scripts).
-2. GitHub → repo → Releases → Draft new release → tag `v1.0.0` → attach both files → Publish.
-3. The `/download` page already links `.../releases/latest` as fallback — no code change needed.
+2. GitHub → repo → Releases → Draft new release → use the app version tag (currently `v1.1.0`) → attach the APK → Publish.
+3. The `/get/android` fallback and native update check use `CAMANIME_RELEASE_TAG` (default `v1.1.0`); update it when publishing a later release.
 
 ## TikTok bio link
 

@@ -6,13 +6,15 @@
     <title>CamAnime — Free Anime Streaming Website | Watch Sub & Dub Online (Cameroon & Worldwide)</title>
     <meta name="description" content="CamAnime is a free anime streaming website for Cameroon and worldwide fans: watch anime online free in 1080p SUB/DUB, download episodes, track simulcast schedule. Made by kayefande-droid & co.">
     <meta name="keywords" content="free anime streaming website, watch anime online free, anime websites Cameroon, free streaming websites, best free anime sites, download anime episodes, anime sub dub 1080p, CamAnime app">
-    <meta name="theme-color" content="#07080d">
+    <meta name="theme-color" content="#087BFF">
     <meta name="google-site-verification" content="3rRXefg_LYfyIPKcJgeXbLXBLkHx9zKOUlWcX7Fm6Tg" />
     <meta property="og:title" content="CamAnime — Free Anime Streaming Website">
     <meta property="og:description" content="Watch anime online free in 1080p SUB/DUB. Free streaming website for Cameroon and worldwide fans.">
     <meta property="og:type" content="website">
     <link rel="manifest" href="/static/manifest.webmanifest">
-    <link rel="icon" href="/static/icon-192.png" type="image/png">
+    <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+    <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" sizes="180x180">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -85,31 +87,17 @@
         .site-logo {
             display: inline-flex;
             align-items: center;
-            gap: 0.65rem;
             text-decoration: none;
-            font-family: 'Syne', sans-serif;
-            font-weight: 800;
-            font-size: 1.55rem;
-            letter-spacing: -0.03em;
-            color: var(--text-primary);
+            flex: 0 0 auto;
         }
-        .logo-mark {
-            width: 34px;
-            height: 34px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: #07080d;
-            font-size: 1rem;
-            box-shadow: 0 4px 16px rgba(255, 179, 71, 0.35);
+        .site-logo img {
+            display: block;
+            width: clamp(180px, 17vw, 248px);
+            height: auto;
+            max-height: 58px;
+            object-fit: contain;
         }
-        .logo-accent {
-            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+        .site-logo:focus-visible { outline: 2px solid #12CDE8; outline-offset: 5px; border-radius: 5px; }
         .nav-links {
             display: flex;
             align-items: center;
@@ -840,7 +828,8 @@
             .nav-toggle { display: inline-flex; }
             .header-inner { flex-wrap: wrap; gap: 0.75rem; }
             .brand-group { flex: 1; min-width: 0; gap: 1rem; }
-            .site-logo { font-size: 1.3rem; min-width: 0; }
+            .site-logo { min-width: 0; }
+            .site-logo img { width: clamp(158px, 38vw, 218px); max-height: 48px; }
             .header-actions { flex: 1 1 100%; min-width: 0; }
             .search-form { flex: 1; max-width: none; min-width: 0; }
             .main-wrap { padding: 1rem 1rem 3rem; }
@@ -871,9 +860,8 @@
 <header>
     <div class="header-inner">
         <div class="brand-group">
-            <a href="/" class="site-logo">
-                <span class="logo-mark"><i class="fas fa-play"></i></span>
-                <span>Cam<span class="logo-accent">Anime</span></span>
+            <a href="/" class="site-logo" aria-label="CamAnime — Watch, discover, enjoy">
+                <img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" fetchpriority="high">
             </a>
             <nav class="nav-links">
                 <a href="/" class="nav-link {{ 'active' if page_type == 'home' and not active_format else '' }}">

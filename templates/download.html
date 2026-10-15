@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Download the Free CamAnime App — Android APK & Windows | CamAnime</title>
+<meta name="theme-color" content="#087BFF"><link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml"><link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
 <meta name="description" content="Download the free CamAnime app for Android (APK) and Windows. 1080p SUB/DUB streaming, hidden in-app library, save-to-device downloads. Made by kayefande-droid & co.">
 <meta name="keywords" content="camanime app download, free anime app android apk, anime app windows, free anime streaming website">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -19,13 +20,17 @@ p.sub{color:#a0abc0;margin-bottom:1.5rem}
 .meta{font-size:.8rem;color:#64708a;font-family:monospace}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;background:linear-gradient(135deg,#FFB347,#FF5E62);color:#07080d;font-weight:800;text-decoration:none;border-radius:999px;padding:.85rem 1.4rem;margin-top:.4rem}
 .btn.ghost{background:#141926;color:#fff;border:1px solid rgba(255,255,255,.15)}.direct{display:block;text-align:center;font-size:.82rem;color:#FFB347;margin-top:.25rem;text-decoration:none}.direct:hover{text-decoration:underline}
+.copy-row{display:flex;gap:.45rem;align-items:stretch;margin-top:.35rem;min-width:0}
+.copy-row input{flex:1;min-width:0;background:#080b13;color:#dbe5ff;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:.65rem .7rem;font:500 .76rem/1.3 ui-monospace,SFMono-Regular,Consolas,monospace}
+.copy-row button{border:1px solid rgba(8,123,255,.45);border-radius:9px;background:#10213b;color:#dbeafe;padding:.55rem .8rem;font-weight:700;cursor:pointer}
+.copy-row button:hover{background:#15335d}.copy-status{min-height:1.1em;color:#95a7c8;font-size:.75rem}
 ol{margin:1rem 0 0 1.2rem;color:#a0abc0;line-height:1.9;font-size:.9rem}
 a{color:#FFB347}
 @media(max-width:414px){body{padding:1rem}}
 </style>
 </head>
 <body>
-<p><a href="/">← CamAnime</a> · <a href="/promo">Promo kit</a></p>
+<p style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" style="display:block;width:min(230px,70vw);height:auto"></a><a href="/promo">Promo kit</a></p>
 <h1><i class="fas fa-download" style="color:#FFB347"></i> Download the free CamAnime app</h1>
 <p class="sub">Same account as the website. Hidden in-app library — files only leave the app when you tap <strong>Save to device</strong>. Made by kayefande-droid &amp; co.</p>
 <div class="cards">
@@ -38,6 +43,9 @@ a{color:#FFB347}
     {% endif %}
     <a class="btn" href="/get/android"><i class="fas fa-mobile-alt"></i> Install App</a>
     <a class="direct" href="/get/android" download="CamAnime.apk"><i class="fas fa-download"></i> Direct link: CamAnime.apk — tap to start downloading</a>
+    <label class="meta" for="android-download-url">Copyable download URL</label>
+    <div class="copy-row"><input id="android-download-url" type="text" readonly value="{{ request.url_root.rstrip('/') }}/get/android" aria-label="Direct CamAnime Android APK URL"><button type="button" id="copy-android-url" aria-describedby="copy-android-status">Copy link</button></div>
+    <div id="copy-android-status" class="copy-status" role="status" aria-live="polite"></div>
     
   </div>
   <div class="card">
@@ -59,5 +67,27 @@ a{color:#FFB347}
   <li>Point the app at your site URL, sign in with your website account — one shared user database.</li>
 </ol>
 <p style="margin-top:1.5rem;color:#64708a;font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
+<script>
+(() => {
+  const field = document.getElementById('android-download-url');
+  const button = document.getElementById('copy-android-url');
+  const status = document.getElementById('copy-android-status');
+  if (!field || !button || !status) return;
+  button.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(field.value);
+      status.textContent = 'Download link copied.';
+    } catch (_) {
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, field.value.length);
+      const copied = document.execCommand('copy');
+      status.textContent = copied
+        ? 'Download link copied.'
+        : 'Select and copy the link above.';
+    }
+  });
+})();
+</script>
 </body>
 </html>

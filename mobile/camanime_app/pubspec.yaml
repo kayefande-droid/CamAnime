@@ -1,7 +1,7 @@
 name: camanime_app
-description: CamAnime native app (Android APK + Windows). Free 1080p SUB/DUB streaming, hidden in-app library, save-to-device downloads. Made by kayefande-droid & co.
+description: CamAnime Flutter app for shared anime discovery, cached artwork, and authorized playback. Made by kayefande-droid & co.
 publish_to: none
-version: 1.0.0+1
+version: 1.1.0+2
 environment:
   sdk: ">=3.2.0 <4.0.0"
 dependencies:
@@ -12,5 +12,11 @@ dependencies:
   chewie: ^1.8.1
   shared_preferences: ^2.2.3
   path_provider: ^2.1.4
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
 flutter:
   uses-material-design: true
+  assets:
+    - assets/brand/camanime-logo.png
