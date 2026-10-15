@@ -62,7 +62,7 @@ def test_download_page_exposes_copyable_android_url_and_direct_download(api):
 
     version = client.get("/api/version")
     assert version.status_code == 200
-    assert version.json["app_version"] == "1.1.0"
+    assert version.json["app_version"] == "1.2.0"
     assert version.json["apk_url"] == "/get/android"
 
 

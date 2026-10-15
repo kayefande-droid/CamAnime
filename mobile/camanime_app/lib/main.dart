@@ -1,18 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '1.1.0';
+const String appVersion = '1.2.0';
 const String appCredit = 'Made by kayefande-droid & co.';
 
-// API host is baked at build time (kept out of the repo source):
+// Backend is the CamAnime website itself — always on, no manual linking.
 //   flutter build apk --release --dart-define=CAMANIME_API=https://your-host
-// It can still be overridden per-device on the You tab.
 const String apiHost = String.fromEnvironment(
   'CAMANIME_API',
   defaultValue: 'https://camanime.onrender.com',
@@ -31,6 +32,25 @@ const brandBlue = Color(0xFF087BFF);
 const brandCyan = Color(0xFF04DEE8);
 const brandPurple = Color(0xFF8635EF);
 
+// ── App themes (Settings → Appearance) ─────────────────
+const Map<String, Map<String, dynamic>> appThemes = {
+  'midnight': {'label': 'Midnight', 'seed': 0xFF087BFF, 'bg': 0xFF07080D},
+  'vibrant': {'label': 'Vibrant', 'seed': 0xFF7C61D4, 'bg': 0xFF14101F},
+  'sakura': {'label': 'Sakura', 'seed': 0xFFFF7AA8, 'bg': 0xFF120A12},
+  'forest': {'label': 'Forest', 'seed': 0xFF34D399, 'bg': 0xFF07120E},
+};
+
+const List<Map<String, dynamic>> avatarPresets = [
+  {'icon': IconData(0xe491), 'color': 0xFFFFB347}, // person
+  {'icon': IconData(0xe3b6), 'color': 0xFFFF5E62}, // movie
+  {'icon': IconData(0xe40d), 'color': 0xFF7C61D4}, // bolt
+  {'icon': IconData(0xe1d2), 'color': 0xFF10B981}, // star
+  {'icon': IconData(0xe0e5), 'color': 0xFF04DEE8}, // rocket
+  {'icon': IconData(0xe1fe), 'color': 0xFFFF7AA8}, // pets
+  {'icon': IconData(0xe1a3), 'color': 0xFF087BFF}, // sports
+  {'icon': IconData(0xe548), 'color': 0xFFA3E635}, // game
+];
+
 void main() => runApp(const CamAnimeApp());
 
 class CamAnimeApp extends StatefulWidget {
@@ -42,6 +62,15 @@ class CamAnimeApp extends StatefulWidget {
 class _CamAnimeAppState extends State<CamAnimeApp> {
   int tab = 0;
   bool showTutorial = false;
+  String themeName = 'midnight';
+
+  static const _tabs = [
+    ('Home', Icons.home_outlined, Icons.home),
+    ('Explore', Icons.explore_outlined, Icons.explore),
+    ('Search', Icons.search_outlined, Icons.search),
+    ('Library', Icons.video_library_outlined, Icons.video_library),
+    ('Profile', Icons.person_outline, Icons.person),
+  ];
 
   @override
   void initState() {
@@ -51,6 +80,13 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
 
   Future<void> _firstRun() async {
     final p = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        themeName = appThemes.containsKey(p.getString('app_theme'))
+            ? p.getString('app_theme')!
+            : 'midnight';
+      });
+    }
     if (p.getBool('tutorial_done') != true) {
       if (mounted) setState(() => showTutorial = true);
     } else {
@@ -60,9 +96,8 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
 
   Future<void> _checkUpdate({bool manual = false}) async {
     try {
-      final b = await Api.base();
       final r = await http
-          .get(Uri.parse('$b/api/version'))
+          .get(Uri.parse('$apiHost/api/version'))
           .timeout(const Duration(seconds: 12));
       final d = json.decode(r.body) as Map<String, dynamic>;
       final latest = (d['app_version'] ?? '').toString();
@@ -97,9 +132,9 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
                 backgroundColor: amber, foregroundColor: Colors.black),
             onPressed: () {
               Navigator.pop(context);
-              setState(() => tab = 5);
+              setState(() => tab = 3);
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Open the Updates tab to download.')));
+                  content: Text('Open Library → App update to download.')));
             },
             child: const Text('Get it'),
           ),
@@ -108,17 +143,24 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
     );
   }
 
+  Future<void> _applyTheme(String name) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('app_theme', name);
+    if (mounted) setState(() => themeName = name);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final t = appThemes[themeName] ?? appThemes['midnight']!;
+    final seed = Color(t['seed'] as int);
+    final scaffold = Color(t['bg'] as int);
     return MaterialApp(
       title: 'CamAnime',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true).copyWith(
-        scaffoldBackgroundColor: bg,
+        scaffoldBackgroundColor: scaffold,
         colorScheme: ColorScheme.fromSeed(
-            seedColor: brandBlue,
-            brightness: Brightness.dark,
-            primary: brandBlue),
+            seedColor: seed, brightness: Brightness.dark, primary: seed),
         cardTheme: CardThemeData(
             color: card,
             shape: RoundedRectangleBorder(
@@ -139,45 +181,22 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
               HomeTab(onUpdate: () => _checkUpdate(manual: true)),
               const ExploreTab(),
               const SearchTab(),
-              const DownloadsTab(),
               const LibraryTab(),
-              UpdatesTab(onCheck: () => _checkUpdate(manual: true)),
               const ProfileTab(),
             ][tab],
-            bottomNavigationBar: NavigationBar(
-              backgroundColor: const Color(0xFF0B0E16),
-              selectedIndex: tab,
-              onDestinationSelected: (i) => setState(() => tab = i),
-              destinations: const [
-                NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home),
-                    label: 'Home'),
-                NavigationDestination(
-                    icon: Icon(Icons.explore_outlined),
-                    selectedIcon: Icon(Icons.explore),
-                    label: 'Explore'),
-                NavigationDestination(
-                    icon: Icon(Icons.search_outlined),
-                    selectedIcon: Icon(Icons.search),
-                    label: 'Search'),
-                NavigationDestination(
-                    icon: Icon(Icons.download_outlined),
-                    selectedIcon: Icon(Icons.download),
-                    label: 'Downloads'),
-                NavigationDestination(
-                    icon: Icon(Icons.video_library_outlined),
-                    selectedIcon: Icon(Icons.video_library),
-                    label: 'My Library'),
-                NavigationDestination(
-                    icon: Icon(Icons.system_update_outlined),
-                    selectedIcon: Icon(Icons.system_update),
-                    label: 'Updates'),
-                NavigationDestination(
-                    icon: Icon(Icons.person_outline),
-                    selectedIcon: Icon(Icons.person),
-                    label: 'Profile'),
-              ],
+            bottomNavigationBar: _FloatingNav(
+              tab: tab,
+              tabs: _tabs,
+              onTab: (i) => setState(() => tab = i),
+              onSettings: () async {
+                await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => SettingsScreen(
+                            themeName: themeName,
+                            onTheme: _applyTheme,
+                            onCheckUpdate: () => _checkUpdate(manual: true))));
+              },
             ),
           ),
           if (showTutorial)
@@ -193,13 +212,89 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
   }
 }
 
-// ── API (website backend) ──────────────────────────────
-class Api {
-  static Future<String> base() async {
-    final p = await SharedPreferences.getInstance();
-    final b = (p.getString('api_base') ?? '').trim();
-    return b.isEmpty ? apiHost : b;
+// ── Floating bottom navigation + gear ──────────────────
+class _FloatingNav extends StatelessWidget {
+  final int tab;
+  final List<(String, IconData, IconData)> tabs;
+  final ValueChanged<int> onTab;
+  final VoidCallback onSettings;
+  const _FloatingNav(
+      {required this.tab,
+      required this.tabs,
+      required this.onTab,
+      required this.onSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xF20B0E16),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: const Color(0x33FFB347)),
+            boxShadow: const [
+              BoxShadow(
+                  color: Colors.black54, blurRadius: 18, offset: Offset(0, 6))
+            ],
+          ),
+          child: Row(children: [
+            for (var i = 0; i < tabs.length; i++)
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => onTab(i),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    decoration: BoxDecoration(
+                      color: tab == i
+                          ? amber.withValues(alpha: 0.16)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(tab == i ? tabs[i].$3 : tabs[i].$2,
+                          size: 23, color: tab == i ? amber : muted),
+                      const SizedBox(height: 2),
+                      Text(tabs[i].$1,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: tab == i ? amber : muted)),
+                    ]),
+                  ),
+                ),
+              ),
+            Container(
+              margin: const EdgeInsets.only(left: 2),
+              decoration: BoxDecoration(
+                  color: card2, borderRadius: BorderRadius.circular(18)),
+              child: IconButton(
+                tooltip: 'App settings',
+                icon:
+                    const Icon(Icons.settings_outlined, size: 23, color: muted),
+                onPressed: onSettings,
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
+}
+
+// ── API (the CamAnime website — always connected) ───────
+class Api {
+  // Hardwired to the website backend. No manual URL entry anywhere.
+  static String base() => apiHost.replaceFirst(RegExp(r'/+$'), '');
+
+  static String abs(String url) =>
+      url.startsWith('http') ? url : '${base()}$url';
 
   static Future<String?> token() async {
     final p = await SharedPreferences.getInstance();
@@ -209,6 +304,16 @@ class Api {
   static Future<Map<String, String>> headers() async {
     final t = await token();
     return {if (t != null) 'Authorization': 'Bearer $t'};
+  }
+
+  static Future<String> guestName() async {
+    final p = await SharedPreferences.getInstance();
+    return (p.getString('username') ?? '').trim();
+  }
+
+  static Future<int> avatarIdx() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt('avatar_idx') ?? 0;
   }
 
   static bool _isTransientStatus(int status) => status >= 500;
@@ -246,7 +351,7 @@ class Api {
   }
 
   static Future<Map<String, dynamic>> catalogHome() async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
+    final b = base();
     try {
       final response = await _get(Uri.parse('$b/api/v1/catalog/home'));
       final body = json.decode(response.body) as Map<String, dynamic>;
@@ -272,40 +377,83 @@ class Api {
   }
 
   static Future<List> search(String q) async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
     final response = await _get(Uri.parse(
-        '$b/api/v1/search?q=${Uri.encodeQueryComponent(q)}&limit=36'));
+        '${base()}/api/v1/search?q=${Uri.encodeQueryComponent(q)}&limit=36'));
     return ((json.decode(response.body) as Map)['results'] as List?) ?? [];
   }
 
   static Future<Map<String, dynamic>> animeInfo(String animeId) async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
     final response = await _get(
-        Uri.parse('$b/api/v1/anime/${Uri.encodeComponent(animeId)}'));
+        Uri.parse('${base()}/api/v1/anime/${Uri.encodeComponent(animeId)}'));
     return ((json.decode(response.body) as Map)['anime'] as Map?)
             ?.cast<String, dynamic>() ??
         {};
   }
 
-  static Future<Map<String, dynamic>> announcements() async {
-    final b = await base();
+  /// Same streaming servers the website uses for this episode.
+  static Future<Map<String, dynamic>> episodeSources(
+      String animeId, int ep, String audio) async {
+    final response = await _get(Uri.parse(
+        '${base()}/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio'));
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  static Future<List> genres() async {
+    final response = await _get(Uri.parse('${base()}/api/v1/genres'));
+    return ((json.decode(response.body) as Map)['genres'] as List?) ?? [];
+  }
+
+  static Future<List> genreAnime(String slug) async {
+    final response = await _get(Uri.parse(
+        '${base()}/api/v1/genres/${Uri.encodeComponent(slug)}/anime?limit=36'));
+    return ((json.decode(response.body) as Map)['results'] as List?) ?? [];
+  }
+
+  static Future<List> comments(String animeId) async {
+    final response = await _get(Uri.parse(
+        '${base()}/api/community/comments?anime_id=${Uri.encodeComponent(animeId)}'));
+    return ((json.decode(response.body) as Map)['comments'] as List?) ?? [];
+  }
+
+  static Future<void> postComment(String animeId, String text) async {
+    final fd = {'anime_id': animeId, 'text': text, 'name': await guestName()};
     final r = await http
-        .get(Uri.parse('$b/api/announcements'))
+        .post(Uri.parse('${base()}/api/community/comment'), body: fd)
+        .timeout(const Duration(seconds: 15));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    if (d['status'] != 'success') throw Exception(d['error'] ?? 'Post failed');
+  }
+
+  static Future<void> rate(String animeId, int score) async {
+    final fd = {
+      'anime_id': animeId,
+      'score': '$score',
+      'name': await guestName()
+    };
+    final r = await http
+        .post(Uri.parse('${base()}/api/community/rate'), body: fd)
+        .timeout(const Duration(seconds: 15));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    if (d['status'] != 'success') throw Exception(d['error'] ?? 'Rate failed');
+  }
+
+  static Future<Map<String, dynamic>> announcements() async {
+    final r = await http
+        .get(Uri.parse('${base()}/api/announcements'))
         .timeout(const Duration(seconds: 12));
     return json.decode(r.body) as Map<String, dynamic>;
   }
 
   static Future<Map<String, dynamic>> version() async {
-    final b = await base();
     final r = await http
-        .get(Uri.parse('$b/api/version'))
+        .get(Uri.parse('${base()}/api/version'))
         .timeout(const Duration(seconds: 12));
     return json.decode(r.body) as Map<String, dynamic>;
   }
 
   static Future<Map<String, dynamic>> signIn(String email, String password,
       {bool register = false, String name = ''}) async {
-    final b = await base();
+    final b = base();
     final path = register ? 'register' : 'login';
     final r = await http.post(Uri.parse('$b/api/auth/$path'),
         headers: {'Content-Type': 'application/json'},
@@ -323,9 +471,8 @@ class Api {
   }
 
   static Future<void> signOut() async {
-    final b = await base();
     try {
-      await http.post(Uri.parse('$b/api/auth/logout'),
+      await http.post(Uri.parse('${base()}/api/auth/logout'),
           headers: await headers());
     } catch (_) {}
     final p = await SharedPreferences.getInstance();
@@ -335,9 +482,8 @@ class Api {
 
   /// Synced admin/secret status — admin only, same backend the website uses.
   static Future<Map<String, dynamic>> adminSync() async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
     final r = await http
-        .get(Uri.parse('$b/api/admin/sync'), headers: await headers())
+        .get(Uri.parse('${base()}/api/admin/sync'), headers: await headers())
         .timeout(const Duration(seconds: 12));
     final d = json.decode(r.body) as Map<String, dynamic>;
     if (d['status'] != 'success') {
@@ -349,8 +495,7 @@ class Api {
   /// Change own admin password (admin only). Clears server tokens on success.
   static Future<void> changeAdminPassword(
       String currentPassword, String newPassword) async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
-    final r = await http.post(Uri.parse('$b/api/admin/password'),
+    final r = await http.post(Uri.parse('${base()}/api/admin/password'),
         headers: {...await headers(), 'Content-Type': 'application/json'},
         body: json.encode({
           'current_password': currentPassword,
@@ -363,14 +508,11 @@ class Api {
     await signOut();
   }
 
-  /// Download a file directly from the CamAnime platform backend with auth.
-  /// Use only for files your platform is authorized to distribute.
-  /// Saves into the private in-app library; export via My Library > Save.
-  static Future<File> downloadPlatformFile(String platformUrl, String filename,
+  /// Direct MP4 download from the website's own download manager.
+  /// Saves into the private in-app library; export via Library > Save.
+  static Future<File> downloadEpisodeFile(String websiteUrl, String filename,
       {void Function(int received, int total)? onProgress}) async {
-    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
-    final full =
-        platformUrl.startsWith('http') ? platformUrl : '$b$platformUrl';
+    final full = abs(websiteUrl);
     final req = http.Request('GET', Uri.parse(full));
     req.headers.addAll(await headers());
     final resp = await http.Client().send(req);
@@ -402,6 +544,7 @@ class PosterCard extends StatelessWidget {
   final Map item;
   final double width;
   const PosterCard({super.key, required this.item, this.width = 128});
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -552,16 +695,16 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
       'Browse the catalogue shared with the CamAnime website. No account needed to explore.'
     ],
     [
-      'Rate & discuss as guest',
-      'Tap a 1-10 score and post comments with just a display name. Signing in syncs everything.'
+      'Watch in the app',
+      'Episodes stream with the same servers as the website — SUB & DUB, straight in the app.'
     ],
     [
       'Downloads from CamAnime',
-      'Downloads tab saves the same episode file playing on the website into My Library. No sign-in needed.'
+      'Pick single or multiple episodes and save MP4s into My Library. No sign-in needed.'
     ],
     [
-      'Stay in sync',
-      'The catalogue refreshes on return and cached posters stay visible offline.'
+      'You, your way',
+      'Set a profile pic, switch themes, and comment under every anime as a guest.'
     ],
   ];
   @override
@@ -638,7 +781,7 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
       );
 }
 
-// ── Home ───────────────────────────────────────────────
+// ── Home (slideshow + rails) ───────────────────────────
 class HomeTab extends StatefulWidget {
   final VoidCallback onUpdate;
   const HomeTab({super.key, required this.onUpdate});
@@ -762,8 +905,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
-                        backgroundColor: amber,
-                        foregroundColor: Colors.black),
+                        backgroundColor: amber, foregroundColor: Colors.black),
                     onPressed: _load,
                     icon: const Icon(Icons.refresh),
                     label: const Text('Try again'),
@@ -776,7 +918,8 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
               color: amber,
               backgroundColor: card,
               onRefresh: _load,
-              child: ListView(padding: EdgeInsets.zero, children: kids));
+              child: ListView(
+                  padding: const EdgeInsets.only(bottom: 110), children: kids));
         }),
       );
 
@@ -807,6 +950,24 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.6)),
               ])),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+                color: mint.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(99),
+                border: Border.all(color: mint.withValues(alpha: 0.4))),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                  width: 8,
+                  height: 8,
+                  decoration:
+                      const BoxDecoration(color: mint, shape: BoxShape.circle)),
+              const SizedBox(width: 6),
+              const Text('Connected',
+                  style: TextStyle(
+                      color: mint, fontSize: 11, fontWeight: FontWeight.w800)),
+            ]),
+          ),
         ]),
       );
 
@@ -825,6 +986,8 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         )),
       ));
     }
+    final slides = trending.isNotEmpty ? trending.take(6).toList() : [];
+    if (slides.isNotEmpty) out.add(_slideshow(slides));
     if (featured != null) out.add(_featuredCard(featured!));
     out.add(_rail('Trending Anime', trending));
     out.add(_rail('Popular this season', popular));
@@ -845,6 +1008,8 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
             style: TextStyle(color: muted, fontSize: 12))));
     return out;
   }
+
+  Widget _slideshow(List slides) => _Slideshow(items: slides);
 
   Widget _featuredCard(Map item) {
     final image = (item['banner'] ?? item['image'] ?? '').toString();
@@ -936,41 +1101,140 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       ]);
 }
 
-// ── Detail ─────────────────────────────────────────────
-class ExploreTab extends StatelessWidget {
+/// Auto-rotating anime slideshow (16:9 stage, dots + tap to open).
+class _Slideshow extends StatefulWidget {
+  final List items;
+  const _Slideshow({required this.items});
+  @override
+  State<_Slideshow> createState() => _SlideshowState();
+}
+
+class _SlideshowState extends State<_Slideshow> {
+  final _ctrl = PageController(viewportFraction: 0.92);
+  Timer? _timer;
+  int _page = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted || widget.items.isEmpty) return;
+      _page = (_page + 1) % widget.items.length;
+      _ctrl.animateToPage(_page,
+          duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      SizedBox(
+        height: 210,
+        child: PageView.builder(
+          controller: _ctrl,
+          onPageChanged: (i) => setState(() => _page = i),
+          itemCount: widget.items.length,
+          itemBuilder: (_, i) {
+            final item = widget.items[i] as Map;
+            final img = (item['banner'] ?? item['image'] ?? '').toString();
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => DetailScreen(
+                            animeId: item['id'].toString(),
+                            title: (item['title'] ?? 'Anime').toString()))),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Stack(fit: StackFit.expand, children: [
+                    CachedPosterImage(url: img),
+                    const DecoratedBox(
+                        decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                          Color(0x08000000),
+                          Color(0xDD07080D)
+                        ]))),
+                    Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 12,
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                      color: amber,
+                                      borderRadius: BorderRadius.circular(6)),
+                                  child: Text('TRENDING #${i + 1}',
+                                      style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w900))),
+                              const SizedBox(height: 4),
+                              Text((item['title'] ?? '').toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w900)),
+                              Text('Tap to watch · stream & download free',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.white
+                                          .withValues(alpha: 0.75))),
+                            ])),
+                  ]),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      const SizedBox(height: 8),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        for (var k = 0; k < widget.items.length; k++)
+          Container(
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: _page == k ? 22 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                  color: _page == k ? amber : muted,
+                  borderRadius: BorderRadius.circular(99))),
+      ]),
+    ]);
+  }
+}
+
+// ── Explore (real rails + genres) ───────────────────────
+class ExploreTab extends StatefulWidget {
   const ExploreTab({super.key});
-
   @override
-  Widget build(BuildContext context) => SafeArea(
-          child: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Explore',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 8),
-        const Text(
-            'Browse trending and popular titles. Use Search to filter the shared catalogue.',
-            style: TextStyle(color: muted)),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text(
-                        'Select Search below to search the live catalogue.'))),
-            icon: const Icon(Icons.search),
-            label: const Text('Search CamAnime')),
-      ]));
+  State<ExploreTab> createState() => _ExploreTabState();
 }
 
-class DetailScreen extends StatefulWidget {
-  final String animeId;
-  final String title;
-  const DetailScreen({super.key, required this.animeId, required this.title});
-  @override
-  State<DetailScreen> createState() => _DetailScreenState();
-}
-
-class _DetailScreenState extends State<DetailScreen> {
-  Map info = {};
+class _ExploreTabState extends State<ExploreTab> {
+  List trending = [], popular = [], topRated = [], movies = [];
+  List genres = [];
+  String? genreSlug;
+  List genreResults = [];
   bool loading = true;
+  bool genreBusy = false;
+
   @override
   void initState() {
     super.initState();
@@ -979,10 +1243,210 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _load() async {
     try {
+      final result = await Api.catalogHome();
+      final data = (result['catalog'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{};
+      List list(String key) => (data[key] as List?) ?? [];
+      List g = [];
+      try {
+        g = await Api.genres();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        trending = list('trending');
+        popular = list('popular');
+        topRated = list('top_rated');
+        movies = list('movies');
+        genres = g;
+        loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _pickGenre(String? slug) async {
+    setState(() {
+      genreSlug = slug;
+      genreBusy = slug != null;
+      if (slug == null) genreResults = [];
+    });
+    if (slug == null) return;
+    try {
+      final r = await Api.genreAnime(slug);
+      if (!mounted) return;
+      setState(() {
+        genreResults = r;
+        genreBusy = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => genreBusy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    final cols = w < 360 ? 2 : 3;
+    return SafeArea(
+      child: loading
+          ? const Center(child: CircularProgressIndicator(color: amber))
+          : RefreshIndicator(
+              color: amber,
+              backgroundColor: card,
+              onRefresh: _load,
+              child: ListView(
+                  padding: const EdgeInsets.only(bottom: 110),
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                      child: Text('Explore',
+                          style: TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.w900)),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                          'Rails and genres from the live CamAnime catalogue.',
+                          style: TextStyle(color: muted, fontSize: 12)),
+                    ),
+                    if (genres.isNotEmpty) ...[
+                      SizedBox(
+                        height: 44,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: genres.length + 1,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (_, i) {
+                            if (i == 0) {
+                              final on = genreSlug == null;
+                              return ChoiceChip(
+                                  label: const Text('All'),
+                                  selected: on,
+                                  onSelected: (_) => _pickGenre(null));
+                            }
+                            final g = genres[i - 1] as Map;
+                            final slug = (g['slug'] ?? '').toString();
+                            return ChoiceChip(
+                                label: Text((g['name'] ?? slug).toString()),
+                                selected: genreSlug == slug,
+                                onSelected: (_) => _pickGenre(slug));
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    if (genreBusy)
+                      const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Center(
+                              child: CircularProgressIndicator(color: amber)))
+                    else if (genreSlug != null)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: genreResults.isEmpty
+                            ? const Text('No titles in this genre yet.',
+                                style: TextStyle(color: muted))
+                            : GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: cols,
+                                        childAspectRatio: 0.56,
+                                        crossAxisSpacing: 10,
+                                        mainAxisSpacing: 12),
+                                itemCount: genreResults.length,
+                                itemBuilder: (_, i) => PosterCard(
+                                    item: genreResults[i] as Map,
+                                    width: double.infinity),
+                              ),
+                      )
+                    else ...[
+                      _miniRail('Trending now', trending),
+                      _miniRail('Popular this season', popular),
+                      _miniRail('Top rated', topRated),
+                      _miniRail('Movies', movies),
+                    ],
+                  ])),
+    );
+  }
+
+  Widget _miniRail(String title, List items) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(title,
+                style: const TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w800))),
+        SizedBox(
+          height: 236,
+          child: items.isEmpty
+              ? const Center(
+                  child: Text('Nothing here yet — pull to refresh.',
+                      style: TextStyle(color: muted)))
+              : ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 10),
+                  itemBuilder: (_, i) => PosterCard(item: items[i] as Map),
+                ),
+        ),
+      ]);
+}
+
+// ── Detail: banner, seasons, episodes, downloads, forum ─
+class DetailScreen extends StatefulWidget {
+  final String animeId;
+  final String title;
+  const DetailScreen({super.key, required this.animeId, required this.title});
+  @override
+  State<DetailScreen> createState() => _DetailScreenState();
+}
+
+class _DetailScreenState extends State<DetailScreen>
+    with SingleTickerProviderStateMixin {
+  Map info = {};
+  bool loading = true;
+  String audio = 'sub';
+  String season = 'Season 1';
+  final Set<int> selected = {};
+  bool dlBusy = false;
+  double? dlProgress;
+  String dlStatus = '';
+  List comments = [];
+  bool commentsBusy = false;
+  String commentError = '';
+  final _commentCtrl = TextEditingController();
+  int? myScore;
+  late TabController _tabs;
+
+  int get totalEps {
+    final n = int.tryParse((info['episode_count'] ?? '').toString()) ?? 0;
+    if (n > 0) return n > 200 ? 200 : n;
+    return 12;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 2, vsync: this);
+    _init();
+  }
+
+  Future<void> _init() async {
+    final p = await SharedPreferences.getInstance();
+    audio = (p.getString('app_audio') ?? 'sub') == 'dub' ? 'dub' : 'sub';
+    await _load();
+    await _loadComments();
+  }
+
+  Future<void> _load() async {
+    try {
       final d = await Api.animeInfo(widget.animeId);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         info = d;
         loading = false;
@@ -992,42 +1456,243 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
+  Future<void> _loadComments() async {
+    setState(() {
+      commentsBusy = true;
+      commentError = '';
+    });
+    try {
+      final c = await Api.comments(widget.animeId);
+      if (!mounted) return;
+      setState(() {
+        comments = c;
+        commentsBusy = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          commentsBusy = false;
+          commentError = 'Comments are offline — check connection.';
+        });
+      }
+    }
+  }
+
+  Future<void> _postComment() async {
+    final text = _commentCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => commentError = 'Posting…');
+    try {
+      await Api.postComment(widget.animeId, text);
+      _commentCtrl.clear();
+      if (mounted) setState(() => commentError = '');
+      await _loadComments();
+    } catch (e) {
+      if (mounted) setState(() => commentError = 'Post failed: $e');
+    }
+  }
+
+  Future<void> _rate(int s) async {
+    setState(() => myScore = s);
+    try {
+      await Api.rate(widget.animeId, s);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Rated $s/10 — thanks!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Rating failed: $e')));
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>?> _sourcesFor(int ep) async {
+    try {
+      return await Api.episodeSources(widget.animeId, ep, audio);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _playableUrl(Map bundle) {
+    final servers = (bundle['servers'] as List?) ?? [];
+    Map? pick;
+    for (final s in servers) {
+      final m = (s as Map).cast<String, dynamic>();
+      if (m['audio'] == audio &&
+          (m['playback_mode'] == 'mp4' || m['playback_mode'] == 'hls')) {
+        pick = m;
+        break;
+      }
+    }
+    pick ??= () {
+      for (final s in servers) {
+        final m = (s as Map).cast<String, dynamic>();
+        if (m['playback_mode'] == 'mp4' || m['playback_mode'] == 'hls') {
+          return m;
+        }
+      }
+      return null;
+    }();
+    if (pick == null) return null;
+    return Api.abs((pick['stream_url'] ?? '').toString());
+  }
+
+  String? _downloadUrl(Map bundle, String title) {
+    final dls = (bundle['downloads'] as List?) ?? [];
+    for (final d in dls) {
+      final m = (d as Map).cast<String, dynamic>();
+      if (m['direct'] == true && (m['url'] ?? '').toString().isNotEmpty) {
+        return (m['url'] ?? '').toString();
+      }
+    }
+    final servers = (bundle['servers'] as List?) ?? [];
+    for (final s in servers) {
+      final m = (s as Map).cast<String, dynamic>();
+      if ((m['download_url'] ?? '').toString().isNotEmpty) {
+        return (m['download_url'] ?? '').toString();
+      }
+    }
+    return null;
+  }
+
+  Future<void> _play(int ep) async {
+    final bundle = await _sourcesFor(ep);
+    if (!mounted) return;
+    if (bundle == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not reach streaming servers — try again.')));
+      return;
+    }
+    final url = _playableUrl(bundle);
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Only embed servers available — watch on the site.')));
+      return;
+    }
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => PlayerScreen(
+                url: url,
+                label:
+                    '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})')));
+  }
+
+  Future<void> _downloadEp(int ep) async {
+    setState(() {
+      dlBusy = true;
+      dlProgress = 0;
+      dlStatus = 'Resolving Episode $ep…';
+    });
+    try {
+      final bundle = await _sourcesFor(ep);
+      if (bundle == null) throw const HttpException('No servers reachable');
+      final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
+      final url = _downloadUrl(bundle, title);
+      if (url == null) throw const HttpException('No MP4 available');
+      final f = await Api.downloadEpisodeFile(url, '$title.mp4',
+          onProgress: (rec, total) {
+        if (mounted && total > 0) {
+          setState(() {
+            dlProgress = rec / total;
+            dlStatus = 'Saving Episode $ep… ${(100 * rec / total).round()}%';
+          });
+        }
+      });
+      if (mounted) {
+        setState(() => dlStatus =
+            'Saved: ${f.uri.pathSegments.last} (Library → Save to device)');
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Download started ✓ — saving…')));
+      }
+    } catch (e) {
+      if (mounted) setState(() => dlStatus = 'Episode $ep failed: $e');
+    }
+    if (mounted) {
+      setState(() {
+        dlBusy = false;
+        dlProgress = null;
+      });
+    }
+  }
+
+  Future<void> _downloadSelected() async {
+    if (selected.isEmpty) return;
+    final eps = selected.toList()..sort();
+    setState(() {
+      dlBusy = true;
+      dlStatus = 'Starting ${eps.length} downloads…';
+    });
+    var done = 0;
+    for (final ep in eps) {
+      if (!mounted) break;
+      setState(() {
+        dlStatus = 'Episode $ep (${done + 1}/${eps.length})…';
+        dlProgress = done / eps.length;
+      });
+      try {
+        final bundle = await _sourcesFor(ep);
+        final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
+        final url = bundle == null ? null : _downloadUrl(bundle, title);
+        if (url != null) {
+          await Api.downloadEpisodeFile(url, '$title.mp4');
+          done++;
+        }
+      } catch (_) {}
+    }
+    if (mounted) {
+      setState(() {
+        dlBusy = false;
+        dlProgress = null;
+        dlStatus = 'Finished: $done/${eps.length} saved to My Library.';
+        selected.clear();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    _tabs.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final poster = (info['image'] ?? '').toString();
     final backdrop = (info['banner'] ?? poster).toString();
     final genres = (info['genres'] as List?) ?? [];
-    final episodes = ((info['streaming_metadata'] as List?) ?? []);
     return Scaffold(
       appBar: AppBar(
           title:
               Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
       body: loading
           ? const Center(child: CircularProgressIndicator(color: amber))
-          : ListView(padding: EdgeInsets.zero, children: [
-              SizedBox(
-                  height: 265,
-                  child: Stack(fit: StackFit.expand, children: [
-                    CachedPosterImage(url: backdrop),
-                    const DecoratedBox(
-                        decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                          Color(0x22000000),
-                          Color(0xFF07080D)
-                        ]))),
-                    Positioned(
-                        left: 18,
-                        right: 18,
-                        bottom: 16,
-                        child: Text((info['title'] ?? widget.title).toString(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 26, fontWeight: FontWeight.w900))),
-                  ])),
+          : ListView(padding: const EdgeInsets.only(bottom: 24), children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(fit: StackFit.expand, children: [
+                  CachedPosterImage(url: backdrop),
+                  const DecoratedBox(
+                      decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x22000000), Color(0xFF07080D)]))),
+                  Positioned(
+                      left: 18,
+                      right: 18,
+                      bottom: 14,
+                      child: Text((info['title'] ?? widget.title).toString(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 24, fontWeight: FontWeight.w900))),
+                ]),
+              ),
               Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -1056,19 +1721,16 @@ class _DetailScreenState extends State<DetailScreen> {
                                             color: muted, fontSize: 12)),
                                     const SizedBox(height: 8),
                                     Text(
-                                        '${info['year'] ?? 'Year unknown'} · ${info['format'] ?? 'Anime'} · ${info['status'] ?? 'Status unknown'}',
+                                        '${info['year'] ?? 'Year unknown'} · ${info['format'] ?? 'Anime'} · ${info['status'] ?? ''}',
                                         style: const TextStyle(
                                             color: muted, fontSize: 12)),
                                     const SizedBox(height: 8),
-                                    Text('Rating ${info['rating'] ?? 'N/A'}',
+                                    Text('★ Rating ${info['rating'] ?? 'N/A'}',
                                         style: const TextStyle(
                                             color: amber,
                                             fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 8),
-                                    Text(
-                                        info['episode_count'] == null
-                                            ? 'Episode count unknown'
-                                            : '${info['episode_count']} episodes',
+                                    Text('$totalEps episodes · $season',
                                         style: const TextStyle(
                                             color: muted, fontSize: 12)),
                                   ])),
@@ -1092,52 +1754,259 @@ class _DetailScreenState extends State<DetailScreen> {
                               style:
                                   const TextStyle(color: muted, fontSize: 13)),
                         ],
-                        const SizedBox(height: 18),
-                        const Text('Episodes',
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: amber,
+                                  foregroundColor: Colors.black,
+                                  minimumSize: const Size(0, 50)),
+                              onPressed: dlBusy ? null : () => _play(1),
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('Watch Ep 1'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 50)),
+                              onPressed: dlBusy ? null : () => _downloadEp(1),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Get Ep 1'),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 14),
+                        const Text('Rate this anime',
                             style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 5),
-                        Text(
-                            episodes.isEmpty
-                                ? 'Catalogue information only — no verified episode stream is available here.'
-                                : '${episodes.length} episode metadata entries from AniList.',
-                            style: const TextStyle(color: muted, fontSize: 12)),
+                                fontSize: 15, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var s = 1; s <= 10; s++)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 6),
+                                child: ChoiceChip(
+                                  label: Text('$s'),
+                                  selected: myScore == s,
+                                  onSelected: (_) => _rate(s),
+                                ),
+                              ),
+                          ]),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          const Text('Audio:',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                          const SizedBox(width: 10),
+                          SegmentedButton<String>(
+                            segments: const [
+                              ButtonSegment(
+                                  value: 'sub',
+                                  label: Text('SUB'),
+                                  icon: Icon(Icons.closed_caption)),
+                              ButtonSegment(
+                                  value: 'dub',
+                                  label: Text('DUB'),
+                                  icon: Icon(Icons.headphones)),
+                            ],
+                            selected: {audio},
+                            onSelectionChanged: (s) async {
+                              setState(() => audio = s.first);
+                              final p = await SharedPreferences.getInstance();
+                              await p.setString('app_audio', s.first);
+                            },
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: season,
+                              decoration: const InputDecoration(
+                                  labelText: 'Season',
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8)),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'Season 1', child: Text('Season 1')),
+                              ],
+                              onChanged: (v) =>
+                                  setState(() => season = v ?? 'Season 1'),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          Text('Episodes (1–$totalEps)',
+                              style: const TextStyle(
+                                  fontSize: 17, fontWeight: FontWeight.w800)),
+                          const Spacer(),
+                          TextButton(
+                              onPressed: () => setState(() {
+                                    if (selected.length == totalEps) {
+                                      selected.clear();
+                                    } else {
+                                      selected.addAll(List.generate(
+                                          totalEps, (i) => i + 1));
+                                    }
+                                  }),
+                              child: Text(selected.length == totalEps
+                                  ? 'Clear all'
+                                  : 'Select all')),
+                        ]),
+                        const Text(
+                            'Tap to play · tick to multi-select · ⬇ saves the direct MP4.',
+                            style: TextStyle(color: muted, fontSize: 12)),
                         const SizedBox(height: 8),
-                        if (episodes.isNotEmpty)
-                          for (var i = 0; i < episodes.length; i++)
-                            Card(
-                                child: ListTile(
-                              leading:
-                                  const Icon(Icons.info_outline, color: muted),
-                              title: Text(
-                                  episodes[i]['title']?.toString().isNotEmpty ==
-                                          true
-                                      ? episodes[i]['title'].toString()
-                                      : 'Episode information'),
-                              subtitle: Text(
-                                  (episodes[i]['provider'] ??
-                                          'Metadata provider')
-                                      .toString(),
-                                  style: const TextStyle(
-                                      color: muted, fontSize: 12)),
-                            )),
+                        GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 4,
+                                  childAspectRatio: 1.15,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8),
+                          itemCount: totalEps,
+                          itemBuilder: (_, i) {
+                            final ep = i + 1;
+                            final on = selected.contains(ep);
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => _play(ep),
+                              onLongPress: () => setState(() {
+                                on ? selected.remove(ep) : selected.add(ep);
+                              }),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color:
+                                      on ? amber.withValues(alpha: 0.2) : card2,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: on ? amber : Colors.transparent,
+                                      width: 2),
+                                ),
+                                child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Checkbox(
+                                                value: on,
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                materialTapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
+                                                onChanged: (_) => setState(() {
+                                                      on
+                                                          ? selected.remove(ep)
+                                                          : selected.add(ep);
+                                                    })),
+                                            Text('$ep',
+                                                style: const TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w800)),
+                                          ]),
+                                      InkWell(
+                                        onTap: () => _downloadEp(ep),
+                                        child: const Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.download_rounded,
+                                                  size: 15, color: mint),
+                                              SizedBox(width: 3),
+                                              Text('MP4',
+                                                  style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: mint,
+                                                      fontWeight:
+                                                          FontWeight.w700)),
+                                            ]),
+                                      ),
+                                    ]),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                backgroundColor: mint,
+                                foregroundColor: Colors.black,
+                                minimumSize: const Size(0, 50)),
+                            onPressed: (dlBusy || selected.isEmpty)
+                                ? null
+                                : _downloadSelected,
+                            icon: const Icon(Icons.download),
+                            label: Text(selected.isEmpty
+                                ? 'Download selected (tick episodes)'
+                                : 'Download ${selected.length} selected'),
+                          ),
+                        ),
+                        if (dlProgress != null) ...[
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                              value: dlProgress, color: mint),
+                        ],
+                        if (dlStatus.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(dlStatus,
+                              style:
+                                  const TextStyle(color: muted, fontSize: 12)),
+                        ],
+                        const SizedBox(height: 18),
+                        TabBar(
+                          controller: _tabs,
+                          tabs: const [
+                            Tab(text: 'For you'),
+                            Tab(text: 'Comments'),
+                          ],
+                        ),
+                        SizedBox(
+                          height: 430,
+                          child: TabBarView(
+                            controller: _tabs,
+                            children: [
+                              _RelatedPane(
+                                  animeId: widget.animeId,
+                                  genres:
+                                      genres.map((e) => e.toString()).toList()),
+                              _CommentsPane(
+                                comments: comments,
+                                busy: commentsBusy,
+                                error: commentError,
+                                controller: _commentCtrl,
+                                onPost: _postComment,
+                                onRefresh: _loadComments,
+                              ),
+                            ],
+                          ),
+                        ),
                       ])),
             ]),
     );
   }
 }
 
-// ── Player (enabled only for authorized source manifests) ──
-class PlayerScreen extends StatefulWidget {
-  final String label;
-  const PlayerScreen({super.key, required this.label});
+class _RelatedPane extends StatefulWidget {
+  final String animeId;
+  final List<String> genres;
+  const _RelatedPane({required this.animeId, required this.genres});
   @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
+  State<_RelatedPane> createState() => _RelatedPaneState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
-  bool loading = true;
-  String? error;
+class _RelatedPaneState extends State<_RelatedPane> {
+  List items = [];
+  bool busy = true;
 
   @override
   void initState() {
@@ -1146,14 +2015,218 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _load() async {
-    // Catalogue IDs do not imply playback rights. Only load a server-side,
-    // provider-verified manifest if one is configured for the episode.
-    if (mounted) {
-      setState(() {
-        error = 'No authorized streaming source is configured in this build.';
-        loading = false;
-      });
+    try {
+      final result = await Api.catalogHome();
+      final data = (result['catalog'] as Map?)?.cast<String, dynamic>() ??
+          <String, dynamic>{};
+      final pool = [
+        ...((data['trending'] as List?) ?? []),
+        ...((data['popular'] as List?) ?? []),
+      ];
+      pool.shuffle();
+      if (mounted) {
+        setState(() {
+          items = pool
+              .where((e) => (e as Map)['id'].toString() != widget.animeId)
+              .take(9)
+              .toList();
+          busy = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => busy = false);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (busy) {
+      return const Center(child: CircularProgressIndicator(color: amber));
+    }
+    if (items.isEmpty) {
+      return const Center(
+          child:
+              Text('No recommendations yet.', style: TextStyle(color: muted)));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.only(top: 12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          childAspectRatio: 0.56,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 12),
+      itemCount: items.length,
+      itemBuilder: (_, i) =>
+          PosterCard(item: items[i] as Map, width: double.infinity),
+    );
+  }
+}
+
+class _CommentsPane extends StatelessWidget {
+  final List comments;
+  final bool busy;
+  final String error;
+  final TextEditingController controller;
+  final VoidCallback onPost;
+  final VoidCallback onRefresh;
+  const _CommentsPane(
+      {required this.comments,
+      required this.busy,
+      required this.error,
+      required this.controller,
+      required this.onPost,
+      required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                  hintText: 'Comment as guest…',
+                  prefixIcon: Icon(Icons.chat_bubble_outline)),
+              onSubmitted: (_) => onPost(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: amber,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(0, 48)),
+            onPressed: onPost,
+            child: const Text('Post'),
+          ),
+        ]),
+      ),
+      if (error.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(error, style: const TextStyle(color: pink, fontSize: 12)),
+        ),
+      Expanded(
+        child: busy
+            ? const Center(child: CircularProgressIndicator(color: amber))
+            : comments.isEmpty
+                ? Center(
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                        const Icon(Icons.forum_outlined,
+                            size: 44, color: muted),
+                        const SizedBox(height: 8),
+                        const Text('No comments yet — start the forum.',
+                            style: TextStyle(color: muted)),
+                        TextButton(
+                            onPressed: onRefresh,
+                            child: const Text('Refresh comments')),
+                      ]))
+                : RefreshIndicator(
+                    color: amber,
+                    backgroundColor: card,
+                    onRefresh: () async => onRefresh(),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(top: 8),
+                      itemCount: comments.length,
+                      itemBuilder: (_, i) {
+                        final c = comments[i] as Map;
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                                backgroundColor: card2,
+                                child: Text(
+                                    ((c['user'] ?? 'G')
+                                            .toString()
+                                            .characters
+                                            .firstOrNull ??
+                                        'G'),
+                                    style: const TextStyle(
+                                        color: amber,
+                                        fontWeight: FontWeight.w800))),
+                            title: Text((c['user'] ?? 'Guest').toString(),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800, fontSize: 13)),
+                            subtitle: Text(
+                                (c['text'] ?? c['sticker'] ?? '').toString()),
+                            trailing:
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.favorite, size: 14, color: pink),
+                              const SizedBox(width: 3),
+                              Text('${c['likes'] ?? 0}',
+                                  style: const TextStyle(
+                                      color: muted, fontSize: 12)),
+                            ]),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+      ),
+    ]);
+  }
+}
+
+// ── Player (website's own MP4/HLS streams, in-app) ──────
+class PlayerScreen extends StatefulWidget {
+  final String url;
+  final String label;
+  const PlayerScreen({super.key, required this.url, required this.label});
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen> {
+  VideoPlayerController? _video;
+  ChewieController? _chewie;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  Future<void> _open() async {
+    try {
+      final v = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      await v.initialize();
+      final c = ChewieController(
+        videoPlayerController: v,
+        autoPlay: true,
+        looping: false,
+        allowFullScreen: true,
+        allowPlaybackSpeedChanging: true,
+        errorBuilder: (_, msg) => Center(
+            child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('Playback error: $msg',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: muted)))),
+      );
+      if (!mounted) {
+        await v.dispose();
+        c.dispose();
+        return;
+      }
+      setState(() {
+        _video = v;
+        _chewie = c;
+      });
+    } catch (e) {
+      if (mounted) setState(() => error = 'Stream failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewie?.dispose();
+    _video?.dispose();
+    super.dispose();
   }
 
   @override
@@ -1161,36 +2234,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
         appBar: AppBar(
             title: Text(widget.label,
                 maxLines: 1, overflow: TextOverflow.ellipsis)),
-        body: loading
-            ? const Center(child: CircularProgressIndicator(color: amber))
-            : ListView(padding: const EdgeInsets.all(16), children: [
-                Container(
-                  decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: Colors.black),
-                  clipBehavior: Clip.antiAlias,
-                  child: const AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Center(
-                        child:
-                            Icon(Icons.play_disabled, color: muted, size: 42)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                if (error != null)
-                  Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: muted))),
-                const Text(appCredit,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: muted, fontSize: 12)),
-              ]),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          Container(
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18), color: Colors.black),
+            clipBehavior: Clip.antiAlias,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: error != null
+                  ? Center(
+                      child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Text(error!,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: muted))))
+                  : _chewie == null
+                      ? const Center(
+                          child: CircularProgressIndicator(color: amber))
+                      : Chewie(controller: _chewie!),
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text('Streaming from your CamAnime website servers.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted, fontSize: 12)),
+          const SizedBox(height: 4),
+          const Text(appCredit,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: muted, fontSize: 12)),
+        ]),
       );
 }
 
-// ── Search (posters, full catalog) ─────────────────────
+// ── Search (posters + genre filter) ─────────────────────
 class SearchTab extends StatefulWidget {
   const SearchTab({super.key});
   @override
@@ -1200,11 +2276,27 @@ class SearchTab extends StatefulWidget {
 class _SearchTabState extends State<SearchTab> {
   final c = TextEditingController();
   List results = [];
+  List genres = [];
+  String? genreSlug;
   bool loading = false;
+  bool genreBusy = false;
 
   Timer? _debounce;
   int _requestId = 0;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGenres();
+  }
+
+  Future<void> _loadGenres() async {
+    try {
+      final g = await Api.genres();
+      if (mounted) setState(() => genres = g);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -1219,7 +2311,7 @@ class _SearchTabState extends State<SearchTab> {
     final query = c.text.trim();
     if (query.length < 2) {
       setState(() {
-        results = [];
+        if (genreSlug == null) results = [];
         error = null;
         loading = false;
       });
@@ -1237,6 +2329,7 @@ class _SearchTabState extends State<SearchTab> {
     setState(() {
       loading = true;
       error = null;
+      genreSlug = null;
     });
     try {
       final found = await Api.search(query);
@@ -1257,6 +2350,32 @@ class _SearchTabState extends State<SearchTab> {
       });
     } finally {
       if (mounted && requestId == _requestId) setState(() => loading = false);
+    }
+  }
+
+  Future<void> _pickGenre(String? slug) async {
+    setState(() {
+      genreSlug = slug;
+      genreBusy = slug != null;
+      error = null;
+      if (slug == null && c.text.trim().length < 2) results = [];
+    });
+    if (slug == null) return;
+    try {
+      final found = await Api.genreAnime(slug);
+      if (!mounted) return;
+      setState(() {
+        results = found;
+        genreBusy = false;
+        error = found.isEmpty ? 'No titles in this genre yet.' : null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          genreBusy = false;
+          error = 'Genre is unavailable. Check your connection.';
+        });
+      }
     }
   }
 
@@ -1291,7 +2410,31 @@ class _SearchTabState extends State<SearchTab> {
               ),
             ]),
           ),
-          if (loading) const LinearProgressIndicator(color: amber),
+          if (genres.isNotEmpty)
+            SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: genres.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (_, i) {
+                  if (i == 0) {
+                    return ChoiceChip(
+                        label: const Text('All genres'),
+                        selected: genreSlug == null,
+                        onSelected: (_) => _pickGenre(null));
+                  }
+                  final g = genres[i - 1] as Map;
+                  final slug = (g['slug'] ?? '').toString();
+                  return ChoiceChip(
+                      label: Text((g['name'] ?? slug).toString()),
+                      selected: genreSlug == slug,
+                      onSelected: (_) => _pickGenre(slug));
+                },
+              ),
+            ),
+          if (loading || genreBusy) const LinearProgressIndicator(color: amber),
           Expanded(
             child: results.isEmpty
                 ? Center(
@@ -1310,7 +2453,7 @@ class _SearchTabState extends State<SearchTab> {
                             style: const TextStyle(color: muted)),
                       ]))
                 : GridView.builder(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount:
                             MediaQuery.sizeOf(context).width < 360 ? 2 : 3,
@@ -1326,122 +2469,24 @@ class _SearchTabState extends State<SearchTab> {
       );
 }
 
-// ── Library (hidden in-app, save-to-device export) ─────
+// ── Library (downloads live here + app update) ─────────
 class LibraryTab extends StatefulWidget {
   const LibraryTab({super.key});
   @override
   State<LibraryTab> createState() => _LibraryTabState();
 }
 
-class DownloadsTab extends StatefulWidget {
-  const DownloadsTab({super.key});
-  @override
-  State<DownloadsTab> createState() => _DownloadsTabState();
-}
-
-class _DownloadsTabState extends State<DownloadsTab> {
-  final _urlCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
-  bool _busy = false;
-  double? _progress;
-  String _status = 'Sign in first, then paste a CamAnime platform file link.';
-
-  Future<void> _download() async {
-    final url = _urlCtrl.text.trim();
-    final name = _nameCtrl.text.trim().isEmpty
-        ? 'CamAnime_File.mp4'
-        : _nameCtrl.text.trim();
-    if (url.isEmpty) {
-      setState(
-          () => _status = 'Paste a CamAnime /api/download/video link first.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _progress = 0;
-      _status = 'Downloading directly from your CamAnime platform…';
-    });
-    try {
-      final f =
-          await Api.downloadPlatformFile(url, name, onProgress: (rec, total) {
-        if (mounted && total > 0) setState(() => _progress = rec / total);
-      });
-      if (mounted) {
-        setState(
-            () => _status = 'Saved to My Library: ${f.uri.pathSegments.last}');
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Saved to My Library')));
-      }
-    } catch (e) {
-      if (mounted) setState(() => _status = 'Download failed: $e');
-    }
-    if (mounted) {
-      setState(() {
-        _busy = false;
-        _progress = null;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _urlCtrl.dispose();
-    _nameCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-          child: ListView(padding: const EdgeInsets.all(20), children: [
-        const Text('Downloads',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 6),
-        const Text(
-            'Downloads come directly from your CamAnime platform. Sign in, paste a platform file link, and keep it in My Library. Only download files your platform is authorized to distribute.',
-            style: TextStyle(color: muted, fontSize: 12)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _urlCtrl,
-          decoration: const InputDecoration(
-              labelText: 'CamAnime file link',
-              hintText: '/api/download/video?url=...&title=...',
-              border: OutlineInputBorder()),
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _nameCtrl,
-          decoration: const InputDecoration(
-              labelText: 'Save as (optional)',
-              hintText: 'My_Episode.mp4',
-              border: OutlineInputBorder()),
-        ),
-        const SizedBox(height: 10),
-        FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: amber, foregroundColor: Colors.black),
-            onPressed: _busy ? null : _download,
-            child: Text(_busy ? 'Downloading…' : 'Download from CamAnime')),
-        if (_progress != null) ...[
-          const SizedBox(height: 10),
-          LinearProgressIndicator(value: _progress, color: amber),
-        ],
-        const SizedBox(height: 10),
-        Card(
-            child: ListTile(
-                leading: const Icon(Icons.info_outline, color: muted),
-                title: Text(_status),
-                subtitle: const Text(
-                    'Files stay in the private in-app library until you tap Save in My Library.',
-                    style: TextStyle(color: muted)))),
-      ]));
-}
-
 class _LibraryTabState extends State<LibraryTab> {
   List<FileSystemEntity> files = [];
+  Map ver = {};
+  bool busy = false;
+  double? progress;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _checkVersion();
   }
 
   Future<void> _load() async {
@@ -1453,7 +2498,16 @@ class _LibraryTabState extends State<LibraryTab> {
     if (!mounted) {
       return;
     }
-    setState(() => files = lib.listSync().whereType<File>().toList());
+    final all = lib.listSync().whereType<File>().toList()
+      ..sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+    setState(() => files = all);
+  }
+
+  Future<void> _checkVersion() async {
+    try {
+      final v = await Api.version();
+      if (mounted) setState(() => ver = v);
+    } catch (_) {}
   }
 
   Future<void> _saveToDevice(File f) async {
@@ -1473,97 +2527,11 @@ class _LibraryTabState extends State<LibraryTab> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('My Library',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-            const Text('Hidden in-app — nothing leaves until you tap Save.',
-                style: TextStyle(color: muted, fontSize: 12)),
-            const SizedBox(height: 10),
-            Expanded(
-              child: files.isEmpty
-                  ? const Center(
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                          Icon(Icons.video_library_outlined,
-                              size: 64, color: muted),
-                          SizedBox(height: 10),
-                          Text('No downloads yet',
-                              style: TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w800)),
-                          Text('Download from any player screen.',
-                              style: TextStyle(color: muted)),
-                        ]))
-                  : ListView.builder(
-                      itemCount: files.length,
-                      itemBuilder: (_, i) {
-                        final f = files[i] as File;
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          child: ListTile(
-                            leading: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                    color: purple.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(12)),
-                                child: const Icon(Icons.movie, color: purple)),
-                            title: Text(f.uri.pathSegments.last,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700)),
-                            trailing: FilledButton(
-                                style: FilledButton.styleFrom(
-                                    backgroundColor: amber,
-                                    foregroundColor: Colors.black),
-                                onPressed: () => _saveToDevice(f),
-                                child: const Text('Save')),
-                          ),
-                        );
-                      }),
-            ),
-          ]),
-        ),
-      );
-}
-
-// ── Updates (version check + CEO announcements) ─────────
-class UpdatesTab extends StatefulWidget {
-  final VoidCallback onCheck;
-  const UpdatesTab({super.key, required this.onCheck});
-  @override
-  State<UpdatesTab> createState() => _UpdatesTabState();
-}
-
-class _UpdatesTabState extends State<UpdatesTab> {
-  List ann = [];
-  Map ver = {};
-  bool busy = false;
-  double? progress;
-
-  Future<void> _load() async {
+  Future<void> _delete(File f) async {
     try {
-      final a = await Api.announcements();
-      final v = await Api.version();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        ann = (a['announcements'] as List?) ?? [];
-        ver = v;
-      });
+      await f.delete();
     } catch (_) {}
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
+    await _load();
   }
 
   Future<void> _downloadUpdate() async {
@@ -1572,21 +2540,22 @@ class _UpdatesTabState extends State<UpdatesTab> {
       progress = 0;
     });
     try {
-      final b = await Api.base();
-      final req = http.Request('GET', Uri.parse('$b/get/android'));
+      final req = http.Request('GET', Uri.parse('${Api.base()}/get/android'));
       final resp = await http.Client().send(req);
       final total = resp.contentLength ?? 0;
-      final bytes = <int>[];
-      await for (final chunk in resp.stream) {
-        bytes.addAll(chunk);
-        if (mounted && total > 0) {
-          setState(() => progress = bytes.length / total);
-        }
-      }
       final dir = await getDownloadsDirectory() ??
           await getApplicationDocumentsDirectory();
       final f = File('${dir.path}/CamAnime-update.apk');
-      await f.writeAsBytes(bytes);
+      final sink = f.openWrite();
+      var got = 0;
+      await for (final chunk in resp.stream) {
+        sink.add(chunk);
+        got += chunk.length;
+        if (mounted && total > 0) {
+          setState(() => progress = got / total);
+        }
+      }
+      await sink.close();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
@@ -1611,74 +2580,90 @@ class _UpdatesTabState extends State<UpdatesTab> {
     final latest = (ver['app_version'] ?? '').toString();
     final hasUpdate = latest.isNotEmpty && latest != appVersion;
     return SafeArea(
-      child: ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('Updates',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-        Text('This app: v$appVersion',
-            style: const TextStyle(color: muted, fontSize: 12)),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Icon(Icons.system_update, color: amber),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(
-                        hasUpdate
-                            ? 'Version $latest is available'
-                            : 'You are up to date',
-                        style: const TextStyle(fontWeight: FontWeight.w800))),
-              ]),
+      child: RefreshIndicator(
+        color: amber,
+        backgroundColor: card,
+        onRefresh: _load,
+        child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+            children: [
+              const Text('My Library',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text(
+                  'Episodes you download in the app land here — offline, always yours.',
+                  style: TextStyle(color: muted, fontSize: 12)),
               const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                  child: FilledButton(
-                      style: FilledButton.styleFrom(
-                          backgroundColor: amber,
-                          foregroundColor: Colors.black),
-                      onPressed: busy ? null : _downloadUpdate,
-                      child: Text(busy ? 'Downloading…' : 'Download update')),
+              if (hasUpdate)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.system_update, color: amber),
+                    title: Text('App update $latest available',
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: progress != null
+                        ? LinearProgressIndicator(value: progress, color: amber)
+                        : const Text('From your CamAnime website'),
+                    trailing: FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: amber,
+                            foregroundColor: Colors.black),
+                        onPressed: busy ? null : _downloadUpdate,
+                        child: Text(busy ? '…' : 'Get')),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                    onPressed: widget.onCheck, child: const Text('Check')),
-              ]),
-              if (progress != null) ...[
-                const SizedBox(height: 10),
-                LinearProgressIndicator(value: progress, color: amber),
-              ],
+              const SizedBox(height: 6),
+              if (files.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 30),
+                  child: Column(children: [
+                    Icon(Icons.video_library_outlined, size: 64, color: muted),
+                    SizedBox(height: 10),
+                    Text('No downloads yet',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text('Open any anime → tick episodes → Download.',
+                        style: TextStyle(color: muted)),
+                  ]),
+                )
+              else
+                for (final e in files)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      leading: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: purple.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.movie, color: purple)),
+                      title: Text((e as File).uri.pathSegments.last,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      subtitle: Text(
+                          '${(e.statSync().size / 1048576).toStringAsFixed(1)} MB',
+                          style: const TextStyle(color: muted, fontSize: 12)),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(
+                            tooltip: 'Delete',
+                            icon:
+                                const Icon(Icons.delete_outline, color: muted),
+                            onPressed: () => _delete(e)),
+                        FilledButton(
+                            style: FilledButton.styleFrom(
+                                backgroundColor: amber,
+                                foregroundColor: Colors.black),
+                            onPressed: () => _saveToDevice(e),
+                            child: const Text('Save')),
+                      ]),
+                    ),
+                  ),
             ]),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text('Announcements from kayefande-droid & co.',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        if (ann.isEmpty)
-          const Card(
-              child: ListTile(
-                  title: Text('No announcements yet.',
-                      style: TextStyle(color: muted))))
-        else
-          for (final a in ann)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: const Icon(Icons.campaign, color: amber),
-                title: Text((a['title'] ?? '').toString(),
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: Text((a['body'] ?? '').toString()),
-              ),
-            ),
-      ]),
+      ),
     );
   }
 }
 
-// ── You (link, optional auth — watching needs no login) ─
+// ── Profile (avatar, name, connection, auth) ───────────
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
   @override
@@ -1686,8 +2671,10 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  final base = TextEditingController();
   final name = TextEditingController();
+  int avatar = 0;
+  bool online = false;
+
   @override
   void initState() {
     super.initState();
@@ -1696,14 +2683,55 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _init() async {
     final p = await SharedPreferences.getInstance();
-    base.text = p.getString('api_base') ?? '';
     name.text = p.getString('username') ?? '';
+    avatar = p.getInt('avatar_idx') ?? 0;
     if (mounted) setState(() {});
+    try {
+      await Api.version();
+      if (mounted) setState(() => online = true);
+    } catch (_) {}
+  }
+
+  Future<void> _pickAvatar() async {
+    final chosen = await showDialog<int>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: card,
+        title: const Text('Choose profile pic'),
+        content: SizedBox(
+          width: 320,
+          child: GridView.builder(
+            shrinkWrap: true,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10),
+            itemCount: avatarPresets.length,
+            itemBuilder: (_, i) {
+              final a = avatarPresets[i];
+              return InkWell(
+                onTap: () => Navigator.pop(context, i),
+                child: CircleAvatar(
+                  backgroundColor:
+                      Color(a['color'] as int).withValues(alpha: 0.2),                child: Icon(a['icon'] as IconData,
+                    color: Color(a['color'] as int), size: 30),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (chosen != null) {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt('avatar_idx', chosen);
+      if (mounted) setState(() => avatar = chosen);
+    }
   }
 
   @override
-  Widget build(BuildContext context) =>
-      ListView(padding: EdgeInsets.zero, children: [
+  Widget build(BuildContext context) {
+    final a = avatarPresets[avatar % avatarPresets.length];
+    return SafeArea(
+      child: ListView(padding: const EdgeInsets.only(bottom: 110), children: [
         Container(
           padding: const EdgeInsets.fromLTRB(20, 52, 20, 18),
           decoration: const BoxDecoration(
@@ -1711,16 +2739,60 @@ class _ProfileTabState extends State<ProfileTab> {
                   colors: [Color(0xFF1A1033), bg],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight)),
-          child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('You',
-                    style:
-                        TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-                Text(
-                    'Watching is free without an account. Sign in to sync downloads, ratings and forums.',
-                    style: TextStyle(color: muted, fontSize: 12)),
+          child: Row(children: [
+            GestureDetector(
+              onTap: _pickAvatar,
+              child: Stack(children: [
+                CircleAvatar(
+                  radius: 36,
+                  backgroundColor:
+                      Color(a['color'] as int).withValues(alpha: 0.2),                      child: Icon(a['icon'] as IconData,
+                          size: 40,
+                          color: Color(a['color'] as int)),
+                ),
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                          color: amber, shape: BoxShape.circle),
+                      child: const Icon(Icons.edit,
+                          size: 12, color: Colors.black)),
+                ),
               ]),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name.text.isEmpty ? 'You' : name.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w900)),
+                    const Text(
+                        'Tap the pic to change it. Watching is free, no login needed.',
+                        style: TextStyle(color: muted, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                              color: online ? mint : pink,
+                              shape: BoxShape.circle)),
+                      const SizedBox(width: 6),
+                      Text(online ? 'Connected to website' : 'Connecting…',
+                          style: TextStyle(
+                              color: online ? mint : muted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+                  ]),
+            ),
+          ]),
         ),
         Padding(
           padding: const EdgeInsets.all(16),
@@ -1729,22 +2801,12 @@ class _ProfileTabState extends State<ProfileTab> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(children: [
-                  const CircleAvatar(
-                      radius: 34,
-                      backgroundColor: Color(0x33FFB347),
-                      child: Icon(Icons.person, size: 38, color: amber)),
-                  const SizedBox(height: 8),
                   TextField(
                       controller: name,
+                      onChanged: (_) => setState(() {}),
                       decoration: const InputDecoration(
-                          labelText: 'Username',
+                          labelText: 'Display name (for comments)',
                           prefixIcon: Icon(Icons.badge_outlined))),
-                  const SizedBox(height: 8),
-                  TextField(
-                      controller: base,
-                      decoration: const InputDecoration(
-                          labelText: 'Website URL (blank = built-in default)',
-                          prefixIcon: Icon(Icons.link))),
                   const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
@@ -1754,69 +2816,29 @@ class _ProfileTabState extends State<ProfileTab> {
                             foregroundColor: Colors.black),
                         onPressed: () async {
                           final p = await SharedPreferences.getInstance();
-                          await p.setString('api_base', base.text.trim());
                           await p.setString('username', name.text.trim());
                           if (!context.mounted) return;
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content:
-                                        Text('Linked to website backend')));
-                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'Name saved — it shows on your comments.')));
                         },
-                        child: const Text('Save & link app to website')),
+                        child: const Text('Save name')),
                   ),
                 ]),
               ),
             ),
             const SizedBox(height: 12),
             const _AuthCard(),
-            const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                        color: amber.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.tour_outlined, color: amber)),
-                title: const Text('Replay app tour',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: const Text('See the 4-step intro again',
-                    style: TextStyle(color: muted, fontSize: 12)),
-                trailing: const Icon(Icons.chevron_right, color: muted),
-                onTap: () async {
-                  final p = await SharedPreferences.getInstance();
-                  await p.setBool('tutorial_done', false);
-                  if (!context.mounted) return;
-                  await showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (_) => Dialog(
-                      insetPadding: const EdgeInsets.all(12),
-                      backgroundColor: Colors.transparent,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 480),
-                        child: TutorialOverlay(onDone: () async {
-                          final pp = await SharedPreferences.getInstance();
-                          await pp.setBool('tutorial_done', true);
-                          if (context.mounted) Navigator.pop(context);
-                        }),
-                      ),
-                    ),
-                  );
-                  final pp2 = await SharedPreferences.getInstance();
-                  await pp2.setBool('tutorial_done', true);
-                },
-              ),
-            ),
             const SizedBox(height: 16),
             const Text(appCredit,
                 textAlign: TextAlign.center,
                 style: TextStyle(color: muted, fontSize: 12)),
           ]),
         ),
-      ]);
+      ]),
+    );
+  }
 }
 
 class _AuthCard extends StatefulWidget {
@@ -1926,5 +2948,158 @@ class _AuthCardState extends State<_AuthCard> {
                         child: const Text('Register'))),
               ]),
             ])));
+  }
+}
+
+// ── Settings (gear screen) ─────────────────────────────
+class SettingsScreen extends StatefulWidget {
+  final String themeName;
+  final ValueChanged<String> onTheme;
+  final VoidCallback onCheckUpdate;
+  const SettingsScreen(
+      {super.key,
+      required this.themeName,
+      required this.onTheme,
+      required this.onCheckUpdate});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  String audio = 'sub';
+  bool autoplay = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final p = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        audio = (p.getString('app_audio') ?? 'sub') == 'dub' ? 'dub' : 'sub';
+        autoplay = p.getBool('app_autoplay') ?? false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('App settings')),
+      body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            const Text('Appearance',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final e in appThemes.entries)
+                    ChoiceChip(
+                      label: Text(e.value['label'] as String),
+                      selected: widget.themeName == e.key,
+                      avatar: CircleAvatar(
+                          radius: 9,
+                          backgroundColor: Color(e.value['seed'] as int)),
+                      onSelected: (_) => widget.onTheme(e.key),
+                    ),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Playback',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(children: [
+                ListTile(
+                  title: const Text('Default audio',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  trailing: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'sub', label: Text('SUB')),
+                      ButtonSegment(value: 'dub', label: Text('DUB')),
+                    ],
+                    selected: {audio},
+                    onSelectionChanged: (s) async {
+                      setState(() => audio = s.first);
+                      final p = await SharedPreferences.getInstance();
+                      await p.setString('app_audio', s.first);
+                    },
+                  ),
+                ),
+                SwitchListTile(
+                  title: const Text('Autoplay next episode'),
+                  subtitle: const Text('Same as the website focus mode.',
+                      style: TextStyle(color: muted, fontSize: 12)),
+                  value: autoplay,
+                  onChanged: (v) async {
+                    setState(() => autoplay = v);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('app_autoplay', v);
+                  },
+                ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            const Text('Website connection',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Card(
+              child: ListTile(
+                leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                        color: mint.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.link, color: mint)),
+                title: Text(apiHost,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text(
+                    'Built into the app — always on when you have internet. No setup needed.',
+                    style: TextStyle(color: muted, fontSize: 12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('More',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(children: [
+                ListTile(
+                  leading: const Icon(Icons.tour_outlined, color: amber),
+                  title: const Text('Replay app tour',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                  trailing: const Icon(Icons.chevron_right, color: muted),
+                  onTap: () async {
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('tutorial_done', false);
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.system_update, color: amber),
+                  title: Text('Check for updates (v$appVersion)',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  trailing: const Icon(Icons.chevron_right, color: muted),
+                  onTap: widget.onCheckUpdate,
+                ),
+                const ListTile(
+                  leading: Icon(Icons.info_outline, color: muted),
+                  title: Text(appCredit),
+                  subtitle: Text(
+                      'Free forever · SUB & DUB · downloads included',
+                      style: TextStyle(color: muted, fontSize: 12)),
+                ),
+              ]),
+            ),
+          ]),
+    );
   }
 }

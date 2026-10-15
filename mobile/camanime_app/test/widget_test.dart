@@ -33,12 +33,12 @@ void main() {
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Explore'), findsOneWidget);
     expect(find.text('Search'), findsOneWidget);
-    expect(find.text('Downloads'), findsOneWidget);
-    expect(find.text('My Library'), findsOneWidget);
+    expect(find.text('Library'), findsOneWidget);
     expect(find.text('Profile'), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
   });
 
-  testWidgets('downloads explains authorized-source limitation',
+  testWidgets('library shows empty state when nothing is downloaded',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(430, 932);
     tester.view.devicePixelRatio = 1;
@@ -47,26 +47,21 @@ void main() {
 
     await tester.pumpWidget(const CamAnimeApp());
     await tester.pump();
-    await tester.tap(find.text('Downloads'));
+    await tester.tap(find.text('Library'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No authorized download sources are configured.'),
-        findsOneWidget);
+    expect(find.text('My Library'), findsWidgets);
   });
 }
 
 class _NoNetworkHttpOverrides extends HttpOverrides {
   @override
-  HttpClient createHttpClient(SecurityContext? context) =>
-      _UnavailableHttpClient();
+  HttpClient createHttpClient(SecurityContext? context) => _FailingHttpClient();
 }
 
-class _UnavailableHttpClient implements HttpClient {
+class _FailingHttpClient implements HttpClient {
   @override
   dynamic noSuchMethod(Invocation invocation) {
-    if (invocation.memberName == #getUrl) {
-      throw const SocketException('Network disabled in widget tests');
-    }
-    return super.noSuchMethod(invocation);
+    throw const SocketException('Network disabled in widget tests');
   }
 }
