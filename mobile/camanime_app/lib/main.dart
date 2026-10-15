@@ -336,8 +336,9 @@ class Api {
   /// Synced admin/secret status — admin only, same backend the website uses.
   static Future<Map<String, dynamic>> adminSync() async {
     final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
-    final r = await http.get(Uri.parse('$b/api/admin/sync'),
-        headers: await headers()).timeout(const Duration(seconds: 12));
+    final r = await http
+        .get(Uri.parse('$b/api/admin/sync'), headers: await headers())
+        .timeout(const Duration(seconds: 12));
     final d = json.decode(r.body) as Map<String, dynamic>;
     if (d['status'] != 'success') {
       throw Exception(d['error'] ?? 'Admin sync failed');
@@ -365,30 +366,29 @@ class Api {
   /// Download a file directly from the CamAnime platform backend with auth.
   /// Use only for files your platform is authorized to distribute.
   /// Saves into the private in-app library; export via My Library > Save.
-  static Future<File> downloadPlatformFile(
-      String platformUrl, String filename,
+  static Future<File> downloadPlatformFile(String platformUrl, String filename,
       {void Function(int received, int total)? onProgress}) async {
     final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
-    final full = platformUrl.startsWith('http')
-        ? platformUrl
-        : '$b$platformUrl';
+    final full =
+        platformUrl.startsWith('http') ? platformUrl : '$b$platformUrl';
     final req = http.Request('GET', Uri.parse(full));
     req.headers.addAll(await headers());
     final resp = await http.Client().send(req);
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw HttpException(
-          'CamAnime download failed (${resp.statusCode})', uri: Uri.parse(full));
+      throw HttpException('CamAnime download failed (${resp.statusCode})',
+          uri: Uri.parse(full));
     }
     final dir = await getApplicationSupportDirectory();
     final lib = Directory('${dir.path}/camanime_library');
     await lib.create(recursive: true);
     final safe = filename.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\. ]'), '').trim();
-    final file = File('${lib.path}/${safe.isEmpty ? 'CamAnime_File.mp4' : safe}');
+    final file =
+        File('${lib.path}/${safe.isEmpty ? 'CamAnime_File.mp4' : safe}');
     final sink = file.openWrite();
     final total = resp.contentLength ?? 0;
     var received = 0;
     await for (final chunk in resp.stream) {
-      received += (chunk as List<int>).length;
+      received += chunk.length;
       sink.add(chunk);
       onProgress?.call(received, total);
     }
@@ -576,46 +576,39 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                      gradient:
-                          const LinearGradient(colors: [amber, pink]),
-                      borderRadius: BorderRadius.circular(22)),
-                  child: const Icon(Icons.play_circle_fill,
-                      color: Colors.black, size: 44),
-                ),
-                const SizedBox(height: 18),
-                Text('Step ${i + 1} of ${steps.length}',
-                    style:
-                        const TextStyle(color: muted, fontSize: 12)),
-                const SizedBox(height: 6),
-                Text(steps[i][0],
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontSize: 24, fontWeight: FontWeight.w900)),
-                const SizedBox(height: 8),
-                Text(steps[i][1],
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(color: muted, fontSize: 15)),
-                const SizedBox(height: 20),
-                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  for (var k = 0; k < steps.length; k++)
                     Container(
-                        margin:
-                            const EdgeInsets.symmetric(horizontal: 4),
-                        width: i == k ? 26 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                            color: i == k ? amber : muted,
-                            borderRadius:
-                                BorderRadius.circular(99))),
-                ]),
-                const SizedBox(height: 20),
-                Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [amber, pink]),
+                          borderRadius: BorderRadius.circular(22)),
+                      child: const Icon(Icons.play_circle_fill,
+                          color: Colors.black, size: 44),
+                    ),
+                    const SizedBox(height: 18),
+                    Text('Step ${i + 1} of ${steps.length}',
+                        style: const TextStyle(color: muted, fontSize: 12)),
+                    const SizedBox(height: 6),
+                    Text(steps[i][0],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w900)),
+                    const SizedBox(height: 8),
+                    Text(steps[i][1],
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: muted, fontSize: 15)),
+                    const SizedBox(height: 20),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      for (var k = 0; k < steps.length; k++)
+                        Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            width: i == k ? 26 : 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                                color: i == k ? amber : muted,
+                                borderRadius: BorderRadius.circular(99))),
+                    ]),
+                    const SizedBox(height: 20),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                       if (i > 0)
                         OutlinedButton(
                           onPressed: () => setState(() => i--),
@@ -630,16 +623,15 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
                         onPressed: () => i < steps.length - 1
                             ? setState(() => i++)
                             : widget.onDone(),
-                        child: Text(i < steps.length - 1
-                            ? 'Next'
-                            : 'Start watching'),
+                        child: Text(
+                            i < steps.length - 1 ? 'Next' : 'Start watching'),
                       ),
                     ]),
-                TextButton(
-                  onPressed: widget.onDone,
-                  child: const Text('Skip tour'),
-                ),
-              ]),
+                    TextButton(
+                      onPressed: widget.onDone,
+                      child: const Text('Skip tour'),
+                    ),
+                  ]),
             ),
           ),
         ),
@@ -1343,9 +1335,12 @@ class _DownloadsTabState extends State<DownloadsTab> {
 
   Future<void> _download() async {
     final url = _urlCtrl.text.trim();
-    final name = _nameCtrl.text.trim().isEmpty ? 'CamAnime_File.mp4' : _nameCtrl.text.trim();
+    final name = _nameCtrl.text.trim().isEmpty
+        ? 'CamAnime_File.mp4'
+        : _nameCtrl.text.trim();
     if (url.isEmpty) {
-      setState(() => _status = 'Paste a CamAnime /api/download/video link first.');
+      setState(
+          () => _status = 'Paste a CamAnime /api/download/video link first.');
       return;
     }
     setState(() {
@@ -1354,14 +1349,15 @@ class _DownloadsTabState extends State<DownloadsTab> {
       _status = 'Downloading directly from your CamAnime platform…';
     });
     try {
-      final f = await Api.downloadPlatformFile(url, name,
-          onProgress: (rec, total) {
+      final f =
+          await Api.downloadPlatformFile(url, name, onProgress: (rec, total) {
         if (mounted && total > 0) setState(() => _progress = rec / total);
       });
       if (mounted) {
-        setState(() => _status = 'Saved to My Library: ${f.uri.pathSegments.last}');
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Saved to My Library')));
+        setState(
+            () => _status = 'Saved to My Library: ${f.uri.pathSegments.last}');
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Saved to My Library')));
       }
     } catch (e) {
       if (mounted) setState(() => _status = 'Download failed: $e');
@@ -1392,19 +1388,19 @@ class _DownloadsTabState extends State<DownloadsTab> {
             style: TextStyle(color: muted, fontSize: 12)),
         const SizedBox(height: 12),
         TextField(
-            controller: _urlCtrl,
-            decoration: const InputDecoration(
-                labelText: 'CamAnime file link',
-                hintText: '/api/download/video?url=...&title=...',
-                border: OutlineInputBorder()),
+          controller: _urlCtrl,
+          decoration: const InputDecoration(
+              labelText: 'CamAnime file link',
+              hintText: '/api/download/video?url=...&title=...',
+              border: OutlineInputBorder()),
         ),
         const SizedBox(height: 8),
         TextField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(
-                labelText: 'Save as (optional)',
-                hintText: 'My_Episode.mp4',
-                border: OutlineInputBorder()),
+          controller: _nameCtrl,
+          decoration: const InputDecoration(
+              labelText: 'Save as (optional)',
+              hintText: 'My_Episode.mp4',
+              border: OutlineInputBorder()),
         ),
         const SizedBox(height: 10),
         FilledButton(
@@ -1789,8 +1785,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 480),
                         child: TutorialOverlay(onDone: () async {
-                          final pp =
-                              await SharedPreferences.getInstance();
+                          final pp = await SharedPreferences.getInstance();
                           await pp.setBool('tutorial_done', true);
                           if (context.mounted) Navigator.pop(context);
                         }),

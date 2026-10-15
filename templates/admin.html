@@ -7,7 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1100px;margin:0 auto}
-h1{font-family:'Syne';font-size:1.8rem;margin-bottom:.25rem}
+h1{font-family:'Syne';font-size:clamp(1.4rem,1.2rem + 1.5vw,1.8rem);margin-bottom:.25rem}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:1rem;margin:1.5rem 0}
 .stat{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1.1rem}
 .stat b{font-size:1.5rem;display:block}.stat span{color:#a0abc0;font-size:.82rem}
@@ -16,6 +16,8 @@ td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);font-siz
 a{color:#FFB347}
 @media(max-width:414px){body{padding:1rem}}
 </style>
+<link href="/static/css/sync.css" rel="stylesheet">
+<script src="/static/js/site.js" defer></script>
 </head>
 <body>
 <p><a href="/">← Back to site</a> · Signed in as {{ user.name }} (admin)</p>
