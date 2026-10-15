@@ -30,10 +30,39 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-# Never ship a predictable session secret. Configure CAMANIME_SECRET in production
-# so sessions remain valid across worker restarts; the process-local fallback is
-# intentionally ephemeral for local development only.
-app.secret_key = os.environ.get("CAMANIME_SECRET") or os.urandom(32)
+
+
+def _load_secret_key():
+    """Synced secret without needing Render env on first login.
+
+    Order: CAMANIME_SECRET env > local file camanime_secret.key > ephemeral.
+    The file is auto-created on first boot, gitignored (never committed),
+    and reused across restarts on the same disk. Change it anytime by
+    setting CAMANIME_SECRET env. No secret is stored in git."""
+    env_secret = os.environ.get("CAMANIME_SECRET")
+    if env_secret:
+        return env_secret.encode() if isinstance(env_secret, str) else env_secret
+    secret_path = os.environ.get("CAMANIME_SECRET_FILE", "camanime_secret.key")
+    try:
+        if os.path.isfile(secret_path):
+            with open(secret_path, "rb") as f:
+                raw = f.read().strip()
+                if len(raw) >= 32:
+                    return raw
+        import secrets as _secrets
+        raw = _secrets.token_hex(32).encode()
+        try:
+            with open(secret_path, "wb") as f:
+                f.write(raw)
+        except Exception:
+            pass
+        return raw
+    except Exception:
+        import secrets as _secrets
+        return _secrets.token_hex(32).encode()
+
+
+app.secret_key = _load_secret_key()
 
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400  # /static cached 1 day
 

@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 camanime_store.json
 camanime.db*
+camanime_secret.key
 .env
 *.log
 mobile/camanime_app/android/.kotlin/
