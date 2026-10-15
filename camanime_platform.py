@@ -23,6 +23,11 @@ ADMIN_EMAIL = os.environ.get("CAMANIME_ADMIN_EMAIL", "admin@camanime.local")
 ADMIN_PASSWORD = os.environ.get("CAMANIME_ADMIN_PASSWORD")
 if os.environ.get("CAMANIME_ADMIN_EMAIL") and not ADMIN_PASSWORD:
     raise RuntimeError("CAMANIME_ADMIN_PASSWORD is required when CAMANIME_ADMIN_EMAIL is configured.")
+# Default first-run admin (changeable from /admin when logged in as admin).
+# Env always wins when set; otherwise the first boot with an empty user table
+# creates this account so the owner is never locked out. Change it immediately.
+DEFAULT_ADMIN_EMAIL = "admin@camanime.local"
+DEFAULT_ADMIN_PASSWORD = os.environ.get("CAMANIME_DEFAULT_ADMIN_PASSWORD", "CamAnime123!")
 TOKEN_TTL = 60 * 60 * 24 * 90  # 90 days
 
 SEO_KEYWORDS = (
@@ -295,6 +300,75 @@ def ensure_admin(data: Dict = None) -> Optional[Dict]:
             row = conn.execute("SELECT * FROM users WHERE email = ?",
                                (ADMIN_EMAIL.lower(),)).fetchone()
         return _row_user(row)
+
+
+def ensure_default_admin() -> Optional[Dict]:
+    """Create the changeable first-run admin if no admin exists yet.
+
+    Env-seeded admin (ensure_admin) always runs first. This fallback only
+    fires on a fresh DB with zero admin rows, so the owner is never locked
+    out. Change the password immediately from /admin (admin-only)."""
+    _init()
+    with _db() as conn:
+        has_admin = conn.execute("SELECT 1 FROM users WHERE role='admin' LIMIT 1").fetchone()
+        if has_admin:
+            row = conn.execute("SELECT * FROM users WHERE email=?", (DEFAULT_ADMIN_EMAIL.lower(),)).fetchone()
+            return _row_user(row) if row else None
+        conn.execute(
+            "INSERT OR IGNORE INTO users(email,name,pw,role,avatar,created) VALUES (?,?,?,?,?,?)",
+            (DEFAULT_ADMIN_EMAIL.lower(), "CamAnime Admin",
+             generate_password_hash(DEFAULT_ADMIN_PASSWORD), "admin", "", int(time.time())),
+        )
+        row = conn.execute("SELECT * FROM users WHERE email=?", (DEFAULT_ADMIN_EMAIL.lower(),)).fetchone()
+        return _row_user(row) if row else None
+
+
+def create_admin_user(email: str, name: str, password: str) -> Dict:
+    """Create an extra admin. Caller must already be an admin (checked in app.py)."""
+    key = (email or "").strip().lower()
+    if not key or "@" not in key:
+        raise ValueError("Enter a valid admin email address.")
+    if len(password or "") < 8:
+        raise ValueError("Admin password must be at least 8 characters.")
+    _init()
+    with _db() as conn:
+        if conn.execute("SELECT 1 FROM users WHERE email=?", (key,)).fetchone():
+            raise ValueError("That email already has an account.")
+        conn.execute(
+            "INSERT INTO users(email,name,pw,role,avatar,created) VALUES (?,?,?,?,?,?)",
+            (key, (name or "").strip() or key.split("@")[0],
+             generate_password_hash(password), "admin", "", int(time.time())),
+        )
+        row = conn.execute("SELECT * FROM users WHERE email=?", (key,)).fetchone()
+        return _row_user(row)
+
+
+def change_own_password(email: str, current_password: str, new_password: str) -> None:
+    """Admin/owner changes their own password after verifying the current one."""
+    if len(new_password or "") < 8:
+        raise ValueError("New password must be at least 8 characters.")
+    _init()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email=?", (email.lower(),)).fetchone()
+        if not row or not check_password_hash(row["pw"], current_password or ""):
+            raise ValueError("Current password is incorrect.")
+        conn.execute("UPDATE users SET pw=? WHERE email=?",
+                     (generate_password_hash(new_password), email.lower()))
+        conn.execute("DELETE FROM tokens WHERE email=?", (email.lower(),))
+
+
+def admin_reset_password(target_email: str, new_password: str) -> None:
+    """Admin resets any account password (admin-only route). Revokes its tokens."""
+    if len(new_password or "") < 8:
+        raise ValueError("New password must be at least 8 characters.")
+    _init()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email=?", (target_email.lower(),)).fetchone()
+        if not row:
+            raise ValueError("Account not found.")
+        conn.execute("UPDATE users SET pw=? WHERE email=?",
+                     (generate_password_hash(new_password), target_email.lower()))
+        conn.execute("DELETE FROM tokens WHERE email=?", (target_email.lower(),))
 
 
 def register_user(data: Dict, email: str, name: str, password: str) -> Dict:

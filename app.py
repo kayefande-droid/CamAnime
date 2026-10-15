@@ -60,6 +60,7 @@ def _speed_headers(resp):
 
 PLATFORM_STORE = platform.load_store()
 platform.ensure_admin(PLATFORM_STORE)
+platform.ensure_default_admin()
 PLATFORM_STORE = platform.load_store()
 
 ANILIST_API_URL = "https://graphql.anilist.co"
@@ -1515,6 +1516,72 @@ def api_admin_announce():
     try:
         a = platform.post_announcement(d.get("title", ""), d.get("body", ""), u.get("name") or u.get("email"))
         return jsonify({"status": "success", "announcement": a})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+def _require_admin():
+    """Admin-only guard shared by web + native app (session or Bearer token)."""
+    u = _current_user()
+    if not u or u.get("role") != "admin":
+        return None
+    return u
+
+
+@app.route("/api/admin/sync")
+def api_admin_sync():
+    """Synced admin/secret status for apps + tools. Admin only."""
+    u = _require_admin()
+    if not u:
+        return jsonify({"status": "error", "error": "Admin only. Sign in as admin."}), 403
+    import os as _os
+    secret_set = bool(_os.environ.get("CAMANIME_SECRET"))
+    return jsonify({
+        "status": "success",
+        "admin_email": u["email"],
+        "default_admin_email": platform.DEFAULT_ADMIN_EMAIL,
+        "env_admin_email": _os.environ.get("CAMANIME_ADMIN_EMAIL") or "",
+        "secret_configured": secret_set,
+        "db_path": platform.DB_PATH,
+        "app_version": APP_VERSION,
+        "apk_url": "/get/android",
+        "windows_url": "/get/windows",
+        "message": "OK - app and website share this admin + secret." if secret_set else "CAMANIME_SECRET is not set; sessions reset on restart.",
+    })
+
+
+@app.route("/api/admin/password", methods=["POST"])
+def api_admin_password():
+    """Change own admin password (needs current pw) or reset another user (admin only).
+
+    Body: {current_password, new_password} for self-change, or
+    {target_email, new_password} for an admin reset. Website form + app JSON both work."""
+    u = _require_admin()
+    if not u:
+        return jsonify({"status": "error", "error": "Admin only."}), 403
+    d = _post_data()
+    try:
+        target = (d.get("target_email") or "").strip().lower()
+        new_pw = d.get("new_password") or ""
+        if target and target != u["email"].lower():
+            platform.admin_reset_password(target, new_pw)
+            return jsonify({"status": "success", "reset_for": target})
+        platform.change_own_password(u["email"], d.get("current_password") or "", new_pw)
+        return jsonify({"status": "success", "changed_for": u["email"]})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/admin/create-admin", methods=["POST"])
+def api_admin_create():
+    """Create an extra admin. Admin only."""
+    u = _require_admin()
+    if not u:
+        return jsonify({"status": "error", "error": "Admin only."}), 403
+    d = _post_data()
+    try:
+        created = platform.create_admin_user(d.get("email", ""), d.get("name", ""), d.get("password", ""))
+        return jsonify({"status": "success", "admin": platform.public_user(created)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
 

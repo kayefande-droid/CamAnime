@@ -45,6 +45,52 @@ document.getElementById('annForm').onsubmit = async (e) => {
   if (d.status === 'success') location.reload();
 };
 </script>
+<h2>Admin account tools (admin only)</h2>
+<p style="color:#a0abc0;max-width:640px">Default admin <code>{{ user.email }}</code> is changeable here. Changing your own password signs you out everywhere — sign in again on web + app. Use a strong password you alone control.</p>
+<form id="pwForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0">
+<input id="pwCurrent" type="password" placeholder="Current password" autocomplete="current-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<input id="pwNew" type="password" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<button style="background:#10b981;border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#04120c">Change my admin password</button>
+</form>
+<form id="resetForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
+<input id="resetEmail" placeholder="User email to reset" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<input id="resetPw" type="password" placeholder="New password for that user (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<button style="background:#0e111a;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#fff">Reset user password</button>
+</form>
+<form id="adminForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
+<input id="newAdminEmail" placeholder="New admin email" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<input id="newAdminName" placeholder="Display name (optional)" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<input id="newAdminPw" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
+<button style="background:#087bff;border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#fff">Create admin</button>
+</form>
+<div class="stat" style="max-width:640px;margin-bottom:2rem"><b style="font-size:1rem">Sync status</b><span id="syncStatus">Checking secret + admin sync…</span></div>
+<script>
+async function postAdmin(url, body) {
+  const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  return r.json();
+}
+document.getElementById('pwForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const d = await postAdmin('/api/admin/password', {current_password: document.getElementById('pwCurrent').value, new_password: document.getElementById('pwNew').value});
+  alert(d.status === 'success' ? 'Password changed. Please sign in again everywhere.' : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') location.href = '/logout';
+};
+document.getElementById('resetForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const d = await postAdmin('/api/admin/password', {target_email: document.getElementById('resetEmail').value, new_password: document.getElementById('resetPw').value});
+  alert(d.status === 'success' ? ('Reset for ' + d.reset_for) : ('Failed: ' + (d.error || 'unknown')));
+};
+document.getElementById('adminForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const d = await postAdmin('/api/admin/create-admin', {email: document.getElementById('newAdminEmail').value, name: document.getElementById('newAdminName').value, password: document.getElementById('newAdminPw').value});
+  alert(d.status === 'success' ? ('Admin created: ' + d.admin.email) : ('Failed: ' + (d.error || 'unknown')));
+};
+fetch('/api/admin/sync').then(r=>r.json()).then(d=>{
+  document.getElementById('syncStatus').textContent = d.status === 'success'
+    ? (d.admin_email + ' · secret ' + (d.secret_configured ? 'OK' : 'MISSING - set CAMANIME_SECRET') + ' · db ' + d.db_path)
+    : ('Failed: ' + (d.error || 'unknown'));
+}).catch(()=>{ document.getElementById('syncStatus').textContent = 'Could not reach sync endpoint.'; });
+</script>
 <h2>Most watched anime playlist</h2>
 <table><tr><th>Anime ID</th><th>Plays</th><th>Open</th></tr>
 {% for m in stats.most_watched %}<tr><td>{{ m.anime_id }}</td><td>{{ m.plays }}</td><td><a href="/anime/{{ m.anime_id }}">Open</a></td></tr>{% endfor %}

@@ -332,6 +332,69 @@ class Api {
     await p.remove('api_token');
     await p.remove('user_email');
   }
+
+  /// Synced admin/secret status — admin only, same backend the website uses.
+  static Future<Map<String, dynamic>> adminSync() async {
+    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
+    final r = await http.get(Uri.parse('$b/api/admin/sync'),
+        headers: await headers()).timeout(const Duration(seconds: 12));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    if (d['status'] != 'success') {
+      throw Exception(d['error'] ?? 'Admin sync failed');
+    }
+    return d;
+  }
+
+  /// Change own admin password (admin only). Clears server tokens on success.
+  static Future<void> changeAdminPassword(
+      String currentPassword, String newPassword) async {
+    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
+    final r = await http.post(Uri.parse('$b/api/admin/password'),
+        headers: {...await headers(), 'Content-Type': 'application/json'},
+        body: json.encode({
+          'current_password': currentPassword,
+          'new_password': newPassword,
+        }));
+    final d = json.decode(r.body) as Map<String, dynamic>;
+    if (d['status'] != 'success') {
+      throw Exception(d['error'] ?? 'Password change failed');
+    }
+    await signOut();
+  }
+
+  /// Download a file directly from the CamAnime platform backend with auth.
+  /// Use only for files your platform is authorized to distribute.
+  /// Saves into the private in-app library; export via My Library > Save.
+  static Future<File> downloadPlatformFile(
+      String platformUrl, String filename,
+      {void Function(int received, int total)? onProgress}) async {
+    final b = (await base()).replaceFirst(RegExp(r'/+$'), '');
+    final full = platformUrl.startsWith('http')
+        ? platformUrl
+        : '$b$platformUrl';
+    final req = http.Request('GET', Uri.parse(full));
+    req.headers.addAll(await headers());
+    final resp = await http.Client().send(req);
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw HttpException(
+          'CamAnime download failed (${resp.statusCode})', uri: Uri.parse(full));
+    }
+    final dir = await getApplicationSupportDirectory();
+    final lib = Directory('${dir.path}/camanime_library');
+    await lib.create(recursive: true);
+    final safe = filename.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\. ]'), '').trim();
+    final file = File('${lib.path}/${safe.isEmpty ? 'CamAnime_File.mp4' : safe}');
+    final sink = file.openWrite();
+    final total = resp.contentLength ?? 0;
+    var received = 0;
+    await for (final chunk in resp.stream) {
+      received += (chunk as List<int>).length;
+      sink.add(chunk);
+      onProgress?.call(received, total);
+    }
+    await sink.close();
+    return file;
+  }
 }
 
 // ── Shared widgets ─────────────────────────────────────
@@ -1230,18 +1293,94 @@ class DownloadsTab extends StatefulWidget {
 }
 
 class _DownloadsTabState extends State<DownloadsTab> {
+  final _urlCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  bool _busy = false;
+  double? _progress;
+  String _status = 'Sign in first, then paste a CamAnime platform file link.';
+
+  Future<void> _download() async {
+    final url = _urlCtrl.text.trim();
+    final name = _nameCtrl.text.trim().isEmpty ? 'CamAnime_File.mp4' : _nameCtrl.text.trim();
+    if (url.isEmpty) {
+      setState(() => _status = 'Paste a CamAnime /api/download/video link first.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _progress = 0;
+      _status = 'Downloading directly from your CamAnime platform…';
+    });
+    try {
+      final f = await Api.downloadPlatformFile(url, name,
+          onProgress: (rec, total) {
+        if (mounted && total > 0) setState(() => _progress = rec / total);
+      });
+      if (mounted) {
+        setState(() => _status = 'Saved to My Library: ${f.uri.pathSegments.last}');
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Saved to My Library')));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _status = 'Download failed: $e');
+    }
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _progress = null;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => SafeArea(
-          child: ListView(padding: const EdgeInsets.all(20), children: const [
-        Text('Downloads',
+          child: ListView(padding: const EdgeInsets.all(20), children: [
+        const Text('Downloads',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-        SizedBox(height: 10),
+        const SizedBox(height: 6),
+        const Text(
+            'Downloads come directly from your CamAnime platform. Sign in, paste a platform file link, and keep it in My Library. Only download files your platform is authorized to distribute.',
+            style: TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 12),
+        TextField(
+            controller: _urlCtrl,
+            decoration: const InputDecoration(
+                labelText: 'CamAnime file link',
+                hintText: '/api/download/video?url=...&title=...',
+                border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(
+                labelText: 'Save as (optional)',
+                hintText: 'My_Episode.mp4',
+                border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 10),
+        FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: amber, foregroundColor: Colors.black),
+            onPressed: _busy ? null : _download,
+            child: Text(_busy ? 'Downloading…' : 'Download from CamAnime')),
+        if (_progress != null) ...[
+          const SizedBox(height: 10),
+          LinearProgressIndicator(value: _progress, color: amber),
+        ],
+        const SizedBox(height: 10),
         Card(
             child: ListTile(
-                leading: Icon(Icons.info_outline, color: muted),
-                title: Text('No authorized download sources are configured.'),
-                subtitle: Text(
-                    'Downloads are enabled only for media providers that explicitly grant offline rights.',
+                leading: const Icon(Icons.info_outline, color: muted),
+                title: Text(_status),
+                subtitle: const Text(
+                    'Files stay in the private in-app library until you tap Save in My Library.',
                     style: TextStyle(color: muted)))),
       ]));
 }
