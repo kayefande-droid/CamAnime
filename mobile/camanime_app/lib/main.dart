@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 // ── Release line ───────────────────────────────────────
@@ -296,6 +298,22 @@ class Api {
   static String abs(String url) =>
       url.startsWith('http') ? url : '${base()}$url';
 
+  static bool isPlayableVideoType(String contentType) {
+    final value = contentType.toLowerCase().split(';').first.trim();
+    return value.startsWith('video/') ||
+        value == 'application/octet-stream' ||
+        value == 'application/mp4';
+  }
+
+  static String safeMediaFilename(String filename) {
+    final leaf = filename.replaceAll('\\', '/').split('/').last;
+    final safe = leaf.replaceAll(RegExp(r'[^a-zA-Z0-9_\-. ]'), '').trim();
+    if (safe.isEmpty || safe == '.' || safe == '..') {
+      return 'CamAnime_Episode.mp4';
+    }
+    return safe;
+  }
+
   static Future<String?> token() async {
     final p = await SharedPreferences.getInstance();
     return p.getString('api_token');
@@ -510,33 +528,241 @@ class Api {
 
   /// Direct MP4 download from the website's own download manager.
   /// Saves into the private in-app library; export via Library > Save.
-  static Future<File> downloadEpisodeFile(String websiteUrl, String filename,
-      {void Function(int received, int total)? onProgress}) async {
-    final full = abs(websiteUrl);
-    final req = http.Request('GET', Uri.parse(full));
+  static Future<MediaDownloadResult> downloadEpisodeFile(
+      String websiteUrl, String filename,
+      {void Function(int received, int total)? onProgress,
+      bool Function()? isCancelled}) async {
+    final uri = Uri.parse(abs(websiteUrl));
+    if (uri.scheme != 'https' || !uri.hasAuthority) {
+      throw const HttpException('Downloads require a secure HTTPS source.');
+    }
+    final req = http.Request('GET', uri);
     req.headers.addAll(await headers());
-    final resp = await http.Client().send(req);
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      throw HttpException('CamAnime download failed (${resp.statusCode})',
-          uri: Uri.parse(full));
-    }
+    final client = http.Client();
     final dir = await getApplicationSupportDirectory();
-    final lib = Directory('${dir.path}/camanime_library');
-    await lib.create(recursive: true);
-    final safe = filename.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\. ]'), '').trim();
-    final file =
-        File('${lib.path}/${safe.isEmpty ? 'CamAnime_File.mp4' : safe}');
-    final sink = file.openWrite();
-    final total = resp.contentLength ?? 0;
-    var received = 0;
-    await for (final chunk in resp.stream) {
-      received += chunk.length;
-      sink.add(chunk);
-      onProgress?.call(received, total);
+    final library = Directory('${dir.path}/camanime_library');
+    await library.create(recursive: true);
+    final safe = safeMediaFilename(filename);
+    final id = sha256.convert(utf8.encode('${uri.path}\u0000$safe')).toString();
+    final finalFile = File('${library.path}/$id-$safe');
+    final tempFile = File('${finalFile.path}.part');
+    try {
+      final response = await client.send(req).timeout(const Duration(seconds: 40));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        await response.stream.drain<void>();
+        throw HttpException('CamAnime download failed (${response.statusCode})', uri: uri);
+      }
+      final contentType = response.headers['content-type'] ?? '';
+      if (!isPlayableVideoType(contentType)) {
+        await response.stream.drain<void>();
+        throw HttpException('Source is not a downloadable video ($contentType). HLS playlists and embed pages cannot be saved as MP4.', uri: uri);
+      }
+      final total = response.contentLength ?? 0;
+      if (total == 0) {
+        await response.stream.drain<void>();
+        throw HttpException('The source returned an empty video file.', uri: uri);
+      }
+      if (await finalFile.exists()) {
+        await response.stream.drain<void>();
+        if (await finalFile.length() > 0) {
+          return MediaDownloadResult(file: finalFile, downloadedBytes: await finalFile.length());
+        }
+        await finalFile.delete();
+      }
+      if (await tempFile.exists()) await tempFile.delete();
+      final sink = tempFile.openWrite();
+      var received = 0;
+      try {
+        await for (final chunk in response.stream) {
+          if (isCancelled?.call() == true) throw const MediaDownloadCancelled();
+          received += chunk.length;
+          sink.add(chunk);
+          onProgress?.call(received, total);
+        }
+        await sink.flush();
+        await sink.close();
+      } catch (_) {
+        await sink.close();
+        rethrow;
+      }
+      if (received == 0 || (total > 0 && received != total)) {
+        throw HttpException('Incomplete video transfer ($received/${total > 0 ? total : 'unknown'} bytes).');
+      }
+      final handle = await tempFile.open();
+      final header = await handle.read(16);
+      await handle.close();
+      final validHeader = header.length >= 8 &&
+          (String.fromCharCodes(header.sublist(4, 8)) == 'ftyp' ||
+              (header[0] == 0x1A && header[1] == 0x45 &&
+                  header[2] == 0xDF && header[3] == 0xA3) ||
+              (header[0] == 0x00 && header[1] == 0x00 && header[2] == 0x00));
+      if (!validHeader) {
+        throw HttpException('Downloaded data does not look like a supported video file.');
+      }
+      await tempFile.rename(finalFile.path);
+      return MediaDownloadResult(file: finalFile, downloadedBytes: received);
+    } catch (_) {
+      if (await tempFile.exists()) await tempFile.delete();
+      rethrow;
+    } finally {
+      client.close();
     }
-    await sink.close();
-    return file;
   }
+}
+
+class MediaDownloadResult {
+  final File file;
+  final int downloadedBytes;
+  const MediaDownloadResult({required this.file, required this.downloadedBytes});
+}
+
+class MediaLibraryItem {
+  final String id;
+  final String title;
+  final int? animeId;
+  final int? episode;
+  final String audio;
+  final File file;
+  final int sizeBytes;
+  final DateTime completedAt;
+  const MediaLibraryItem({
+    required this.id,
+    required this.title,
+    required this.animeId,
+    required this.episode,
+    required this.audio,
+    required this.file,
+    required this.sizeBytes,
+    required this.completedAt,
+  });
+}
+
+class MediaLibrary {
+  static Future<Directory> directory() async {
+    final dir = await getApplicationSupportDirectory();
+    final library = Directory('${dir.path}/camanime_library');
+    await library.create(recursive: true);
+    return library;
+  }
+
+  static Future<File> _manifest(Directory library) async =>
+      File('${library.path}/library.json');
+
+  static Future<void> record({
+    required File file,
+    required String title,
+    required int animeId,
+    required int episode,
+    required String audio,
+    required int sizeBytes,
+  }) async {
+    final library = await directory();
+    final manifest = await _manifest(library);
+    List<Map<String, dynamic>> rows = [];
+    if (await manifest.exists()) {
+      try {
+        rows = (json.decode(await manifest.readAsString()) as List)
+            .whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList();
+      } catch (_) {
+        rows = [];
+      }
+    }
+    final id = sha256.convert(utf8.encode('${animeId}_$episode')).toString();
+    rows.removeWhere((e) => e['id'] == id || e['file'] == file.uri.pathSegments.last);
+    rows.add({
+      'id': id,
+      'title': title,
+      'anime_id': animeId,
+      'episode': episode,
+      'audio': audio,
+      'file': file.uri.pathSegments.last,
+      'size_bytes': sizeBytes,
+      'completed_at': DateTime.now().toUtc().toIso8601String(),
+      'format': 'mp4',
+      'status': 'completed',
+    });
+    final temp = File('${manifest.path}.tmp');
+    await temp.writeAsString(json.encode(rows), flush: true);
+    if (await manifest.exists()) await manifest.delete();
+    await temp.rename(manifest.path);
+  }
+
+  static Future<List<MediaLibraryItem>> list() async {
+    final library = await directory();
+    final manifest = await _manifest(library);
+    List<Map<String, dynamic>> rows = [];
+    if (await manifest.exists()) {
+      try {
+        rows = (json.decode(await manifest.readAsString()) as List)
+            .whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList();
+      } catch (_) {
+        rows = [];
+      }
+    }
+    final byFile = {for (final row in rows) row['file']: row};
+    final items = <MediaLibraryItem>[];
+    await for (final entity in library.list()) {
+      if (entity is! File || entity.path.endsWith('.part') ||
+          entity.path.endsWith('.tmp') || entity.path.endsWith('library.json')) {
+        continue;
+      }
+      final name = entity.uri.pathSegments.last;
+      final row = byFile[name];
+      try {
+        final size = await entity.length();
+        final stat = await entity.stat();
+        if (size < 12 || !_isMp4File(entity)) continue;
+        items.add(MediaLibraryItem(
+          id: (row?['id'] ?? name).toString(),
+          title: (row?['title'] ?? name).toString(),
+          animeId: row?['anime_id'] as int?,
+          episode: row?['episode'] as int?,
+          audio: (row?['audio'] ?? 'sub').toString(),
+          file: entity,
+          sizeBytes: size,
+          completedAt: DateTime.tryParse((row?['completed_at'] ?? '').toString()) ?? stat.modified,
+        ));
+      } catch (_) {
+        // Files disappearing during a refresh are omitted and can be retried.
+      }
+    }
+    items.sort((a, b) => b.completedAt.compareTo(a.completedAt));
+    return items;
+  }
+
+  static Future<void> delete(MediaLibraryItem item) async {
+    if (await item.file.exists()) await item.file.delete();
+    final library = await directory();
+    final manifest = await _manifest(library);
+    if (!await manifest.exists()) return;
+    try {
+      final rows = (json.decode(await manifest.readAsString()) as List)
+          .whereType<Map>()
+          .where((e) => e['id'] != item.id && e['file'] != item.file.uri.pathSegments.last)
+          .toList();
+      final temp = File('${manifest.path}.tmp');
+      await temp.writeAsString(json.encode(rows), flush: true);
+      await manifest.delete();
+      await temp.rename(manifest.path);
+    } catch (_) {
+      // File is deleted; a damaged index is reconstructed by the scanner.
+    }
+  }
+
+  static bool _isMp4File(File file) {
+    final ext = file.path.toLowerCase();
+    return ext.endsWith('.mp4') || ext.endsWith('.m4v');
+  }
+}
+
+class MediaDownloadCancelled implements Exception {
+  const MediaDownloadCancelled();
+  @override
+  String toString() => 'Download cancelled';
 }
 
 // ── Shared widgets ─────────────────────────────────────
@@ -1516,43 +1742,42 @@ class _DetailScreenState extends State<DetailScreen>
     }
   }
 
-  String? _playableUrl(Map bundle) {
+  Map<String, dynamic>? _selectServer(Map bundle) {
     final servers = (bundle['servers'] as List?) ?? [];
-    Map? pick;
-    for (final s in servers) {
-      final m = (s as Map).cast<String, dynamic>();
-      if (m['audio'] == audio &&
-          (m['playback_mode'] == 'mp4' || m['playback_mode'] == 'hls')) {
-        pick = m;
-        break;
-      }
+    final candidates = servers
+        .whereType<Map>()
+        .map((s) => s.cast<String, dynamic>())
+        .where((s) => s['playback_mode'] == 'mp4' || s['playback_mode'] == 'hls')
+        .toList();
+    if (candidates.isEmpty) return null;
+    for (final server in candidates) {
+      if (server['audio'] == audio) return server;
     }
-    pick ??= () {
-      for (final s in servers) {
-        final m = (s as Map).cast<String, dynamic>();
-        if (m['playback_mode'] == 'mp4' || m['playback_mode'] == 'hls') {
-          return m;
-        }
-      }
-      return null;
-    }();
-    if (pick == null) return null;
-    return Api.abs((pick['stream_url'] ?? '').toString());
+    return candidates.first;
   }
 
-  String? _downloadUrl(Map bundle, String title) {
-    final dls = (bundle['downloads'] as List?) ?? [];
-    for (final d in dls) {
-      final m = (d as Map).cast<String, dynamic>();
-      if (m['direct'] == true && (m['url'] ?? '').toString().isNotEmpty) {
-        return (m['url'] ?? '').toString();
+  String? _playableUrl(Map bundle) {
+    final server = _selectServer(bundle);
+    final path = (server?['stream_url'] ?? '').toString();
+    return path.isEmpty ? null : Api.abs(path);
+  }
+
+  Map<String, dynamic>? _downloadSource(Map bundle) {
+    final servers = (bundle['servers'] as List?) ?? [];
+    for (final raw in servers) {
+      if (raw is! Map) continue;
+      final server = raw.cast<String, dynamic>();
+      if (server['audio'] == audio && server['playback_mode'] == 'mp4' &&
+          (server['download_url'] ?? '').toString().isNotEmpty) {
+        return server;
       }
     }
-    final servers = (bundle['servers'] as List?) ?? [];
-    for (final s in servers) {
-      final m = (s as Map).cast<String, dynamic>();
-      if ((m['download_url'] ?? '').toString().isNotEmpty) {
-        return (m['download_url'] ?? '').toString();
+    for (final raw in servers) {
+      if (raw is! Map) continue;
+      final server = raw.cast<String, dynamic>();
+      if (server['playback_mode'] == 'mp4' &&
+          (server['download_url'] ?? '').toString().isNotEmpty) {
+        return server;
       }
     }
     return null;
@@ -1581,8 +1806,7 @@ class _DetailScreenState extends State<DetailScreen>
                     '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})')));
   }
 
-  Future<void> _downloadEp(int ep) async {
-    setState(() {
+  Future<void> _downloadEp(int ep) async {    setState(() {
       dlBusy = true;
       dlProgress = 0;
       dlStatus = 'Resolving Episode $ep…';
@@ -1591,9 +1815,12 @@ class _DetailScreenState extends State<DetailScreen>
       final bundle = await _sourcesFor(ep);
       if (bundle == null) throw const HttpException('No servers reachable');
       final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
-      final url = _downloadUrl(bundle, title);
-      if (url == null) throw const HttpException('No MP4 available');
-      final f = await Api.downloadEpisodeFile(url, '$title.mp4',
+      final server = _downloadSource(bundle);
+      if (server == null) {
+        throw const HttpException('No direct MP4 download is available for this episode. HLS/embeds are stream-only.');
+      }
+      final url = Api.abs(server['download_url'].toString());
+      final result = await Api.downloadEpisodeFile(url, '$title.mp4',
           onProgress: (rec, total) {
         if (mounted && total > 0) {
           setState(() {
@@ -1602,11 +1829,19 @@ class _DetailScreenState extends State<DetailScreen>
           });
         }
       });
+      await MediaLibrary.record(
+        file: result.file,
+        title: title,
+        animeId: int.tryParse(widget.animeId) ?? 0,
+        episode: ep,
+        audio: (server['audio'] ?? audio).toString(),
+        sizeBytes: result.downloadedBytes,
+      );
       if (mounted) {
         setState(() => dlStatus =
-            'Saved: ${f.uri.pathSegments.last} (Library → Save to device)');
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Download started ✓ — saving…')));
+            'Downloaded and verified: ${result.file.uri.pathSegments.last}');
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Download verified ✓ — available in My Library offline.')));
       }
     } catch (e) {
       if (mounted) setState(() => dlStatus = 'Episode $ep failed: $e');
@@ -1636,9 +1871,18 @@ class _DetailScreenState extends State<DetailScreen>
       try {
         final bundle = await _sourcesFor(ep);
         final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
-        final url = bundle == null ? null : _downloadUrl(bundle, title);
-        if (url != null) {
-          await Api.downloadEpisodeFile(url, '$title.mp4');
+        final server = bundle == null ? null : _downloadSource(bundle);
+        if (server != null) {
+          final result = await Api.downloadEpisodeFile(
+              Api.abs(server['download_url'].toString()), '$title.mp4');
+          await MediaLibrary.record(
+            file: result.file,
+            title: title,
+            animeId: int.tryParse(widget.animeId) ?? 0,
+            episode: ep,
+            audio: (server['audio'] ?? audio).toString(),
+            sizeBytes: result.downloadedBytes,
+          );
           done++;
         }
       } catch (_) {}
@@ -2175,7 +2419,12 @@ class _CommentsPane extends StatelessWidget {
 class PlayerScreen extends StatefulWidget {
   final String url;
   final String label;
-  const PlayerScreen({super.key, required this.url, required this.label});
+  final bool localFile;
+  const PlayerScreen(
+      {super.key,
+      required this.url,
+      required this.label,
+      this.localFile = false});
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -2193,7 +2442,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _open() async {
     try {
-      final v = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      final v = widget.localFile
+          ? VideoPlayerController.file(File(widget.url))
+          : VideoPlayerController.networkUrl(Uri.parse(widget.url));
       await v.initialize();
       final c = ChewieController(
         videoPlayerController: v,
@@ -2255,9 +2506,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          const Text('Streaming from your CamAnime website servers.',
+          Text(widget.localFile
+              ? 'Playing downloaded file offline-ready from My Library.'
+              : 'Streaming directly from CamAnime website servers — no download required.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: muted, fontSize: 12)),
+              style: const TextStyle(color: muted, fontSize: 12)),
           const SizedBox(height: 4),
           const Text(appCredit,
               textAlign: TextAlign.center,
@@ -2674,6 +2927,8 @@ class _ProfileTabState extends State<ProfileTab> {
   final name = TextEditingController();
   int avatar = 0;
   bool online = false;
+  String? customAvatarPath;
+  bool customBusy = false;
 
   @override
   void initState() {
@@ -2685,11 +2940,76 @@ class _ProfileTabState extends State<ProfileTab> {
     final p = await SharedPreferences.getInstance();
     name.text = p.getString('username') ?? '';
     avatar = p.getInt('avatar_idx') ?? 0;
+    final savedPath = p.getString('avatar_custom_path');
+    if (savedPath != null && savedPath.isNotEmpty) {
+      try {
+        if (await File(savedPath).exists()) {
+          customAvatarPath = savedPath;
+        } else {
+          await p.remove('avatar_custom_path');
+        }
+      } catch (_) {}
+    }
     if (mounted) setState(() {});
     try {
       await Api.version();
       if (mounted) setState(() => online = true);
     } catch (_) {}
+  }
+
+  Future<void> _pickCustomPhoto() async {
+    if (customBusy) return;
+    setState(() => customBusy = true);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+          source: ImageSource.gallery, maxWidth: 512, imageQuality: 85);
+      if (picked == null) return;
+      final dir = await getApplicationDocumentsDirectory();
+      final dest = File('${dir.path}/camanime_profile.jpg');
+      await File(picked.path).copy(dest.path);
+      final p = await SharedPreferences.getInstance();
+      await p.setString('avatar_custom_path', dest.path);
+      if (mounted) setState(() => customAvatarPath = dest.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profile pic updated')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not set pic: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => customBusy = false);
+    }
+  }
+
+  Future<void> _removeCustomPhoto() async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove('avatar_custom_path');
+    if (customAvatarPath != null) {
+      try {
+        await File(customAvatarPath!).delete();
+      } catch (_) {}
+    }
+    if (mounted) setState(() => customAvatarPath = null);
+  }
+
+  Widget _avatarImage(Map<String, dynamic> a, double radius, double iconSize) {
+    if (customAvatarPath != null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: FileImage(File(customAvatarPath!)),
+        backgroundColor: card2,
+      );
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: Color(a['color'] as int).withValues(alpha: 0.2),
+      child: Icon(a['icon'] as IconData,
+          size: iconSize, color: Color(a['color'] as int)),
+    );
   }
 
   Future<void> _pickAvatar() async {
@@ -2700,31 +3020,60 @@ class _ProfileTabState extends State<ProfileTab> {
         title: const Text('Choose profile pic'),
         content: SizedBox(
           width: 320,
-          child: GridView.builder(
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10),
-            itemCount: avatarPresets.length,
-            itemBuilder: (_, i) {
-              final a = avatarPresets[i];
-              return InkWell(
-                onTap: () => Navigator.pop(context, i),
-                child: CircleAvatar(
-                  backgroundColor:
-                      Color(a['color'] as int).withValues(alpha: 0.2),                child: Icon(a['icon'] as IconData,
-                    color: Color(a['color'] as int), size: 30),
-                ),
-              );
-            },
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, -1),
+                icon: const Icon(Icons.upload, size: 18),
+                label: Text(customBusy
+                    ? 'Loading…'
+                    : customAvatarPath != null
+                        ? 'Change custom photo'
+                        : 'Upload custom photo'),
+              ),
+            ),
+            if (customAvatarPath != null)
+              TextButton.icon(
+                onPressed: () => Navigator.pop(context, -2),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Remove custom photo'),
+              ),
+            const SizedBox(height: 8),
+            GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10),
+              itemCount: avatarPresets.length,
+              itemBuilder: (_, i) {
+                final preset = avatarPresets[i];
+                return InkWell(
+                  onTap: () => Navigator.pop(context, i),
+                  child: CircleAvatar(
+                    backgroundColor: Color(preset['color'] as int)
+                        .withValues(alpha: 0.2),
+                    child: Icon(preset['icon'] as IconData,
+                        color: Color(preset['color'] as int), size: 30),
+                  ),
+                );
+              },
+            ),
+          ]),
         ),
       ),
     );
-    if (chosen != null) {
-      final p = await SharedPreferences.getInstance();
-      await p.setInt('avatar_idx', chosen);
-      if (mounted) setState(() => avatar = chosen);
+    if (chosen == null) return;
+    if (chosen == -1) {
+      await _pickCustomPhoto();
+      return;
     }
+    if (chosen == -2) {
+      await _removeCustomPhoto();
+      return;
+    }
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('avatar_idx', chosen);
+    if (mounted) setState(() => avatar = chosen);
   }
 
   @override
@@ -2741,15 +3090,9 @@ class _ProfileTabState extends State<ProfileTab> {
                   end: Alignment.bottomRight)),
           child: Row(children: [
             GestureDetector(
-              onTap: _pickAvatar,
+              onTap: customBusy ? null : _pickAvatar,
               child: Stack(children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor:
-                      Color(a['color'] as int).withValues(alpha: 0.2),                      child: Icon(a['icon'] as IconData,
-                          size: 40,
-                          color: Color(a['color'] as int)),
-                ),
+                _avatarImage(a, 36, 40),
                 Positioned(
                   right: 0,
                   bottom: 0,

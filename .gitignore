@@ -6,3 +6,10 @@ camanime_secret.key
 .env
 *.log
 mobile/camanime_app/android/.kotlin/
+# App binaries ship via GitHub Releases — keep them out of git so the
+# Render slug stays under the size limit. /download and /get/* fall back
+# to the Release asset automatically (see docs/APP_RELEASES.md).
+static/downloads/*.apk
+static/downloads/*.zip
+static/downloads/*.exe
+mobile/camanime_app/build_log*.txt

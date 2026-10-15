@@ -152,10 +152,9 @@ query {{
 }}
 """
 
-SEARCH_FILTER_QUERY = f"""
-query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int) {{
+SEARCH_FILTER_QUERY = f"""  query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int, $yearBefore: Int) {{
   Page(page: $page, perPage: $perPage) {{
-    media(search: $search, genre: $genre, format: $format, sort: $sort, type: ANIME, isAdult: false) {{
+    media(search: $search, genre: $genre, format: $format, seasonYear_lesser: $yearBefore, sort: $sort, type: ANIME, isAdult: false) {{
       {MEDIA_FRAGMENT}
     }}
   }}
@@ -318,6 +317,11 @@ def format_anime_card(anime: Dict) -> Dict:
         "status": (anime.get("status") or "FINISHED").replace("_", " ").title(),
         "season": f"{(anime.get('season') or '').title()} {anime.get('seasonYear') or ''}".strip(),
         "year": anime.get("seasonYear") or "",
+        "next_airing_episode": ({
+            "episode": next_ep.get("episode"),
+            "airing_at": next_ep.get("airingAt"),
+            "seconds_until_airing": next_ep.get("timeUntilAiring"),
+        } if next_ep else None),
         "duration": f"{anime.get('duration')}m" if anime.get("duration") else "",
         "rating": rating,
         "score": score or 0,
@@ -1326,7 +1330,7 @@ def download_page():
     return render_template("download.html", user=_current_user(), apk=apk, winapp=winapp)
 
 
-RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.1.0")
+RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.2.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 APP_VERSION = "1.2.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
 
@@ -1508,7 +1512,12 @@ def api_v1_anime_list(genre_override: Optional[str] = None):
         return _catalog_error("Unsupported sort order.", 400)
     if page < 1 or page > 10000 or limit < 1 or limit > 50:
         return _catalog_error("Page must be positive and limit must be between 1 and 50.", 400)
+    year_before = request.args.get("year_before", type=int)
+    if year_before is not None and (year_before < 1900 or year_before > 2100):
+        return _catalog_error("year_before must be between 1900 and 2100.", 400)
     variables = {"page": page, "perPage": limit, "sort": [CATALOG_SORTS[sort_key]]}
+    if year_before is not None:
+        variables["yearBefore"] = year_before
     if query:
         variables["search"] = query
     if genre:
@@ -1553,10 +1562,21 @@ def _anime_metadata(anime_id: int):
     card = format_anime_card(raw)
     count = raw.get("episodes") if isinstance(raw.get("episodes"), int) else None
     known_streaming = raw.get("streamingEpisodes") or []
+    relations = []
+    for edge in ((raw.get("relations") or {}).get("edges") or []):
+        node = edge.get("node") or {}
+        if node.get("type") == "ANIME" and node.get("id"):
+            relations.append({
+                **format_anime_card(node),
+                "relation": (edge.get("relationType") or "RELATED").replace("_", " "),
+                "episode_count": node.get("episodes"),
+            })
+    relations.sort(key=lambda item: (item.get("year") or 0, item.get("id") or 0))
     return {"id": raw.get("id"), "mal_id": raw.get("idMal"), **card,
             "title_alternates": [t for t in ((raw.get("title") or {}).get("english"),
                                                (raw.get("title") or {}).get("romaji"),
                                                (raw.get("title") or {}).get("native")) if t],
+            "seasons": relations,
             "episode_count": count, "streaming_metadata_count": len(known_streaming),
             "streaming_metadata_available": bool(known_streaming),
             "streaming_metadata": [{"title": x.get("title", ""),

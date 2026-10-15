@@ -8,10 +8,12 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  crypto: ^3.0.7
   video_player: ^2.9.1
   chewie: ^1.8.1
   shared_preferences: ^2.2.3
   path_provider: ^2.1.4
+  image_picker: ^1.1.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
