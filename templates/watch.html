@@ -9,10 +9,11 @@
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
     <link href="/static/css/sync.css" rel="stylesheet">
+    <script src="/static/js/site.js" defer></script>
     <style>
         :root {
             --bg-canvas: #06070c;
@@ -477,6 +478,7 @@
                 <button type="button" id="skipIntroBtn" class="skip-intro-btn" onclick="skipIntro()">
                     <i class="fas fa-forward"></i> Skip Intro
                 </button>
+                <div id="playerError" style="display:none;position:absolute;left:12px;right:12px;bottom:12px;z-index:40;background:rgba(7,8,13,.92);border:1px solid rgba(248,113,113,.55);color:#fecaca;font-size:.82rem;border-radius:10px;padding:.6rem .8rem;"></div>
             </div>
 
             <!-- ─── TRANSPORT CONTROLS ─── -->
@@ -502,8 +504,11 @@
                     <button type="button" class="ctrl-btn" onclick="toggleLights()">
                         <i class="fas fa-lightbulb"></i> Focus Mode
                     </button>
-                    <button type="button" class="ctrl-btn download-cta" onclick="document.getElementById('downloadPanel').scrollIntoView({behavior:'smooth'})">
-                        <i class="fas fa-download"></i> Download Episode
+                    <a id="downloadCurrentBtn" class="ctrl-btn download-cta" href="{{ active_server.download_url or (downloads[0].url if downloads else '#') }}" download>
+                        <i class="fas fa-download"></i> Download Playing Ep
+                    </a>
+                    <button type="button" class="ctrl-btn" onclick="document.getElementById('downloadPanel').scrollIntoView({behavior:'smooth'})">
+                        <i class="fas fa-list"></i> All Files
                     </button>
                 </div>
             </div>
@@ -567,8 +572,9 @@
                 Direct Episode {{ ep_num }} Download Manager
             </div>
             <p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                Download this episode directly as an MP4 file from our AnimeHeaven scraper or select 360p / 720p / 1080p Sub & Dub mirrors.
+                The green button above downloads the exact file now playing. No sign-in needed. MP4 saves as video, HLS servers save the stream playlist. More mirrors below.
             </p>
+            <div id="dlStatus" style="display:none;font-size:.82rem;margin-bottom:.8rem;color:#fca5a5;"></div>
             <div class="dl-grid">
                 {% if downloads %}
                     {% for dl in downloads %}
@@ -625,13 +631,39 @@
     let hlsInstance = null;
     let currentIntro = null;
 
-    function switchServer(srv) {
+    let currentServer = null;
+    function showPlayerError(msg) {
+        const box = document.getElementById('playerError');
+        if (!box) return;
+        if (!msg) { box.style.display = 'none'; box.textContent = ''; return; }
+        box.style.display = 'block';
+        box.textContent = msg;
+    }
+    function downloadUrlFor(srv) {
+        if (!srv) return '#';
+        if (srv.download_url) return srv.download_url;
+        const raw = srv.raw_url || '';
+        if (raw && (srv.playback_mode === 'mp4' || srv.playback_mode === 'hls')) {
+            return `/api/download/video?url=${encodeURIComponent(raw)}&title=${encodeURIComponent(document.title || 'CamAnime_Episode')}`;
+        }
+        return '#';
+    }
+    function switchServer(srv, opts) {
         if (!srv) return;
+        opts = opts || {};
+        currentServer = srv;
         document.querySelectorAll('.server-btn').forEach(btn => {
             btn.classList.toggle('active', btn.getAttribute('data-server-id') === srv.id);
         });
         document.getElementById('activeServerStatus').textContent = `Active Server: ${srv.name} (${(srv.quality || '1080p')})`;
         document.getElementById('playbackBadge').textContent = (srv.playback_mode || 'STREAM').toUpperCase();
+        const dlBtn = document.getElementById('downloadCurrentBtn');
+        if (dlBtn) {
+            const durl = downloadUrlFor(srv);
+            if (durl === '#') { dlBtn.classList.add('disabled'); dlBtn.removeAttribute('href'); }
+            else { dlBtn.classList.remove('disabled'); dlBtn.href = durl; }
+        }
+        showPlayerError('');
 
         const video = document.getElementById('nativeVideo');
         const iframe = document.getElementById('embedIframe');
@@ -682,11 +714,15 @@
                     video.play().catch(() => {});
                 });
                 hlsInstance.on(Hls.Events.ERROR, (event, data) => {
-                    if (data.fatal && srv.embed_url) {
-                        // Automatic fallback to server embed url if HLS stream fails
+                    if (!data.fatal) return;
+                    if (srv.embed_url) {
                         video.style.display = 'none';
                         iframe.style.display = 'block';
                         iframe.src = srv.embed_url;
+                        showPlayerError('This HD stream failed, switched to backup embed automatically.');
+                    } else {
+                        showPlayerError('This stream failed to load. Pick another SUB/DUB server below.');
+                        autoTryNextServer(srv.id);
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
@@ -701,7 +737,14 @@
             video.style.display = 'none';
             iframe.style.display = 'block';
             iframe.src = srv.stream_url;
+            if (dlBtn) { dlBtn.classList.add('disabled'); dlBtn.removeAttribute('href'); }
+            showPlayerError('Embed-only server: video plays here but cannot be saved as a file. Switch to an MP4 or CamStream server for a downloadable copy.');
         }
+    }
+    function autoTryNextServer(failedId) {
+        const idx = ALL_SERVERS.findIndex(s => s.id === failedId);
+        const next = ALL_SERVERS.slice(idx + 1).find(s => s.playback_mode === 'mp4' || s.playback_mode === 'hls');
+        if (next) setTimeout(() => switchServer(next, { auto: true }), 1200);
     }
 
     // Intro skip button handler
@@ -755,6 +798,19 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        const videoEl = document.getElementById('nativeVideo');
+        videoEl.addEventListener('error', () => {
+            showPlayerError('Video file failed (source blocked or expired). Trying next working server…');
+            if (currentServer) autoTryNextServer(currentServer.id);
+        });
+        const dlBtn0 = document.getElementById('downloadCurrentBtn');
+        if (dlBtn0) dlBtn0.addEventListener('click', (e) => {
+            if (!dlBtn0.getAttribute('href') || dlBtn0.getAttribute('href') === '#') {
+                e.preventDefault();
+                const st = document.getElementById('dlStatus');
+                if (st) { st.style.display = 'block'; st.textContent = 'This embed server has no downloadable file. Switch to an MP4 or CamStream server.'; }
+            }
+        });
         switchServer(INITIAL_SERVER);
         recordWatchHistory();
         const activeEp = document.querySelector('#epRailList .ep-rail-item.current');

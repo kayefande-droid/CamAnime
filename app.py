@@ -821,10 +821,11 @@ def api_heaven_resolve(episode_key: str):
     sources = []
     for s in res["sources"]:
         u = s["url"]
+        sref = s.get("referer", "https://animeheaven.me/")
         sources.append({
             **s,
-            "proxy_url": f"/api/proxy/video?url={quote(u, safe='')}",
-            "download_url": f"/api/download/video?url={quote(u, safe='')}&title={quote(request.args.get('title', f'AnimeHeaven_{episode_key[:8]}'), safe='')}",
+            "proxy_url": f"/api/proxy/video?url={quote(u, safe='')}&ref={quote(sref, safe='')}",
+            "download_url": f"/api/download/video?url={quote(u, safe='')}&title={quote(request.args.get('title', f'AnimeHeaven_{episode_key[:8]}'), safe='')}&ref={quote(sref, safe='')}",
         })
     return jsonify({"status": "success", "episode_key": episode_key, "sources": sources})
 
@@ -844,12 +845,13 @@ def api_heaven_season_pack(site_id: str):
         primary = (st.get("sources") or [None])[0]
         if primary:
             ep_title = f"{info['title']} - Episode {ep['num']}"
+            pref = primary.get("referer", "https://animeheaven.me/")
             resolved_pack.append({
                 "num": ep["num"],
                 "key": ep["key"],
                 "raw_mp4": primary["url"],
-                "stream_url": f"/api/proxy/video?url={quote(primary['url'], safe='')}",
-                "download_url": f"/api/download/video?url={quote(primary['url'], safe='')}&title={quote(ep_title, safe='')}",
+                "stream_url": f"/api/proxy/video?url={quote(primary['url'], safe='')}&ref={quote(pref, safe='')}",
+                "download_url": f"/api/download/video?url={quote(primary['url'], safe='')}&title={quote(ep_title, safe='')}&ref={quote(pref, safe='')}",
             })
     return jsonify({
         "status": "success",
@@ -859,6 +861,20 @@ def api_heaven_season_pack(site_id: str):
         "resolved_count": len(resolved_pack),
         "episodes": resolved_pack,
     })
+
+
+def _media_host_allowed(host: str) -> bool:
+    """Optional allowlist for owned/licensed media hosts.
+
+    Set CAMANIME_MEDIA_HOSTS="cdn.example.com,files.example.com" to restrict
+    /api/proxy/* and /api/download/video to hosts you own or are licensed to
+    distribute. When unset (default), the SSRF guard below still applies but no
+    allowlist is enforced."""
+    raw = (os.environ.get("CAMANIME_MEDIA_HOSTS") or "").strip()
+    if not raw:
+        return True
+    allowed = {h.strip().lower() for h in raw.split(",") if h.strip()}
+    return (host or "").lower() in allowed
 
 
 def _safe_upstream_url(url):
@@ -891,6 +907,8 @@ def _safe_upstream_url(url):
                 return None
             if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
                 return None
+        if not _media_host_allowed(host):
+            return None
         return par.geturl()
     except Exception:
         return None
@@ -977,6 +995,15 @@ def proxy_video():
 
     try:
         upstream = requests.get(url, headers=headers, stream=True, timeout=20)
+        ctype = (upstream.headers.get("Content-Type", "") or "").lower()
+        if upstream.status_code >= 400:
+            upstream.close()
+            logger.error(f"Video Proxy upstream {upstream.status_code} ({url})")
+            return jsonify({"error": f"Stream source returned {upstream.status_code}. Try another server.", "upstream": upstream.status_code}), 502
+        if "text/html" in ctype or "application/json" in ctype:
+            upstream.close()
+            logger.error(f"Video Proxy blocked page, not video ({url}, {ctype})")
+            return jsonify({"error": "Stream source returned a block page, not video. Try another server.", "content_type": ctype}), 502
 
         def generate():
             try:
@@ -1005,20 +1032,24 @@ def proxy_video():
 
 @app.route("/api/download/video")
 def download_video():
-    """Forces a direct browser file download (.mp4) of the anime episode."""
-    if not _current_user():
-        if "text/html" in (request.headers.get("Accept", "") or ""):
-            return redirect(url_for("login_page", next=request.full_path))
-        return jsonify({"error": "Sign in to download episodes.", "login": "/login"}), 401
+    """Directly downloads the same file that is streaming (no sign-in).
+
+    MP4 sources save as .mp4; HLS (.m3u8) sources save as .m3u8 so the exact
+    playing stream can always be kept from the website."""
     url = _safe_upstream_url(request.args.get("url", ""))
-    title = request.args.get("title", "CamAnime_Episode").strip()
-    ref = request.args.get("ref", "https://animeheaven.me/").strip()
+    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
+    ref = (request.args.get("ref", "https://animeheaven.me/") or "https://animeheaven.me/").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
 
     safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
-    if not safe_filename.lower().endswith(".mp4"):
-        safe_filename += ".mp4"
+    wants_hls = ".m3u8" in url.lower()
+    want_ext = ".m3u8" if wants_hls else ".mp4"
+    if not safe_filename.lower().endswith(want_ext):
+        base = safe_filename
+        if base.lower().endswith(".mp4") or base.lower().endswith(".m3u8"):
+            base = base.rsplit(".", 1)[0]
+        safe_filename = base + want_ext
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -1030,6 +1061,15 @@ def download_video():
 
     try:
         upstream = requests.get(url, headers=headers, stream=True, timeout=25)
+        ctype = (upstream.headers.get("Content-Type", "") or "").lower()
+        if upstream.status_code >= 400:
+            upstream.close()
+            logger.error(f"Video Download upstream {upstream.status_code} ({url})")
+            return jsonify({"error": f"Download source returned {upstream.status_code}. The same file failed to stream, so there is nothing to save. Try another server.", "upstream": upstream.status_code}), 502
+        if "text/html" in ctype or "application/json" in ctype:
+            upstream.close()
+            logger.error(f"Video Download blocked page, not video ({url}, {ctype})")
+            return jsonify({"error": "Download source returned a block page, not video. The stream itself failed too.", "content_type": ctype}), 502
 
         def generate():
             try:
@@ -1039,16 +1079,19 @@ def download_video():
             finally:
                 upstream.close()
 
+        out_ctype = "application/vnd.apple.mpegurl" if wants_hls else "video/mp4"
         resp = Response(
             generate(),
             status=upstream.status_code,
-            content_type="video/mp4",
+            content_type=out_ctype,
         )
         resp.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
         resp.headers["Access-Control-Allow-Origin"] = "*"
         for h in ("Content-Length", "Content-Range", "Accept-Ranges"):
             if h in upstream.headers:
                 resp.headers[h] = upstream.headers[h]
+        if "Accept-Ranges" not in resp.headers:
+            resp.headers["Accept-Ranges"] = "bytes"
         return resp
     except Exception as e:
         logger.error(f"Video Download Error ({url}): {e}")
@@ -1111,6 +1154,47 @@ def _current_user():
     store = platform.load_store()
     u = store["users"].get(email.lower())
     return platform.public_user(u) if u else None
+
+
+def _acting_user(allow_guest=True):
+    """Logged-in user or stable guest (no sign-in required for rate/comment/like).
+
+    Guests get a server-stored session id (guest:<hex>) so one browser = one
+    rating identity and attributable comments. Name comes from the posted
+    `name` field or saved session name, sanitized to 2-24 chars."""
+    u = _current_user()
+    if u:
+        return {**u, "guest": False}
+    if not allow_guest:
+        return None
+    import secrets as _secrets
+    gid = session.get("guest_id", "")
+    if not gid or len(gid) < 8:
+        gid = _secrets.token_hex(8)
+        session["guest_id"] = gid
+    posted_name = ""
+    try:
+        posted_name = (_post_data().get("name", "") or "").strip()
+    except Exception:
+        posted_name = ""
+    if posted_name:
+        posted_name = posted_name[:24]
+        session["guest_name"] = posted_name
+    name = posted_name or session.get("guest_name", "") or f"Guest-{gid[:4].upper()}"
+    name = str(name).strip()[:24] or f"Guest-{gid[:4].upper()}"
+    return {"email": f"guest:{gid}@guests.camanime.local", "name": name,
+            "role": "guest", "avatar": "", "guest": True}
+
+
+def _guest_throttle_ok(key="comment", seconds=8):
+    """Simple per-session spam throttle for guest actions."""
+    import time as _t
+    now = _t.time()
+    last = float(session.get(f"guest_last_{key}", 0) or 0)
+    if now - last < seconds:
+        return False
+    session[f"guest_last_{key}"] = now
+    return True
 
 
 def _auth_payload():
@@ -1291,23 +1375,23 @@ def api_comments():
 
 @app.route("/api/community/comment", methods=["POST"])
 def api_comment_post():
-    u = _current_user()
-    if not u:
-        return jsonify({"status": "error", "error": "Sign in to comment."}), 401
+    d = _post_data()
+    if not (d.get("anime_id", "") or "").strip():
+        return jsonify({"status": "error", "error": "anime_id is required."}), 400
+    u = _acting_user(allow_guest=True)
+    if u.get("guest") and not _guest_throttle_ok("comment", 8):
+        return jsonify({"status": "error", "error": "Slow down — wait a few seconds before posting again."}), 429
     store = platform.load_store()
-    full = store["users"].get(u["email"], {})
     try:
-        c = platform.add_comment(store, _post_data().get("anime_id", ""), _post_data().get("ep", ""), {**u, "email": u["email"]}, _post_data().get("text", ""), _post_data().get("parent", ""), _post_data().get("sticker", ""))
-        return jsonify({"status": "success", "comment": c})
+        c = platform.add_comment(store, d.get("anime_id", ""), d.get("ep", ""), {**u, "email": u["email"]}, d.get("text", ""), d.get("parent", ""), d.get("sticker", ""))
+        return jsonify({"status": "success", "comment": c, "guest": bool(u.get("guest"))})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
 
 
 @app.route("/api/community/like/<cid>", methods=["POST"])
 def api_comment_like(cid):
-    u = _current_user()
-    if not u:
-        return jsonify({"status": "error", "error": "Sign in to like."}), 401
+    u = _acting_user(allow_guest=True)
     store = platform.load_store()
     try:
         c = platform.like_comment(store, cid, u["email"])
@@ -1318,12 +1402,21 @@ def api_comment_like(cid):
 
 @app.route("/api/community/rate", methods=["POST"])
 def api_rate():
-    u = _current_user()
-    if not u:
-        return jsonify({"status": "error", "error": "Sign in to rate."}), 401
+    d = _post_data()
+    try:
+        score = int(d.get("score", 8))
+    except Exception:
+        return jsonify({"status": "error", "error": "Score must be 1-10."}), 400
+    if score < 1 or score > 10:
+        return jsonify({"status": "error", "error": "Score must be 1-10."}), 400
+    if not (d.get("anime_id", "") or "").strip():
+        return jsonify({"status": "error", "error": "anime_id is required."}), 400
+    u = _acting_user(allow_guest=True)
+    if u.get("guest") and not _guest_throttle_ok("rate", 5):
+        return jsonify({"status": "error", "error": "Slow down — wait a few seconds before rating again."}), 429
     store = platform.load_store()
-    r = platform.rate_anime(store, _post_data().get("anime_id", ""), u["email"], _post_data().get("score", 8))
-    return jsonify({"status": "success", "rating": r})
+    r = platform.rate_anime(store, _post_data().get("anime_id", ""), u["email"], score)
+    return jsonify({"status": "success", "rating": r, "guest": bool(u.get("guest"))})
 
 
 @app.route("/api/community/notifications")

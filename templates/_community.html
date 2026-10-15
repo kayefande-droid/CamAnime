@@ -1,16 +1,25 @@
-<section id="ca-community" data-anime="{{ anime.id }}" data-ep="{{ ep_num | default(1) }}" style="margin-top:2rem;background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:1.25rem">
-  <h2 style="font-size:1.15rem;margin-bottom:.25rem">Comments &amp; episode forum</h2>
-  <p style="color:#a0abc0;font-size:.85rem">Replies, likes, stickers + CamAnime originals (🍥⚔️🐉👺🌸🔥🍜⛩️👾💫🎴🍡). Honest anime ratings from users.</p>
-  <div style="display:flex;gap:.5rem;margin:.75rem 0;flex-wrap:wrap" id="ca-rate-row">
-    <span style="font-size:.85rem;color:#a0abc0">Rate this anime:</span>
-    {% for s in [10,9,8,7,6] %}<button class="ca-rate-btn" data-score="{{ s }}" style="background:#141926;color:#FFB347;border:1px solid rgba(255,179,71,.4);border-radius:8px;padding:.3rem .6rem;cursor:pointer">{{ s }}</button>{% endfor %}
-    <span id="ca-rating-out" style="font-size:.82rem;color:#a0abc0"></span>
+<section id="ca-community" data-anime="{{ anime.id }}" data-ep="{{ ep_num | default(1) }}" class="ca-community">
+  <h2 class="ca-community-title">Comments &amp; episode forum</h2>
+  <p class="ca-community-sub">No sign-in needed — pick a name, rate 1–10, and join the forum. Replies, likes, stickers + CamAnime originals (🍥⚔️🐉👺🌸🔥🍜⛩️👾💫🎴🍡).</p>
+  <div class="ca-theme-row" role="group" aria-label="Site theme">
+    <span class="ca-theme-label">Theme:</span>
+    <button type="button" class="ca-theme-btn" data-theme-name="midnight">Midnight</button>
+    <button type="button" class="ca-theme-btn" data-theme-name="vibrant">Vibrant</button>
+    <button type="button" class="ca-theme-btn" data-theme-name="sakura">Sakura</button>
+    <button type="button" class="ca-theme-btn" data-theme-name="forest">Forest</button>
   </div>
-  <form id="ca-comment-form" style="display:flex;gap:.5rem;flex-wrap:wrap">
-    <input id="ca-comment-text" placeholder="Join the discussion…" style="flex:1;min-width:200px;background:#141926;border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:.6rem .8rem">
-    <button type="submit" style="background:#FFB347;border:none;border-radius:10px;padding:.6rem 1rem;font-weight:700;cursor:pointer">Post</button>
+  <div class="ca-rate-row" id="ca-rate-row">
+    <span class="ca-rate-label">Rate this anime:</span>
+    {% for s in [10,9,8,7,6,5,4,3,2,1] %}<button type="button" class="ca-rate-btn" data-score="{{ s }}">{{ s }}</button>{% endfor %}
+    <span id="ca-rating-out" class="ca-rating-out">Tap a score — average updates instantly.</span>
+  </div>
+  <form id="ca-comment-form" class="ca-comment-form">
+    <input id="ca-guest-name" maxlength="24" placeholder="Your name (optional)" autocomplete="nickname" aria-label="Display name">
+    <input id="ca-comment-text" maxlength="600" placeholder="Join the discussion… (no login needed)" aria-label="Comment text">
+    <button type="submit">Post</button>
   </form>
-  <div id="ca-sticker-row" style="display:flex;gap:.35rem;margin:.6rem 0;flex-wrap:wrap"></div>
-  <div id="ca-comments" style="display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem"></div>
+  <div id="ca-form-msg" class="ca-form-msg" aria-live="polite"></div>
+  <div id="ca-sticker-row" class="ca-sticker-row"></div>
+  <div id="ca-comments" class="ca-comments"></div>
 </section>
 <script src="/static/js/community.js" defer></script>

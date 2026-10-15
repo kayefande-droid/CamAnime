@@ -1112,8 +1112,9 @@ class StreamingManager:
                     heaven_ep_key = target_ep["key"]
                     st = self.animeheaven.get_streaming_sources(heaven_ep_key, referer_site_id=heaven_id)
                     for idx, src in enumerate(st.get("sources", [])):
-                        proxy_url = f"/api/proxy/video?url={quote(src['url'], safe='')}&ref={quote(src.get('referer', 'https://animeheaven.me/'), safe='')}"
-                        dl_url = f"/api/download/video?url={quote(src['url'], safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num}', safe='')}"
+                        _ref = src.get('referer', 'https://animeheaven.me/')
+                        proxy_url = f"/api/proxy/video?url={quote(src['url'], safe='')}&ref={quote(_ref, safe='')}"
+                        dl_url = f"/api/download/video?url={quote(src['url'], safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num}', safe='')}&ref={quote(_ref, safe='')}"
                         servers.append({
                             "id": f"heaven-mp4-{idx+1}",
                             "name": f"AnimeHeaven {('Primary' if idx == 0 else f'Mirror {idx+1}')}",
@@ -1170,6 +1171,7 @@ class StreamingManager:
                             ]
                             if m3u8:
                                 hls_proxy = f"/api/proxy/hls?url={quote(m3u8, safe='')}&ref={quote(ref, safe='')}"
+                                hls_dl = f"/api/download/video?url={quote(m3u8, safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num} {audio.upper()}', safe='')}&ref={quote(ref, safe='')}"
                                 servers.append({
                                     "id": f"anikoto-{audio}-{srv['name'].lower()}-{resolved_per_audio[audio]}",
                                     "name": f"CamStream {srv['name']} ({audio.upper()})",
@@ -1178,12 +1180,21 @@ class StreamingManager:
                                     "playback_mode": "hls",
                                     "stream_url": hls_proxy,
                                     "raw_url": m3u8,
+                                    "download_url": hls_dl,
                                     "embed_url": stream_data.get("embed_url"),
                                     "quality": "1080p HLS",
                                     "subtitles": subs,
                                     "intro": stream_data.get("intro"),
                                     "outro": stream_data.get("outro"),
                                     "badge": f"1080p {audio.upper()}",
+                                })
+                                downloads.append({
+                                    "label": f"Episode {ep_num} {audio.upper()} Stream File (same as playing)",
+                                    "quality": "HLS playlist",
+                                    "audio": audio.upper(),
+                                    "url": hls_dl,
+                                    "direct": True,
+                                    "provider": f"CamStream {srv['name']}",
                                 })
                             elif stream_data.get("embed_url"):
                                 servers.append({

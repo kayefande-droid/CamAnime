@@ -549,58 +549,100 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
   static const steps = [
     [
       'Discover anime',
-      'Browse AniList-backed catalogue data shared with the CamAnime website.'
+      'Browse the catalogue shared with the CamAnime website. No account needed to explore.'
     ],
     [
-      'Verified availability',
-      'Playback and downloads appear only when an authorized source is configured.'
+      'Rate & discuss as guest',
+      'Tap a 1-10 score and post comments with just a display name. Signing in syncs everything.'
+    ],
+    [
+      'Downloads from CamAnime',
+      'Downloads tab saves the same episode file playing on the website into My Library. No sign-in needed.'
     ],
     [
       'Stay in sync',
-      'The catalogue refreshes on return and cached posters remain visible offline.'
+      'The catalogue refreshes on return and cached posters stay visible offline.'
     ],
   ];
   @override
   Widget build(BuildContext context) => Container(
-        color: Colors.black.withValues(alpha: 0.88),
-        padding: const EdgeInsets.all(32),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [amber, pink]),
-                borderRadius: BorderRadius.circular(22)),
-            child: const Icon(Icons.play_circle_fill,
-                color: Colors.black, size: 44),
-          ),
-          const SizedBox(height: 18),
-          Text(steps[i][0],
-              style:
-                  const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 8),
-          Text(steps[i][1],
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: muted)),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (var k = 0; k < steps.length; k++)
-              Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: i == k ? 26 : 8,
-                  height: 8,
+        color: Colors.black.withValues(alpha: 0.9),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height - 56),
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                      color: i == k ? amber : muted,
-                      borderRadius: BorderRadius.circular(99))),
-          ]),
-          const SizedBox(height: 20),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: amber, foregroundColor: Colors.black),
-            onPressed: () =>
-                i < steps.length - 1 ? setState(() => i++) : widget.onDone(),
-            child: Text(i < steps.length - 1 ? 'Next' : 'Start watching'),
+                      gradient:
+                          const LinearGradient(colors: [amber, pink]),
+                      borderRadius: BorderRadius.circular(22)),
+                  child: const Icon(Icons.play_circle_fill,
+                      color: Colors.black, size: 44),
+                ),
+                const SizedBox(height: 18),
+                Text('Step ${i + 1} of ${steps.length}',
+                    style:
+                        const TextStyle(color: muted, fontSize: 12)),
+                const SizedBox(height: 6),
+                Text(steps[i][0],
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text(steps[i][1],
+                    textAlign: TextAlign.center,
+                    style:
+                        const TextStyle(color: muted, fontSize: 15)),
+                const SizedBox(height: 20),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  for (var k = 0; k < steps.length; k++)
+                    Container(
+                        margin:
+                            const EdgeInsets.symmetric(horizontal: 4),
+                        width: i == k ? 26 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            color: i == k ? amber : muted,
+                            borderRadius:
+                                BorderRadius.circular(99))),
+                ]),
+                const SizedBox(height: 20),
+                Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (i > 0)
+                        OutlinedButton(
+                          onPressed: () => setState(() => i--),
+                          child: const Text('Back'),
+                        ),
+                      if (i > 0) const SizedBox(width: 10),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: amber,
+                            foregroundColor: Colors.black,
+                            minimumSize: const Size(140, 48)),
+                        onPressed: () => i < steps.length - 1
+                            ? setState(() => i++)
+                            : widget.onDone(),
+                        child: Text(i < steps.length - 1
+                            ? 'Next'
+                            : 'Start watching'),
+                      ),
+                    ]),
+                TextButton(
+                  onPressed: widget.onDone,
+                  child: const Text('Skip tour'),
+                ),
+              ]),
+            ),
           ),
-        ]),
+        ),
       );
 }
 
@@ -1720,6 +1762,46 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
             const SizedBox(height: 12),
             const _AuthCard(),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                        color: amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.tour_outlined, color: amber)),
+                title: const Text('Replay app tour',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: const Text('See the 4-step intro again',
+                    style: TextStyle(color: muted, fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right, color: muted),
+                onTap: () async {
+                  final p = await SharedPreferences.getInstance();
+                  await p.setBool('tutorial_done', false);
+                  if (!context.mounted) return;
+                  await showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => Dialog(
+                      insetPadding: const EdgeInsets.all(12),
+                      backgroundColor: Colors.transparent,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: TutorialOverlay(onDone: () async {
+                          final pp =
+                              await SharedPreferences.getInstance();
+                          await pp.setBool('tutorial_done', true);
+                          if (context.mounted) Navigator.pop(context);
+                        }),
+                      ),
+                    ),
+                  );
+                  final pp2 = await SharedPreferences.getInstance();
+                  await pp2.setBool('tutorial_done', true);
+                },
+              ),
+            ),
             const SizedBox(height: 16),
             const Text(appCredit,
                 textAlign: TextAlign.center,
