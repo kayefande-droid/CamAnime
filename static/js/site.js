@@ -3,6 +3,7 @@
   try {
     var t = localStorage.getItem("camanime-theme");
     if (t) document.documentElement.setAttribute("data-theme", t);
+    if (localStorage.getItem("camanime-motion") === "1") document.documentElement.dataset.motion = "reduced";
   } catch (e) {}
   window.caSetTheme = function (name) {
     document.documentElement.setAttribute("data-theme", name);

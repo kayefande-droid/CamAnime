@@ -417,6 +417,10 @@
         .cinema-grid > *, .player-column, .episode-sidebar { min-width: 0; }
         .header-inner { flex-wrap: wrap; }
         .header-inner > div { min-width: 0; }
+        .header-inner > div:last-child { display: flex; gap: 0.65rem; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+        @media (max-width: 600px) {
+            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.7rem; font-size: 0.75rem; }
+        }
         .breadcrumb-bar { min-width: 0; flex-wrap: wrap; }
         .breadcrumb-bar a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; display: inline-block; vertical-align: bottom; }
         @media (max-width: 1080px) {
@@ -498,7 +502,7 @@
                     <a href="{{ '/watch/' ~ anime.id ~ '/' ~ prev_ep.id if prev_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not prev_ep else '' }}">
                         <i class="fas fa-step-backward"></i> Prev Ep
                     </a>
-                    <a href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not next_ep else '' }}">
+                    <a id="nextEpBtn" href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not next_ep else '' }}">
                         Next Ep <i class="fas fa-step-forward"></i>
                     </a>
                     <button type="button" class="ctrl-btn" onclick="toggleLights()">
@@ -804,11 +808,49 @@
             if (currentServer) autoTryNextServer(currentServer.id);
         });
         const dlBtn0 = document.getElementById('downloadCurrentBtn');
+        function dlStartedMsg(okText) {
+            const st = document.getElementById('dlStatus');
+            if (st) {
+                st.style.display = 'block';
+                st.style.color = '#6ee7b7';
+                st.textContent = okText;
+            }
+        }
         if (dlBtn0) dlBtn0.addEventListener('click', (e) => {
             if (!dlBtn0.getAttribute('href') || dlBtn0.getAttribute('href') === '#') {
                 e.preventDefault();
                 const st = document.getElementById('dlStatus');
                 if (st) { st.style.display = 'block'; st.textContent = 'This embed server has no downloadable file. Switch to an MP4 or CamStream server.'; }
+            } else {
+                dlStartedMsg('Download started ✓ check your downloads folder. Stays yours forever.');
+            }
+        });
+        document.querySelectorAll('.dl-action[download]').forEach(a => {
+            a.addEventListener('click', () => dlStartedMsg('Download started ✓ check your downloads folder.'));
+        });
+        // Settings: preferred audio rewrites the episode rail links
+        try {
+            const prefAudio = localStorage.getItem('camanime-audio');
+            if (prefAudio === 'sub' || prefAudio === 'dub') {
+                document.querySelectorAll('#epRailList a').forEach(a => {
+                    try {
+                        const u = new URL(a.href, window.location.origin);
+                        if (u.searchParams.get('audio') !== prefAudio) {
+                            u.searchParams.set('audio', prefAudio);
+                            a.href = u.toString();
+                        }
+                    } catch (err) {}
+                });
+            }
+        } catch (e) {}
+        // Settings: autoplay next episode when this one ends
+        videoEl.addEventListener('ended', () => {
+            let auto = false;
+            try { auto = localStorage.getItem('camanime-autoplay') === '1'; } catch (e) {}
+            const next = document.getElementById('nextEpBtn');
+            if (auto && next && next.getAttribute('href') && next.getAttribute('href') !== '#') {
+                showPlayerError('Finished — up next, Episode {{ ep_num + 1 }}…');
+                setTimeout(() => window.location.href = next.href, 1500);
             }
         });
         switchServer(INITIAL_SERVER);

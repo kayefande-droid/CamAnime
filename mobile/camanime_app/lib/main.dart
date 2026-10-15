@@ -759,11 +759,24 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                   Text(err!,
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: muted)),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                        backgroundColor: amber,
+                        foregroundColor: Colors.black),
+                    onPressed: _load,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try again'),
+                  ),
                 ])));
           } else {
             kids.addAll(_homeContent());
           }
-          return ListView(padding: EdgeInsets.zero, children: kids);
+          return RefreshIndicator(
+              color: amber,
+              backgroundColor: card,
+              onRefresh: _load,
+              child: ListView(padding: EdgeInsets.zero, children: kids));
         }),
       );
 

@@ -105,6 +105,18 @@ small, .muted { font-size: .85em; color: var(--text-secondary); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+/* Manual reduce-motion from Settings (data-motion="reduced") */
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important;
+}
+/* Community + comment form: roomy touch targets, stacks cleanly on phones */
+.ca-rate-btn { min-height: 2.75rem; }
+@media (max-width: 480px) {
+  #ca-guest-name { flex: 1 1 100%; min-width: 0; }
+  #ca-comment-text { flex: 1 1 100%; min-width: 0; }
+  .ca-comment-form button { flex: 1 1 100%; min-height: 3rem; }
+  .ca-rate-row { gap: .5rem; }
+}
 
 /* ── Mobile polish: filters, search, grids, banners, player, titles ── */
 /* 1. Filter ribbon scrolls instead of wrapping awkwardly */

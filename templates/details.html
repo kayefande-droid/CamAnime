@@ -517,14 +517,14 @@
 </header>
 
 <div class="banner-wrap">
-    <img src="{{ anime.banner or anime.image }}" class="banner-img" alt="{{ anime.title }}">
+    <img src="{{ anime.banner or anime.image }}" class="banner-img" alt="{{ anime.title }}" fetchpriority="high" decoding="async">
     <div class="banner-gradient"></div>
 </div>
 
 <div class="container">
     <div class="dossier-card">
         <div class="poster-col">
-            <img src="{{ anime.image }}" class="anime-poster" alt="{{ anime.title }}">
+            <img src="{{ anime.image }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async">
             <div class="scraper-status-box">
                 <strong><i class="fas fa-check-circle"></i> Multi-Source Verified</strong>
                 {% if anime.heaven_id %}

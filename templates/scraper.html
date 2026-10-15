@@ -390,7 +390,7 @@
     <!-- ─── ACTIVE ANIMEHEAVEN SHOW INSPECTOR & DIRECT MP4 PLAYER/DOWNLOADER ─── -->
     <section class="inspector-panel" id="inspectorPanel">
         <div class="inspector-top">
-            <img src="{{ selected_anime.image }}" class="inspector-poster" alt="{{ selected_anime.title }}">
+            <img src="{{ selected_anime.image }}" class="inspector-poster" alt="{{ selected_anime.title }}" decoding="async">
             <div>
                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
                     <span class="status-chip">Site ID: {{ selected_anime.site_id }}</span>
@@ -504,13 +504,14 @@
             const data = await resp.json();
             if (data.status === 'success' && data.sources && data.sources.length) {
                 const primary = data.sources[0];
-                label.textContent = `${epLabel} — Direct MP4 Stream Ready`;
                 rawUrlEl.textContent = `CDN Mirror: ${primary.url}`;
                 dlBtn.href = primary.download_url;
 
                 if (triggerDownload) {
+                    label.textContent = `${epLabel} — Download started ✓ check your downloads folder.`;
                     window.location.href = primary.download_url;
                 } else {
+                    label.textContent = `${epLabel} — Direct MP4 Stream Ready (tap Download below to keep it).`;
                     video.src = primary.proxy_url;
                     video.load();
                     video.play().catch(() => {});

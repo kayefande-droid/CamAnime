@@ -1301,6 +1301,11 @@ def promo_page():
     return render_template("promo.html", user=_current_user())
 
 
+@app.route("/settings")
+def settings_page():
+    return render_template("settings.html", user=_current_user())
+
+
 def _app_file_info(filename: str):
     import datetime
     path = os.path.join(app.static_folder or "static", "downloads", filename)
