@@ -1,5 +1,7 @@
 # CamAnime — Free Anime Streaming Website + Native Apps
 
+© 2026 kayefande-droid. All rights reserved. See LICENSE.
+
 CamAnime pairs a responsive Flask discovery website with a Flutter Android app and a shared, AniList-backed catalogue. Streaming and downloads are exposed only when configured providers are authorized to distribute the media. Made by **kayefande-droid & co.**
 
 - Website: `https://camanime.onrender.com` (auto-deploys from `main` via Render + `render.yaml`)

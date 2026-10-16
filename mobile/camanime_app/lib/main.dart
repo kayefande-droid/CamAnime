@@ -1655,7 +1655,7 @@ class _DetailScreenState extends State<DetailScreen>
   Map info = {};
   bool loading = true;
   String audio = 'sub';
-  String season = 'Season 1';
+
   final Set<int> selected = {};
   bool dlBusy = false;
   double? dlProgress;
@@ -1667,11 +1667,18 @@ class _DetailScreenState extends State<DetailScreen>
   int? myScore;
   late TabController _tabs;
 
+  /// Real episode count from the website. Never fabricates a number: titles
+  /// still airing report their aired count through `next_airing_episode`.
   int get totalEps {
     final n = int.tryParse((info['episode_count'] ?? '').toString()) ?? 0;
-    if (n > 0) return n > 200 ? 200 : n;
-    return 12;
+    if (n > 0) return n > 500 ? 500 : n;
+    final next =
+        int.tryParse((info['next_airing_episode'] ?? '').toString()) ?? 0;
+    return next > 1 ? next - 1 : 0;
   }
+
+  /// Real related seasons/series for this anime, straight from the catalogue.
+  List get seasons => (info['seasons'] as List?) ?? [];
 
   @override
   void initState() {
@@ -1752,12 +1759,40 @@ class _DetailScreenState extends State<DetailScreen>
     }
   }
 
+  /// Resolved episode bundles, memoised per episode + audio.
+  final Map<String, Map<String, dynamic>> _sourceCache = {};
+  bool _dlCancelled = false;
+
+  /// Episode sources, memoised. A resolved bundle is reused instantly so
+  /// switching episodes never re-hits the network, and the next episode is
+  /// warmed in the background so the following tap plays immediately.
   Future<Map<String, dynamic>?> _sourcesFor(int ep) async {
+    final key = '${widget.animeId}|$ep|$audio';
+    final cached = _sourceCache[key];
+    if (cached != null) return cached;
     try {
-      return await Api.episodeSources(widget.animeId, ep, audio);
+      final bundle = await Api.episodeSources(widget.animeId, ep, audio);
+      _sourceCache[key] = bundle;
+      _prefetchNext(ep);
+      return bundle;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Warm the cache for the following episode in the background (staggered so
+  /// it never competes with the episode the user is actually starting).
+  void _prefetchNext(int ep) {
+    final next = ep + 1;
+    if (totalEps > 0 && next > totalEps) return;
+    final key = '${widget.animeId}|$next|$audio';
+    if (_sourceCache.containsKey(key)) return;
+    Future<void>.delayed(const Duration(milliseconds: 400), () async {
+      try {
+        _sourceCache[key] =
+            await Api.episodeSources(widget.animeId, next, audio);
+      } catch (_) {}
+    });
   }
 
   Map<String, dynamic>? _selectServer(Map bundle) {
@@ -1829,6 +1864,7 @@ class _DetailScreenState extends State<DetailScreen>
   Future<void> _downloadEp(int ep) async {
     setState(() {
       dlBusy = true;
+      _dlCancelled = false;
       dlProgress = 0;
       dlStatus = 'Resolving Episode $ep…';
     });
@@ -1843,14 +1879,16 @@ class _DetailScreenState extends State<DetailScreen>
       }
       final url = Api.abs(server['download_url'].toString());
       final result = await Api.downloadEpisodeFile(url, '$title.mp4',
+          isCancelled: () => _dlCancelled,
           onProgress: (rec, total) {
-        if (mounted && total > 0) {
-          setState(() {
-            dlProgress = rec / total;
-            dlStatus = 'Saving Episode $ep… ${(100 * rec / total).round()}%';
+            if (mounted && total > 0) {
+              setState(() {
+                dlProgress = rec / total;
+                dlStatus =
+                    'Saving Episode $ep… ${(100 * rec / total).round()}%';
+              });
+            }
           });
-        }
-      });
       await MediaLibrary.record(
         file: result.file,
         title: title,
@@ -1882,11 +1920,12 @@ class _DetailScreenState extends State<DetailScreen>
     final eps = selected.toList()..sort();
     setState(() {
       dlBusy = true;
+      _dlCancelled = false;
       dlStatus = 'Starting ${eps.length} downloads…';
     });
     var done = 0;
     for (final ep in eps) {
-      if (!mounted) break;
+      if (!mounted || _dlCancelled) break;
       setState(() {
         dlStatus = 'Episode $ep (${done + 1}/${eps.length})…';
         dlProgress = done / eps.length;
@@ -1897,7 +1936,17 @@ class _DetailScreenState extends State<DetailScreen>
         final server = bundle == null ? null : _downloadSource(bundle);
         if (server != null) {
           final result = await Api.downloadEpisodeFile(
-              Api.abs(server['download_url'].toString()), '$title.mp4');
+              Api.abs(server['download_url'].toString()), '$title.mp4',
+              isCancelled: () => _dlCancelled,
+              onProgress: (rec, total) {
+                if (mounted && total > 0) {
+                  setState(() {
+                    dlProgress = (done + rec / total) / eps.length;
+                    dlStatus =
+                        'Episode $ep (${done + 1}/${eps.length})… ${(100 * rec / total).round()}%';
+                  });
+                }
+              });
           await MediaLibrary.record(
             file: result.file,
             title: title,
@@ -1914,7 +1963,9 @@ class _DetailScreenState extends State<DetailScreen>
       setState(() {
         dlBusy = false;
         dlProgress = null;
-        dlStatus = 'Finished: $done/${eps.length} saved to My Library.';
+        dlStatus = _dlCancelled
+            ? 'Cancelled: $done/${eps.length} saved to My Library.'
+            : 'Finished: $done/${eps.length} saved to My Library.';
         selected.clear();
       });
     }
@@ -1997,7 +2048,10 @@ class _DetailScreenState extends State<DetailScreen>
                                             color: amber,
                                             fontWeight: FontWeight.w700)),
                                     const SizedBox(height: 8),
-                                    Text('$totalEps episodes · $season',
+                                    Text(
+                                        totalEps > 0
+                                            ? '$totalEps episodes · ${seasons.length} related'
+                                            : 'Episode list not published yet',
                                         style: const TextStyle(
                                             color: muted, fontSize: 12)),
                                   ])),
@@ -2021,6 +2075,86 @@ class _DetailScreenState extends State<DetailScreen>
                               style:
                                   const TextStyle(color: muted, fontSize: 13)),
                         ],
+                        if (seasons.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          Row(children: [
+                            const Text('Seasons & related series',
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(width: 8),
+                            Text('${seasons.length}',
+                                style: const TextStyle(
+                                    color: muted, fontSize: 12)),
+                          ]),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 196,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: seasons.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 10),
+                              itemBuilder: (_, i) {
+                                final raw = seasons[i];
+                                final s = raw is Map
+                                    ? raw.cast<String, dynamic>()
+                                    : {};
+                                final id = (s['id'] ?? '').toString();
+                                return GestureDetector(
+                                  onTap: id.isEmpty
+                                      ? null
+                                      : () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                              builder: (_) => DetailScreen(
+                                                  animeId: id,
+                                                  title: (s['title'] ?? 'Anime')
+                                                      .toString()))),
+                                  child: SizedBox(
+                                    width: 112,
+                                    child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                            child: AspectRatio(
+                                                aspectRatio: 2 / 2.85,
+                                                child: CachedPosterImage(
+                                                    url: (s['image'] ?? '')
+                                                        .toString())),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                              (s['relation'] ?? 'Related')
+                                                  .toString()
+                                                  .toUpperCase(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  color: amber,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800)),
+                                          Text(
+                                              (s['title'] ?? 'Untitled')
+                                                  .toString(),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w700)),
+                                          Text(
+                                              '${s['episode_count'] ?? '?'} eps · ${s['year'] ?? '—'}',
+                                              style: const TextStyle(
+                                                  color: muted, fontSize: 10)),
+                                        ]),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         Row(children: [
                           Expanded(
@@ -2031,7 +2165,9 @@ class _DetailScreenState extends State<DetailScreen>
                                   minimumSize: const Size(0, 50)),
                               onPressed: dlBusy ? null : () => _play(1),
                               icon: const Icon(Icons.play_arrow),
-                              label: const Text('Watch Ep 1'),
+                              label: Text(totalEps > 1
+                                  ? 'Stream episodes'
+                                  : 'Watch Ep 1'),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2087,26 +2223,60 @@ class _DetailScreenState extends State<DetailScreen>
                               await p.setString('app_audio', s.first);
                             },
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: season,
-                              decoration: const InputDecoration(
-                                  labelText: 'Season',
-                                  contentPadding: EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 8)),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'Season 1', child: Text('Season 1')),
-                              ],
-                              onChanged: (v) =>
-                                  setState(() => season = v ?? 'Season 1'),
+                          if (seasons.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: widget.animeId,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                    labelText: 'Switch season',
+                                    contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8)),
+                                items: [
+                                  DropdownMenuItem(
+                                      value: widget.animeId,
+                                      child: Text(
+                                          (info['title'] ?? 'This season')
+                                              .toString(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis)),
+                                  for (final raw in seasons)
+                                    if (raw is Map &&
+                                        (raw['id'] ?? '').toString().isNotEmpty)
+                                      DropdownMenuItem(
+                                          value: raw['id'].toString(),
+                                          child: Text(
+                                              '${(raw['relation'] ?? 'Related').toString()}: ${(raw['title'] ?? 'Untitled')}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis)),
+                                ],
+                                onChanged: (v) {
+                                  if (v == null || v == widget.animeId) return;
+                                  final match = seasons.firstWhere(
+                                      (r) =>
+                                          r is Map &&
+                                          (r['id'] ?? '').toString() == v,
+                                      orElse: () => null);
+                                  if (match == null) return;
+                                  Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => DetailScreen(
+                                              animeId: v,
+                                              title: (match['title'] ?? 'Anime')
+                                                  .toString())));
+                                },
+                              ),
                             ),
-                          ),
+                          ],
                         ]),
                         const SizedBox(height: 12),
                         Row(children: [
-                          Text('Episodes (1–$totalEps)',
+                          Text(
+                              totalEps > 0
+                                  ? 'Episodes (1–$totalEps)'
+                                  : 'Episodes',
                               style: const TextStyle(
                                   fontSize: 17, fontWeight: FontWeight.w800)),
                           const Spacer(),
@@ -2123,6 +2293,18 @@ class _DetailScreenState extends State<DetailScreen>
                                   ? 'Clear all'
                                   : 'Select all')),
                         ]),
+                        if (totalEps == 0) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                                color: card2,
+                                borderRadius: BorderRadius.circular(12)),
+                            child: const Text(
+                                'The website has not published an episode list for this title yet — no numbers are invented. You can still try Episode 1 below.',
+                                style: TextStyle(color: muted, fontSize: 12)),
+                          ),
+                        ],
                         const Text(
                             'Tap to play · tick to multi-select · ⬇ saves the direct MP4.',
                             style: TextStyle(color: muted, fontSize: 12)),
@@ -2222,6 +2404,16 @@ class _DetailScreenState extends State<DetailScreen>
                           const SizedBox(height: 8),
                           LinearProgressIndicator(
                               value: dlProgress, color: mint),
+                        ],
+                        if (dlBusy) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                              onPressed: () =>
+                                  setState(() => _dlCancelled = true),
+                              icon: const Icon(Icons.cancel_outlined,
+                                  size: 18, color: pink),
+                              label: const Text('Cancel download',
+                                  style: TextStyle(color: pink))),
                         ],
                         if (dlStatus.isNotEmpty) ...[
                           const SizedBox(height: 6),

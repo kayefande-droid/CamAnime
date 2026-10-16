@@ -9,6 +9,14 @@
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    {% for srv in servers %}{% if srv.stream_url and srv.stream_url.startswith('http') %}<link rel="preconnect" href="https://{{ srv.stream_url.split('/')[2] }}" crossorigin>
+    <link rel="dns-prefetch" href="https://{{ srv.stream_url.split('/')[2] }}">
+    {% endif %}{% endfor %}{% if next_ep %}<link rel="prefetch" href="/watch/{{ anime.id }}/{{ next_ep.id }}?audio={{ preferred_audio }}">
+    {% endif %}
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
@@ -477,7 +485,7 @@
         <div class="player-column">
             <!-- ─── VIDEO PLAYER STAGE (Supports Native MP4, HLS.js M3U8 + WebVTT Subtitles, and Iframe Fallback) ─── -->
             <div class="video-stage" id="videoStage">
-                <video id="nativeVideo" controls playsinline preload="metadata" crossorigin="anonymous" style="display: none;"></video>
+                <video id="nativeVideo" controls playsinline preload="auto" crossorigin="anonymous" style="display: none;"></video>
                 <iframe id="embedIframe" src="{{ stream_url }}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="display: none;"></iframe>
                 <button type="button" id="skipIntroBtn" class="skip-intro-btn" onclick="skipIntro()">
                     <i class="fas fa-forward"></i> Skip Intro
@@ -710,7 +718,15 @@
             if (window.Hls && Hls.isSupported()) {
                 hlsInstance = new Hls({
                     enableWorker: true,
+                    lowLatencyMode: false,
+                    backBufferLength: 30,
                     maxBufferLength: 30,
+                    maxMaxBufferLength: 120,
+                    maxBufferSize: 60 * 1000 * 1000,
+                    startLevel: -1,
+                    capLevelToPlayerSize: true,
+                    fragLoadingMaxRetry: 6,
+                    manifestLoadingMaxRetry: 4,
                 });
                 hlsInstance.loadSource(srv.stream_url);
                 hlsInstance.attachMedia(video);

@@ -474,6 +474,34 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .mini-poster-sub {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 0.15rem;
+        }
+        .mini-poster-fallback {
+            width: 100%;
+            aspect-ratio: 2 / 2.8;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-surface);
+            color: var(--text-muted);
+            font-size: 1.6rem;
+        }
+        .season-count-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            background: rgba(255, 179, 71, 0.14);
+            border: 1px solid var(--border-accent);
+            border-radius: 999px;
+            padding: 0.2rem 0.7rem;
+        }
 
         /* Responsive: fluid grids, wrapping header, compact banner offset on phones */
         .dossier-card > *, .info-col, .two-col-layout > * { min-width: 0; }
@@ -662,14 +690,22 @@
             <div class="panel-title">
                 <span class="accent-dot"></span> Seasons, Sequels & Related Releases
             </div>
+            <span class="season-count-badge">{{ anime.relations | length }} SEASON{{ '' if anime.relations | length == 1 else 'S' }}</span>
         </div>
         <div class="mini-grid">
             {% for rel in anime.relations %}
-            <a href="/anime/{{ rel.id }}" class="mini-poster-card">
-                <img src="{{ rel.image }}" loading="lazy" alt="{{ rel.title }}">
+            <a href="/anime/{{ rel.id }}" class="mini-poster-card"
+               title="{{ rel.title or 'Untitled' }}{% if rel.relation %} — {{ rel.relation }}{% endif %}">
+                {% if rel.image %}
+                <img src="{{ rel.image }}" loading="lazy" alt="{{ rel.title or 'Related anime' }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <div class="mini-poster-fallback" style="display:none;"><i class="fas fa-layer-group"></i></div>
+                {% else %}
+                <div class="mini-poster-fallback"><i class="fas fa-layer-group"></i></div>
+                {% endif %}
                 <div class="mini-poster-body">
-                    <div class="mini-poster-rel">{{ rel.relation }} • {{ rel.format }}{% if rel.year %} • {{ rel.year }}{% endif %}</div>
-                    <div class="mini-poster-title">{{ rel.title }}</div>
+                    <div class="mini-poster-rel">{{ (rel.relation or 'RELATED') | upper }}{% if rel.format %} • {{ rel.format }}{% endif %}{% if rel.year %} • {{ rel.year }}{% endif %}</div>
+                    <div class="mini-poster-title">{{ rel.title or 'Untitled' }}</div>
+                    <div class="mini-poster-sub">{% if rel.episode_count %}{{ rel.episode_count }} EPISODE{{ '' if rel.episode_count == 1 else 'S' }}{% elif rel.total_episodes %}{{ rel.total_episodes }} EPISODE{{ '' if rel.total_episodes == 1 else 'S' }}{% elif rel.episode %}{{ rel.episode }}{% else %}EPISODES TBA{% endif %}{% if rel.status %} • {{ rel.status }}{% endif %}</div>
                 </div>
             </a>
             {% endfor %}
@@ -690,7 +726,7 @@
             <a href="/anime/{{ rec.id }}" class="mini-poster-card">
                 <img src="{{ rec.image }}" loading="lazy" alt="{{ rec.title }}">
                 <div class="mini-poster-body">
-                    <div class="mini-poster-rel">★ {{ rec.rating }} • {{ rec.episode }}</div>
+                    <div class="mini-poster-rel">★ {{ rec.rating }}{% if rec.episode %} • {{ rec.episode }}{% endif %}</div>
                     <div class="mini-poster-title">{{ rec.title }}</div>
                 </div>
             </a>

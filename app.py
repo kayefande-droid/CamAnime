@@ -66,6 +66,82 @@ app.secret_key = _load_secret_key()
 
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400  # /static cached 1 day
 
+# ── Session / cookie hardening ─────────────────────────
+# Secure cookies require HTTPS; Render terminates TLS so this is correct in
+# production. Set CAMANIME_COOKIE_SECURE=0 for local plain-HTTP development.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("CAMANIME_COOKIE_SECURE", "1") != "0",
+    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 14,
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+)
+
+# ── Lightweight in-memory rate limiting (stdlib only, no new deps) ──
+_RATE_BUCKETS: Dict[str, List[float]] = {}
+_RATE_RULES = (
+    # (path prefix, max requests, window in seconds)
+    ("/api/auth/login", 10, 300),
+    ("/api/auth/register", 5, 3600),
+    ("/api/download/video", 30, 600),
+    ("/api/proxy/", 300, 600),
+    ("/api/community/comment", 20, 600),
+    ("/api/community/like", 60, 600),
+    ("/api/community/rate", 30, 600),
+    ("/api/track", 120, 600),
+    ("/api/admin/", 10, 300),
+)
+
+# Patterns that are only ever requested by vulnerability scanners.
+_BLOCKED_PATTERNS = re.compile(
+    r"(?i)(\.env|\.git|\.svn|wp-admin|wp-login|wp-config|xmlrpc\.php|"
+    r"phpmyadmin|/\.aws/|/\.ssh/|id_rsa|/etc/passwd|base64_decode|"
+    r"\.sql$|\.bak$|\.old$|/actuator|/c99\.php|/boaform/|\.DS_Store)"
+)
+
+_AUTHENTICATED_PATHS = ("/admin", "/settings", "/login", "/logout")
+
+
+def _client_ip() -> str:
+    """Real client IP, honouring Render's proxy header."""
+    forwarded = (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+    return forwarded or request.remote_addr or "unknown"
+
+
+def _rate_limited(path: str) -> bool:
+    """Sliding-window limiter for sensitive endpoints."""
+    now = time.time()
+    for prefix, limit, window in _RATE_RULES:
+        if path.startswith(prefix):
+            key = f"{prefix}|{_client_ip()}"
+            bucket = _RATE_BUCKETS.setdefault(key, [])
+            cutoff = now - window
+            bucket[:] = [t for t in bucket if t >= cutoff]
+            if len(bucket) >= limit:
+                return True
+            bucket.append(now)
+            return False
+    return False
+
+
+@app.before_request
+def _guard_request():
+    """Reject scanner traffic, oversized bodies and abusive request rates."""
+    path = request.path or "/"
+    if _BLOCKED_PATTERNS.search(path):
+        return jsonify({"status": "error", "error": "Not found."}), 404
+    if len(path) > 512:
+        return jsonify({"status": "error", "error": "Bad request."}), 400
+    if request.method in ("POST", "PUT", "PATCH") and (request.content_length or 0) > 2 * 1024 * 1024:
+        return jsonify({"status": "error", "error": "Payload too large."}), 413
+    if _rate_limited(path):
+        resp = jsonify({"status": "error",
+                        "error": "Too many requests. Please slow down and try again shortly."})
+        resp.status_code = 429
+        resp.headers["Retry-After"] = "60"
+        return resp
+    return None
+
 
 @app.after_request
 def _speed_headers(resp):
@@ -549,6 +625,15 @@ def details(anime_id: int):
         if node.get("type") == "ANIME" and node.get("id"):
             rel_card = format_anime_card(node)
             rel_card["relation"] = (edge.get("relationType") or "RELATED").replace("_", " ")
+            # Accurate per-season episode count: a null `episodes` is normal for
+            # titles still airing, so use the aired count instead of a blank or
+            # invented number.
+            _count = node.get("episodes") if isinstance(node.get("episodes"), int) else None
+            _next = node.get("nextAiringEpisode") or {}
+            _next_num = _next.get("episode") if isinstance(_next, dict) else None
+            if isinstance(_next_num, int) and _next_num > 1:
+                _count = max(_count or 0, _next_num - 1)
+            rel_card["episode_count"] = _count
             relations.append(rel_card)
 
     # Order seasons chronologically: prequels/parents first, then by year
@@ -664,6 +749,15 @@ def watch(anime_id: int, ep_num: int):
         if node.get("type") == "ANIME" and node.get("id"):
             rel_card = format_anime_card(node)
             rel_card["relation"] = (edge.get("relationType") or "RELATED").replace("_", " ")
+            # Accurate per-season episode count: a null `episodes` is normal for
+            # titles still airing, so use the aired count instead of a blank or
+            # invented number.
+            _count = node.get("episodes") if isinstance(node.get("episodes"), int) else None
+            _next = node.get("nextAiringEpisode") or {}
+            _next_num = _next.get("episode") if isinstance(_next, dict) else None
+            if isinstance(_next_num, int) and _next_num > 1:
+                _count = max(_count or 0, _next_num - 1)
+            rel_card["episode_count"] = _count
             relations.append(rel_card)
 
     return render_template(
@@ -1011,7 +1105,9 @@ def proxy_video():
 
         def generate():
             try:
-                for chunk in upstream.iter_content(chunk_size=131072):
+                # 256 KB chunks keep the pipe full on fast connections without
+                # delaying the first frame on slow ones.
+                for chunk in upstream.iter_content(chunk_size=262144):
                     if chunk:
                         yield chunk
             finally:
@@ -1077,7 +1173,9 @@ def download_video():
 
         def generate():
             try:
-                for chunk in upstream.iter_content(chunk_size=131072):
+                # Downloads stream as fast as the user's connection allows;
+                # bigger chunks cut per-chunk overhead on high-bandwidth links.
+                for chunk in upstream.iter_content(chunk_size=524288):
                     if chunk:
                         yield chunk
             finally:
@@ -1135,8 +1233,19 @@ def apply_security_headers(resp):
     resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    csp = ("default-src 'self' https: data: blob:; " "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " "img-src 'self' https: data: blob:; " "media-src 'self' https: blob: data:; " "frame-src 'self' https:; " "connect-src 'self' https: blob:;")
+    resp.headers.setdefault("X-XSS-Protection", "1; mode=block")
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    resp.headers.setdefault("Cross-Origin-Resource-Policy", "same-site")
+    # Only meaningful over HTTPS; browsers ignore HSTS on plain HTTP.
+    resp.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    csp = ("default-src 'self' https: data: blob:; " "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " "img-src 'self' https: data: blob:; " "media-src 'self' https: blob: data:; " "frame-src 'self' https:; " "connect-src 'self' https: blob:; " "object-src 'none'; " "base-uri 'self'; " "form-action 'self'; " "frame-ancestors 'self';")
     resp.headers.setdefault("Content-Security-Policy", csp)
+    # Private pages must never be cached by a shared proxy or restored from a
+    # stale cache after logout. Public pages keep caching for fast navigation.
+    if resp.mimetype == "text/html" and any(
+            (request.path or "").startswith(p) for p in _AUTHENTICATED_PATHS):
+        resp.headers["Cache-Control"] = "private, no-store"
     return resp
 
 
@@ -1561,6 +1670,12 @@ def _anime_metadata(anime_id: int):
         return None
     card = format_anime_card(raw)
     count = raw.get("episodes") if isinstance(raw.get("episodes"), int) else None
+    # Shows still airing report a null `episodes`; derive the real count from
+    # the next airing episode so the app never shows a guessed "12 episodes".
+    next_airing = raw.get("nextAiringEpisode") or {}
+    next_ep_num = next_airing.get("episode") if isinstance(next_airing, dict) else None
+    if isinstance(next_ep_num, int) and next_ep_num > 1:
+        count = max(count or 0, next_ep_num - 1)
     known_streaming = raw.get("streamingEpisodes") or []
     relations = []
     for edge in ((raw.get("relations") or {}).get("edges") or []):
@@ -1577,7 +1692,10 @@ def _anime_metadata(anime_id: int):
                                                (raw.get("title") or {}).get("romaji"),
                                                (raw.get("title") or {}).get("native")) if t],
             "seasons": relations,
-            "episode_count": count, "streaming_metadata_count": len(known_streaming),
+            "season_count": len(relations),
+            "episode_count": count,
+            "next_airing_episode": next_ep_num,
+            "streaming_metadata_count": len(known_streaming),
             "streaming_metadata_available": bool(known_streaming),
             "streaming_metadata": [{"title": x.get("title", ""),
                                     "thumbnail": x.get("thumbnail", ""),
