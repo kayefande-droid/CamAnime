@@ -40,6 +40,8 @@ body{background:#07080d;color:#f3f5fa;font-family:'Outfit','Inter',sans-serif;mi
 .seg button.active{border-color:#FFB347;color:#FFB347}
 .name-row{display:flex;gap:.6rem;flex-wrap:wrap}
 .name-row input{flex:1 1 220px;min-width:0;background:#141926;border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
+.login-fields{display:flex;gap:.6rem;flex-wrap:wrap;margin:.4rem 0 .2rem}
+.login-fields input{flex:1 1 200px;min-width:0;background:#141926;border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
 .btn{border:none;border-radius:999px;padding:.75rem 1.4rem;font-weight:800;font-size:.9rem;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem;text-decoration:none}
 .btn-save{background:linear-gradient(135deg,#FFB347,#FF5E62);color:#07080d}
 .btn-danger{background:rgba(255,94,98,.14);border:1px solid rgba(255,94,98,.5);color:#fda4af}
@@ -67,6 +69,35 @@ body{background:#07080d;color:#f3f5fa;font-family:'Outfit','Inter',sans-serif;mi
       <button type="button" class="theme-pick" data-theme-name="sakura"><span class="theme-dot" style="background:linear-gradient(135deg,#ff7aa8,#3a1530)"></span>Sakura</button>
       <button type="button" class="theme-pick" data-theme-name="forest"><span class="theme-dot" style="background:linear-gradient(135deg,#34d399,#07120e)"></span>Forest</button>
     </div>
+  </div>
+
+  <div class="set-card">
+    {% if user %}
+    <h2><i class="fas fa-user-check"></i> Account
+      {% if user.get('role') == 'admin' %}<span style="font-size:.8rem;color:#34d399;border:1px solid rgba(52,211,153,.4);border-radius:999px;padding:.15rem .7rem;margin-left:.4rem">Admin</span>{% endif %}
+    </h2>
+    <p>Signed in as <b>{{ user.get('name') or user.get('email') }}</b>{% if user.get('email') and user.get('name') %} ({{ user.get('email') }}){% endif %}.</p>
+    <div class="btn-row">
+      {% if user.get('role') == 'admin' %}
+      <a class="btn btn-save" href="/admin"><i class="fas fa-shield-halved"></i> Open admin tools</a>
+      {% endif %}
+      <a class="btn btn-danger" href="/logout"><i class="fas fa-arrow-right-from-bracket"></i> Sign out</a>
+    </div>
+    {% else %}
+    <h2><i class="fas fa-right-to-bracket"></i> Sign in</h2>
+    <p>Save your comments, ratings and watch progress to your CamAnime account. Watching works without an account too. Admins sign in with the Admin mode.</p>
+    <form method="POST" action="/login?next=/settings" class="login-fields">
+      <input type="hidden" name="action" value="signin">
+      <input type="email" name="email" required autocomplete="email" placeholder="Email" aria-label="Email">
+      <input type="password" name="password" required autocomplete="current-password" placeholder="Password" aria-label="Password">
+      <div class="btn-row">
+        <button type="submit" class="btn btn-save"><i class="fas fa-right-to-bracket"></i> Sign in</button>
+        <button type="submit" class="btn btn-ghost" name="action" value="signup"><i class="fas fa-user-plus"></i> Create account</button>
+        <a class="btn btn-ghost" style="color:#34d399" href="/login?mode=admin&next=/admin"><i class="fas fa-shield-halved"></i> Admin sign in</a>
+      </div>
+    </form>
+    {% endif %}
+    <p class="storage-line">Passwords are stored hashed — never in plain text.</p>
   </div>
 
   <div class="set-card">

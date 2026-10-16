@@ -53,7 +53,33 @@ const List<Map<String, dynamic>> avatarPresets = [
   {'icon': IconData(0xe548), 'color': 0xFFA3E635}, // game
 ];
 
-void main() => runApp(const CamAnimeApp());
+// ── App modes ──────────────────────────────────────────
+class AppMode {
+  static const String stream = 'stream';
+  static const String download = 'download';
+  static const List<String> all = [stream, download];
+
+  static Future<String> get() async {
+    final p = await SharedPreferences.getInstance();
+    final saved = p.getString('app_mode');
+    return saved == download ? download : stream;
+  }
+
+  static Future<void> set(String mode) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('app_mode', mode == download ? download : stream);
+  }
+}
+
+/// Global mode holder. Switching modes rebuilds the whole UI tree, which the
+/// user experiences as an app restart landing them in the requested mode.
+final ValueNotifier<String> appMode = ValueNotifier<String>(AppMode.stream);
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  appMode.value = await AppMode.get();
+  runApp(const CamAnimeApp());
+}
 
 class CamAnimeApp extends StatefulWidget {
   const CamAnimeApp({super.key});
@@ -153,10 +179,20 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      // Re-keying the tree on each mode switch rebuilds every screen, tab and
+      // pushed route fresh, so the user genuinely lands in the requested mode.
+      valueListenable: appMode,
+      builder: (_, String mode, __) => _buildApp(mode),
+    );
+  }
+
+  Widget _buildApp(String mode) {
     final t = appThemes[themeName] ?? appThemes['midnight']!;
     final seed = Color(t['seed'] as int);
     final scaffold = Color(t['bg'] as int);
     return MaterialApp(
+      key: ValueKey('app-$mode-$themeName'),
       title: 'CamAnime',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true).copyWith(
@@ -498,6 +534,13 @@ class Api {
     await p.remove('user_email');
   }
 
+  /// Signed-in user profile: also tells us the role (admin vs user).
+  static Future<Map<String, dynamic>> me() async {
+    final r = await _get(Uri.parse('${base()}/api/auth/me'),
+        timeout: const Duration(seconds: 12));
+    return json.decode(r.body) as Map<String, dynamic>;
+  }
+
   /// Synced admin/secret status — admin only, same backend the website uses.
   static Future<Map<String, dynamic>> adminSync() async {
     final r = await http
@@ -617,6 +660,130 @@ class Api {
     } finally {
       client.close();
     }
+  }
+}
+
+/// One playable episode, carrying enough context for resume and back-to-back
+/// playback without leaking UI state through globals.
+class _EpisodeSource {
+  final String url;
+  final String label;
+  final String animeId;
+  final int? episode;
+  const _EpisodeSource(
+      {required this.url,
+      required this.label,
+      this.animeId = '',
+      this.episode});
+}
+
+/// Where the user left off, per anime + episode, in plain JSON prefs.
+class WatchProgress {
+  static const _key = 'watch_progress_v1';
+
+  static Future<Map<String, dynamic>> _load() async {
+    final p = await SharedPreferences.getInstance();
+    try {
+      return (json.decode(p.getString(_key) ?? '{}') as Map)
+          .cast<String, dynamic>();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> _save(Map<String, dynamic> map) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_key, json.encode(map));
+  }
+
+  /// Latest saved position for an episode. Returns null when nothing was
+  /// meaningfully started or the episode was nearly finished.
+  static Future<int?> position(String animeId, int episode) async {
+    final data = await _load();
+    final entry = (data[animeId] as Map?)?[episode.toString()];
+    if (entry is! Map) return null;
+    final pos = (int.tryParse('${entry['posMs'] ?? ''}') ?? 0);
+    final dur = (int.tryParse('${entry['durMs'] ?? ''}') ?? 0);
+    if (pos < 15000 || (dur > 0 && pos >= dur * 0.95)) return null;
+    if (dur > 0 && pos > dur) return null;
+    return pos;
+  }
+
+  /// The most recently touched episode for this anime, for a resume chip.
+  static Future<Map<String, dynamic>?> latest(String animeId) async {
+    final data = await _load();
+    final forAnime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
+    if (forAnime.isEmpty) return null;
+    Map<String, dynamic>? best;
+    var bestT = -1;
+    forAnime.forEach((ep, entry) {
+      if (entry is Map) {
+        final t = int.tryParse('${entry['updated'] ?? ''}') ?? 0;
+        if (t > bestT) {
+          bestT = t;
+          best = {
+            ...entry.cast<String, dynamic>(),
+            'ep': int.tryParse(ep) ?? 0
+          };
+        }
+      }
+    });
+    final b = best;
+    if (b == null) return null;
+    final pos = int.tryParse('${(b['posMs'] ?? '').toString()}') ?? 0;
+    final dur = int.tryParse('${(b['durMs'] ?? '').toString()}') ?? 0;
+    if (pos < 15000 || (dur > 0 && pos >= dur * 0.95) || (b['ep'] ?? 0) == 0) {
+      return null;
+    }
+    return b;
+  }
+
+  static Future<void> save(
+      {required String animeId,
+      required String animeTitle,
+      required String image,
+      required int episode,
+      required int posMs,
+      required int durMs}) async {
+    final data = await _load();
+    final anime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
+    anime[episode.toString()] = {
+      'title': animeTitle.substring(0, animeTitle.length.clamp(0, 80)),
+      'image': image,
+      'posMs': posMs,
+      'durMs': durMs,
+      'updated': DateTime.now().millisecondsSinceEpoch,
+    };
+    data[animeId] = anime;
+    // Keep the map bounded so prefs never balloon on a long-lived device.
+    while (data.length > 60) {
+      String? oldest;
+      var oldestT = 1 << 40;
+      for (final entry in data.entries) {
+        final anime = (entry.value as Map?) ?? {};
+        var t = 1 << 40;
+        for (final row in anime.values) {
+          if (row is Map) {
+            t = (int.tryParse('${row['updated'] ?? ''}') ?? t);
+            if (t < oldestT) {
+              oldestT = t;
+              oldest = entry.key.toString();
+            }
+          }
+        }
+      }
+      if (oldest == null) break;
+      data.remove(oldest);
+    }
+    await _save(data);
+  }
+
+  static Future<void> clear(String animeId, int episode) async {
+    final data = await _load();
+    final anime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
+    anime.remove(episode.toString());
+    data[animeId] = anime;
+    await _save(data);
   }
 }
 
@@ -1759,7 +1926,57 @@ class _DetailScreenState extends State<DetailScreen>
     }
   }
 
+  /// Opens the selected episodes back-to-back (Stream mode).
+  Future<void> _playSelected() async {
+    if (selected.isEmpty) return;
+    final eps = selected.toList()..sort();
+    final sources = <_EpisodeSource>[];
+    for (final ep in eps) {
+      final bundle = await _sourcesFor(ep);
+      currentEpisode = ep;
+      if (bundle == null) continue;
+      final server = _selectServer(bundle);
+      final url = (server?['stream_url'] ?? '').toString();
+      if (url.isEmpty) continue;
+      sources.add(_EpisodeSource(
+        url: url,
+        label:
+            '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})',
+        animeId: widget.animeId,
+        episode: ep,
+      ));
+    }
+    if (!mounted) return;
+    if (sources.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'No playable stream resolved for the picked episodes — try again.')));
+      return;
+    }
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => PlayerScreen(
+                url: sources.first.url,
+                label: sources.first.label,
+                playlist: sources)));
+  }
+
+  /// Which of the two app modes we are in right now (stream / download).
+  String mode = AppMode.stream;
+  int? currentEpisode;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (mode != appMode.value) mode = appMode.value;
+  }
+
+  bool get _downloading => appMode.value == AppMode.download;
+
   /// Resolved episode bundles, memoised per episode + audio.
+  /// Also carries the phase where bundles are reused instantly for instant
+  /// switching, and the next episode is warmed in the background.
   final Map<String, Map<String, dynamic>> _sourceCache = {};
   bool _dlCancelled = false;
 
@@ -1857,9 +2074,14 @@ class _DetailScreenState extends State<DetailScreen>
         MaterialPageRoute(
             builder: (_) => PlayerScreen(
                 url: url,
+                resume: true,
                 label:
                     '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})')));
   }
+
+  /// One-tap “continue where you left off” chip on the detail page.
+  Future<Map<String, dynamic>?> _resumeTarget() =>
+      WatchProgress.latest(widget.animeId);
 
   Future<void> _downloadEp(int ep) async {
     setState(() {
@@ -2156,6 +2378,46 @@ class _DetailScreenState extends State<DetailScreen>
                           ),
                         ],
                         const SizedBox(height: 16),
+                        FutureBuilder<Map<String, dynamic>?>(
+                          future: _resumeTarget(),
+                          builder: (context, snap) {
+                            final entry = snap.data;
+                            if (entry == null || !snap.hasData) {
+                              return const SizedBox.shrink();
+                            }
+                            final ep = (entry['ep'] ?? 0) as int;
+                            final pos =
+                                (int.tryParse('${entry['posMs'] ?? ''}') ?? 0);
+                            final dur =
+                                (int.tryParse('${entry['durMs'] ?? ''}') ?? 0);
+                            final minsLeft =
+                                dur > pos ? ((dur - pos) / 60000).round() : 0;
+                            final left =
+                                minsLeft > 0 ? ' · ${minsLeft} min left' : '';
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: Card(
+                                color: mint.withValues(alpha: 0.12),
+                                child: ListTile(
+                                  leading: const Icon(
+                                      Icons.replay_circle_filled,
+                                      color: mint),
+                                  title: Text('Continue watching — Ep $ep',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w800)),
+                                  subtitle: Text(
+                                      'Resumes where you left off$left',
+                                      style: const TextStyle(
+                                          color: muted, fontSize: 12)),
+                                  trailing: TextButton(
+                                      onPressed: () => _play(ep),
+                                      child: const Text('Resume')),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
                         Row(children: [
                           Expanded(
                             child: FilledButton.icon(
@@ -2305,9 +2567,11 @@ class _DetailScreenState extends State<DetailScreen>
                                 style: TextStyle(color: muted, fontSize: 12)),
                           ),
                         ],
-                        const Text(
-                            'Tap to play · tick to multi-select · ⬇ saves the direct MP4.',
-                            style: TextStyle(color: muted, fontSize: 12)),
+                        Text(
+                            _downloading
+                                ? 'Tick episodes to save for offline · tap the ticket to play too.'
+                                : 'Tap to stream · tick to build a queue that plays one after another.',
+                            style: const TextStyle(color: muted, fontSize: 12)),
                         const SizedBox(height: 8),
                         GridView.builder(
                           shrinkWrap: true,
@@ -2324,7 +2588,13 @@ class _DetailScreenState extends State<DetailScreen>
                             final on = selected.contains(ep);
                             return InkWell(
                               borderRadius: BorderRadius.circular(12),
-                              onTap: () => _play(ep),
+                              // Stream mode: tap plays now, tick queues it.
+                              // Download mode: tap selects, tick selects too.
+                              onTap: () => _downloading
+                                  ? setState(() => on
+                                      ? selected.remove(ep)
+                                      : selected.add(ep))
+                                  : _play(ep),
                               onLongPress: () => setState(() {
                                 on ? selected.remove(ep) : selected.add(ep);
                               }),
@@ -2388,16 +2658,25 @@ class _DetailScreenState extends State<DetailScreen>
                           width: double.infinity,
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
-                                backgroundColor: mint,
+                                backgroundColor:
+                                    _downloading ? mint : Colors.purple,
                                 foregroundColor: Colors.black,
                                 minimumSize: const Size(0, 50)),
-                            onPressed: (dlBusy || selected.isEmpty)
+                            onPressed: selected.isEmpty
                                 ? null
-                                : _downloadSelected,
-                            icon: const Icon(Icons.download),
-                            label: Text(selected.isEmpty
-                                ? 'Download selected (tick episodes)'
-                                : 'Download ${selected.length} selected'),
+                                : (_downloading
+                                    ? (dlBusy ? null : _downloadSelected)
+                                    : _playSelected),
+                            icon: Icon(_downloading
+                                ? Icons.download
+                                : Icons.play_arrow_rounded),
+                            label: Text(_downloading
+                                ? (selected.isEmpty
+                                    ? 'Download selected (tick episodes)'
+                                    : 'Download ${selected.length} selected')
+                                : (selected.isEmpty
+                                    ? 'Stream selected (tick episodes)'
+                                    : 'Back-to-back stream ${selected.length} selected')),
                           ),
                         ),
                         if (dlProgress != null) ...[
@@ -2635,11 +2914,21 @@ class PlayerScreen extends StatefulWidget {
   final String url;
   final String label;
   final bool localFile;
-  const PlayerScreen(
-      {super.key,
-      required this.url,
-      required this.label,
-      this.localFile = false});
+
+  /// Back-to-back queue in Stream mode. First entry is the one that plays;
+  /// the rest auto-advance on completion.
+  final List<_EpisodeSource> playlist;
+  final int startIndex;
+  final bool resume;
+  const PlayerScreen({
+    super.key,
+    required this.url,
+    required this.label,
+    this.localFile = false,
+    this.playlist = const [],
+    this.startIndex = 0,
+    this.resume = false,
+  });
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
@@ -2649,18 +2938,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ChewieController? _chewie;
   String? error;
 
+  List<_EpisodeSource> playlist = [];
+  int index = 0;
+  bool _switching = false;
+
+  _EpisodeSource get current => playlist.isEmpty
+      ? _EpisodeSource(url: widget.url, label: widget.label)
+      : playlist[index];
+
   @override
   void initState() {
     super.initState();
+    playlist = widget.playlist.isEmpty
+        ? [
+            _EpisodeSource(
+              url: widget.url,
+              label: widget.label,
+              animeId: '',
+            )
+          ]
+        : List.of(widget.playlist);
+    index = widget.startIndex.clamp(0, playlist.length - 1);
     _open();
   }
 
   Future<void> _open() async {
+    final src = current;
     try {
       final v = widget.localFile
-          ? VideoPlayerController.file(File(widget.url))
-          : VideoPlayerController.networkUrl(Uri.parse(widget.url));
+          ? VideoPlayerController.file(File(src.url))
+          : VideoPlayerController.networkUrl(Uri.parse(src.url));
       await v.initialize();
+      if (src.animeId.isNotEmpty && src.episode != null && !widget.localFile) {
+        final resumeAt = widget.resume
+            ? await WatchProgress.position(src.animeId, src.episode!)
+            : null;
+        if (resumeAt != null && resumeAt > 0 && mounted) {
+          await v.seekTo(Duration(milliseconds: resumeAt));
+        }
+      }
+      v.addListener(_onVideoTick);
       final c = ChewieController(
         videoPlayerController: v,
         autoPlay: true,
@@ -2688,17 +3005,97 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  /// Throttle progress writes so prefs stay quiet while watching.
+  var _lastSaveMs = 0;
+
+  void _onVideoTick() {
+    final v = _video;
+    if (v == null || !v.value.isInitialized) return;
+    final src = current;
+    if (src.animeId.isEmpty || src.episode == null || widget.localFile) return;
+    final pos = v.value.position.inMilliseconds;
+    final dur = v.value.duration.inMilliseconds;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (v.value.isCompleted) {
+      if (src.episode != null) {
+        WatchProgress.clear(src.animeId, src.episode!);
+      }
+      _advance();
+      return;
+    }
+    if (now - _lastSaveMs < 5000) return;
+    _lastSaveMs = now;
+    if (pos < 5000) return;
+    WatchProgress.save(
+      animeId: src.animeId,
+      animeTitle: src.label.split('—').first.trim(),
+      image: '',
+      episode: src.episode ?? 0,
+      posMs: pos,
+      durMs: dur,
+    );
+  }
+
+  /// Next episode in the queue; falls back to nothing when it is the last one.
+  void _advance() {
+    if (_switching || index >= playlist.length - 1) return;
+    _switching = true;
+    final next = index + 1;
+    // Chain: dispose current, open the next episode from scratch.
+    Future<void>(() async {
+      try {
+        _chewie?.dispose();
+        _chewie = null;
+        final old = _video;
+        old?.removeListener(_onVideoTick);
+        await old?.dispose();
+        _video = null;
+        if (mounted) {
+          setState(() {
+            index = next;
+            error = null;
+          });
+          await _open();
+        }
+      } finally {
+        _switching = false;
+      }
+    });
+  }
+
   @override
   void dispose() {
+    final v = _video;
+    if (v != null) {
+      v.removeListener(_onVideoTick);
+      final src = current;
+      if (src.animeId.isNotEmpty && src.episode != null && !widget.localFile) {
+        final pos = v.value.position.inMilliseconds;
+        final dur = v.value.duration.inMilliseconds;
+        if (pos > 5000 && dur > 0 && pos < dur * 0.95) {
+          // fire and forget — app may be closing
+          WatchProgress.save(
+            animeId: src.animeId,
+            animeTitle: src.label.split('—').first.trim(),
+            image: '',
+            episode: src.episode ?? 0,
+            posMs: pos,
+            durMs: dur,
+          );
+        } else if (pos >= dur * 0.95) {
+          WatchProgress.clear(src.animeId, src.episode!);
+        }
+      }
+      v.dispose();
+    }
     _chewie?.dispose();
-    _video?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-            title: Text(widget.label,
+            title: Text(playlist.isEmpty ? widget.label : current.label,
                 maxLines: 1, overflow: TextOverflow.ellipsis)),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           Container(
@@ -3418,18 +3815,34 @@ class _AuthCardState extends State<_AuthCard> {
   final password = TextEditingController();
   bool busy = false;
   String? who;
+  bool isAdmin = false;
+
   @override
   void initState() {
     super.initState();
     _who();
   }
 
+  // The website identifies the signed-in user via /api/auth/me + stored token.
+  // Offline, the last known role is reused so admin tools do not flash.
   Future<void> _who() async {
     final p = await SharedPreferences.getInstance();
-    if (!mounted) {
-      return;
+    var role = 'user';
+    if (p.getString('api_token') != null) {
+      try {
+        final me = await Api.me();
+        role = ((me['user'] as Map?)?['role'] ?? role).toString();
+      } catch (_) {
+        role = p.getString('user_role') ?? role;
+      }
     }
-    setState(() => who = p.getString('user_email'));
+    await p.setString('user_role', role);
+    if (mounted) {
+      setState(() {
+        who = p.getString('user_email');
+        isAdmin = role == 'admin';
+      });
+    }
   }
 
   Future<void> _go(bool register) async {
@@ -3437,13 +3850,12 @@ class _AuthCardState extends State<_AuthCard> {
     try {
       final u = await Api.signIn(email.text.trim(), password.text,
           register: register, name: email.text.split('@').first);
-      if (!mounted) {
-        return;
-      }
-      setState(() => who = u['email'] as String?);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Signed in as ${u['email']} — synced with website')));
+      who = (u['email'] ?? '').toString();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Signed in as ${(u['email'] ?? '').toString()} — synced with the website database')));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -3451,70 +3863,256 @@ class _AuthCardState extends State<_AuthCard> {
       }
     }
     if (mounted) setState(() => busy = false);
+    await _who();
   }
 
   @override
   Widget build(BuildContext context) {
     if (who != null) {
-      return Card(
-          child: ListTile(
-        leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: mint.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.verified_user, color: mint)),
-        title: Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: const Text('Synced with the website database',
-            style: TextStyle(color: muted, fontSize: 12)),
-        trailing: TextButton(
-            onPressed: () async {
-              await Api.signOut();
-              _who();
-            },
-            child: const Text('Sign out')),
-      ));
+      return Column(children: [
+        Card(
+            child: ListTile(
+          leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: mint.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.verified_user, color: mint)),
+          title: Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: const Text('Synced automatically when you comment or rate',
+              style: TextStyle(color: muted, fontSize: 12)),
+          trailing: TextButton(onPressed: () async {
+            await Api.signOut();
+            await _who();
+          }, child: const Text('Sign out')),
+        )),
+        if (isAdmin) ...[
+          const SizedBox(height: 10),
+          const AdminPanel(),
+        ],
+      ]);
     }
     return Card(
         child: Padding(
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Account (optional)',
-                  style: TextStyle(fontWeight: FontWeight.w800)),
-              const Text('Same permanent database as the site.',
-                  style: TextStyle(color: muted, fontSize: 12)),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                      labelText: 'Email (Gmail / iCloud)',
-                      prefixIcon: Icon(Icons.email_outlined))),
-              const SizedBox(height: 8),
-              TextField(
-                  controller: password,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock_outline))),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                    child: FilledButton(
-                        style: FilledButton.styleFrom(
-                            backgroundColor: amber,
-                            foregroundColor: Colors.black),
-                        onPressed: busy ? null : () => _go(false),
-                        child: Text(busy ? 'Please wait…' : 'Sign in'))),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: OutlinedButton(
-                        onPressed: busy ? null : () => _go(true),
-                        child: const Text('Register'))),
-              ]),
-            ])));
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Account (optional)',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text('Same permanent database as the site.',
+                style: TextStyle(color: muted, fontSize: 12)),
+            const SizedBox(height: 10),
+            TextField(
+                controller: email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                    labelText: 'Email (Gmail / iCloud)',
+                    prefixIcon: Icon(Icons.email_outlined))),
+            const SizedBox(height: 8),
+            TextField(
+                controller: password,
+                obscureText: true,
+                decoration: const InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: Icon(Icons.lock_outline))),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: FilledButton(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: amber, foregroundColor: Colors.black),
+                  onPressed: busy ? null : () => _go(false),
+                  child: Text(busy ? 'Please wait…' : 'Sign in'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton(
+                  onPressed: busy ? null : () => _go(true),
+                  child: const Text('Register'))),
+            ]),
+          ]),
+        ));
   }
+}
+
+// ── Admin tools (in-app, only for signed-in admins) ─────
+class AdminPanel extends StatefulWidget {
+  const AdminPanel({super.key});
+  @override
+  State<AdminPanel> createState() => _AdminPanelState();
+}
+
+class _AdminPanelState extends State<AdminPanel> {
+  final annTitle = TextEditingController();
+  final annBody = TextEditingController();
+  final curPw = TextEditingController();
+  final newPw = TextEditingController();
+  Map live = {};
+  bool busyAnn = false, busyPw = false, liveBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLive();
+  }
+
+  /// Same live feed the website admin page shows — read-only, token protected.
+  Future<void> _loadLive() async {
+    if (!mounted) return;
+    setState(() => liveBusy = true);
+    try {
+      final r = await http
+          .get(Uri.parse('${Api.base()}/api/admin/live-activity'),
+              headers: await Api.headers())
+          .timeout(const Duration(seconds: 12));
+      final d = json.decode(r.body) as Map<String, dynamic>;
+      if (mounted) {
+        setState(() {
+          live = d;
+          liveBusy = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => liveBusy = false);
+    }
+  }
+
+  /// Pushes through the exact same endpoint as the website admin, so the
+  /// message lands on the site banner and the app home feed at once.
+  Future<void> _publish() async {
+    if (annTitle.text.trim().isEmpty || annBody.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Title and message are both required.')));
+      return;
+    }
+    setState(() => busyAnn = true);
+    try {
+      final r = await http
+          .post(Uri.parse('${Api.base()}/api/admin/announce'),
+              headers: {
+                ...await Api.headers(),
+                'Content-Type': 'application/json'
+              },
+              body: json.encode({
+                'title': annTitle.text.trim(),
+                'body': annBody.text.trim(),
+              }))
+          .timeout(const Duration(seconds: 15));
+      final d = json.decode(r.body) as Map<String, dynamic>;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(d['status'] == 'success'
+                ? 'Pushed to the website banner and app home feed.'
+                : (d['error'] ?? 'Publish failed'))));
+        if (d['status'] == 'success') {
+          annTitle.clear();
+          annBody.clear();
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not reach the website.')));
+      }
+    }
+    if (mounted) setState(() => busyAnn = false);
+  }
+
+  Future<void> _changePw() async {
+    if (newPw.text.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('New password must be at least 8 characters.')));
+      return;
+    }
+    setState(() => busyPw = true);
+    try {
+      await Api.changeAdminPassword(curPw.text, newPw.text);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Password changed — you are signed out everywhere. Sign in again with the new password.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+    if (mounted) setState(() => busyPw = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: purple.withValues(alpha: 0.10),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.shield, color: mint),
+            const SizedBox(width: 8),
+            const Text('Admin tools',
+                style: TextStyle(fontWeight: FontWeight.w800)),
+            const Spacer(),
+            TextButton(onPressed: _loadLive, child: const Text('Refresh')),
+          ]),
+          if (liveBusy)
+            const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: LinearProgressIndicator(color: mint)),
+          Wrap(spacing: 10, runSpacing: 6, children: [
+            _pill('Online: ${live['online_now'] ?? '—'}'),
+            _pill('Live streams: ${live['active_streams_60s'] ?? '—'}'),
+            _pill(
+                'Downloads: ${live['downloads_60s'] ?? '—'} (1h ${live['downloads_1h'] ?? '—'})'),
+          ]),
+          const SizedBox(height: 10),
+          TextField(
+              controller: annTitle,
+              decoration: const InputDecoration(hintText: 'Announcement title')),
+          const SizedBox(height: 8),
+          TextField(
+              controller: annBody,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  hintText: 'Message to all users…')),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: amber, foregroundColor: Colors.black),
+                onPressed: busyAnn ? null : _publish,
+                child: Text(
+                    busyAnn ? 'Publishing…' : 'Publish push notification')),
+          ),
+          const Divider(height: 26),
+          TextField(
+              controller: curPw,
+              obscureText: true,
+              decoration: const InputDecoration(
+                  hintText: 'Current admin password')),
+          const SizedBox(height: 8),
+          TextField(
+              controller: newPw,
+              obscureText: true,
+              decoration: const InputDecoration(
+                  hintText: 'New password (min 8 chars)')),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+                onPressed: busyPw ? null : _changePw,
+                child: Text(busyPw ? 'Changing…' : 'Change admin password')),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _pill(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+            color: card2, borderRadius: BorderRadius.circular(999)),
+        child: Text(label, style: const TextStyle(fontSize: 12)),
+      );
 }
 
 // ── Settings (gear screen) ─────────────────────────────
