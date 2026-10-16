@@ -698,6 +698,7 @@
             video.style.display = 'block';
             video.src = srv.stream_url;
             video.load();
+            try { window.caTrack('play', '{{ anime.id }}', '{{ ep_num }}'); } catch (e) {}
             video.play().catch(() => {});
         } else if (srv.playback_mode === 'hls') {
             iframe.style.display = 'none';
@@ -731,6 +732,7 @@
                 hlsInstance.loadSource(srv.stream_url);
                 hlsInstance.attachMedia(video);
                 hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    try { window.caTrack('play', '{{ anime.id }}', '{{ ep_num }}'); } catch (e) {}
                     video.play().catch(() => {});
                 });
                 hlsInstance.on(Hls.Events.ERROR, (event, data) => {
@@ -841,9 +843,8 @@
                 dlStartedMsg('Download started ✓ check your downloads folder. Stays yours forever.');
             }
         });
-        document.querySelectorAll('.dl-action[download]').forEach(a => {
-            a.addEventListener('click', () => dlStartedMsg('Download started ✓ check your downloads folder.'));
-        });
+        // Download hits are recorded server-side by /api/download/video, so
+        // the live admin feed shows the real transfer, not a click that may abort.
         // Settings: preferred audio rewrites the episode rail links
         try {
             const prefAudio = localStorage.getItem('camanime-audio');

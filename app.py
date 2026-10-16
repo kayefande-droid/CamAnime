@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from collections import deque
 from typing import Dict, List, Optional
 from urllib.parse import quote, urljoin, urlparse
 
@@ -125,6 +126,67 @@ def _rate_limited(path: str) -> bool:
             bucket.append(now)
             return False
     return False
+
+
+# ── Live activity feed (admin panel) ───────────────────
+# Ephemeral in-memory ring buffer: streams and downloads are *live* by
+# definition, so nothing here touches SQLite or can slow a playback request.
+# Recording is wrapped so a failure can never break the media path.
+_LIVE_ACTIVITY: deque = deque(maxlen=300)
+_RECENT_VISITORS: Dict[str, float] = {}
+_KIND_LABELS = {"stream": "Stream", "download": "Download", "play": "Played"}
+
+
+def _record_activity(kind: str, anime: str = "", ep: str = "", detail: str = "") -> None:
+    """Log one live hit (stream/download) with who it was. Never raises."""
+    try:
+        logged = bool(request.headers.get("Authorization")) or bool(session.get("user_email"))
+        user = _current_user() if logged else None
+        _LIVE_ACTIVITY.append({
+            "t": int(time.time()), "kind": kind, "who": (user or {}).get("id", "") or "",
+            "email": (user or {}).get("email") or "guest",
+            "guest": user is None,
+            "anime": (anime or "")[:80], "ep": str(ep or ""), "detail": (detail or "")[:120],
+            "ip": _client_ip(),
+        })
+    except Exception:
+        logger.debug("live activity logging failed", exc_info=True)
+
+
+@app.before_request
+def _see_visitor():
+    """Cheapest possible online counter: ip -> last seen, no storage growth."""
+    try:
+        _RECENT_VISITORS[_client_ip()] = time.time()
+        if len(_RECENT_VISITORS) > 4000:
+            cutoff = time.time() - 600
+            for key in [k for k, v in _RECENT_VISITORS.items() if v < cutoff][:1500]:
+                _RECENT_VISITORS.pop(key, None)
+    except Exception:
+        pass
+
+
+def _live_activity_summary():
+    """Aggregate live counters + recent rows, all in-memory."""
+    now = time.time()
+    # Distinct IPs seen anywhere on the site in the last 2 minutes.
+    online_ips = {ip for ip, ts in _RECENT_VISITORS.items() if now - ts < 120}
+    rows = list(_LIVE_ACTIVITY)
+    def within(seconds, kind=None):
+        return [r for r in rows
+                if now - r["t"] <= seconds and (kind is None or r["kind"] == kind)]
+    logged = len([r for r in rows[-80:] if not r["guest"]])
+    return {
+        "now": int(now),
+        "online_now": len(online_ips),
+        "media_ips_2min": len({r["ip"] for r in within(120)}),
+        "logged_in_recent": logged,
+        "guest_recent": max(0, len(rows[-80:]) - logged),
+        "active_streams_60s": len(within(60, "stream")) + len(within(60, "play")),
+        "downloads_60s": len(within(60, "download")),
+        "downloads_1h": len(within(3600, "download")),
+        "activity": list(reversed(rows[-120:])),
+    }
 
 
 @app.before_request
@@ -1024,6 +1086,10 @@ def proxy_hls():
     ref = request.args.get("ref", "").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
+    # HLS segment fetches are frequent; log only the first playlist request so
+    # the live feed shows real viewing sessions rather than one row per chunk.
+    if "m3u8" in url.lower():
+        _record_activity("stream", detail=urlparse(url).netloc)
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -1087,6 +1153,8 @@ def proxy_video():
     ref = request.args.get("ref", "https://animeheaven.me/").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
+    # Live feed only — cheap, best-effort, never blocks the stream.
+    _record_activity("stream", detail=urlparse(url).netloc)
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -1148,6 +1216,8 @@ def download_video():
         return jsonify({"error": "Invalid or private url"}), 400
 
     safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
+    # Live feed only — cheap, best-effort, never blocks the download.
+    _record_activity("download", anime=title[:80], detail=urlparse(url).netloc)
     wants_hls = ".m3u8" in url.lower()
     want_ext = ".m3u8" if wants_hls else ".mp4"
     if not safe_filename.lower().endswith(want_ext):
@@ -1841,6 +1911,22 @@ def api_admin_password():
         return jsonify({"status": "success", "changed_for": u["email"]})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/admin/live-activity")
+def api_admin_live_activity():
+    """Live streams, downloads and online users for the admin panel.
+
+    Logged-in requests show the account; anonymous traffic is reported as
+    `guest`. Data is in-memory and ephemeral by design — this is a live feed,
+    not an audit log."""
+    u = _require_admin()
+    if not u:
+        return jsonify({"status": "error", "error": "Admin only. Sign in as admin."}), 403
+    data = _live_activity_summary()
+    for row in data["activity"]:
+        row["kind_label"] = _KIND_LABELS.get(row["kind"], row["kind"].title())
+    return jsonify({"status": "success", **data})
 
 
 @app.route("/api/admin/create-admin", methods=["POST"])

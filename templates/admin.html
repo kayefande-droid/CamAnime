@@ -31,6 +31,20 @@ a{color:#FFB347}
 <div class="stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
 <div class="stat"><b>{{ stats.ratings }}</b><span>Ratings</span></div>
 </div>
+
+<h2>Live now — streams, downloads, who is online</h2>
+<p style="color:#a0abc0;max-width:700px">Refreshes every 5 s. Anonymous visitors show as <i>guest</i>, signed-in users show their account. Totals cover the last minute; online visitors cover the last 2 minutes.</p>
+<div class="grid" id="liveGrid">
+<div class="stat"><b>-</b><span>Online now (last 2 min)</span></div>
+<div class="stat"><b>-</b><span>Active streams (last 1 min)</span></div>
+<div class="stat"><b>-</b><span>Downloads (last 1 min)</span></div>
+<div class="stat"><b>-</b><span>Downloads (last hour)</span></div>
+</div>
+<table id="liveTable">
+<thead><tr><th>When</th><th>Type</th><th>Who</th><th>What</th><th>From</th></tr></thead>
+<tbody id="liveRows"><tr><td colspan="5" style="color:#a0abc0">Loading live activity…</td></tr></tbody>
+</table>
+<p id="liveNote" style="color:#a0abc0;font-size:.78rem;margin:.4rem 0 1.4rem">Live feed is in-memory and resets on restart — it shows what is happening now, not a history.</p>
 <h2>CEO announcements (website banner + app feed)</h2>
 <form id="annForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
 <input id="annTitle" placeholder="Announcement title" maxlength="120" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
@@ -46,6 +60,40 @@ document.getElementById('annForm').onsubmit = async (e) => {
   alert(d.status === 'success' ? 'Published to website + apps.' : ('Failed: ' + (d.error || 'unknown')));
   if (d.status === 'success') location.reload();
 };
+
+// Live streams/downloads/visitors panel (admin only)
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function refreshLive() {
+  try {
+    const r = await fetch('/api/admin/live-activity', {credentials:'same-origin'});
+    const d = await r.json();
+    const cells = document.querySelectorAll('#liveGrid .stat b');
+    if (d.status === 'success' && cells.length === 4) {
+      cells[0].textContent = d.online_now;
+      cells[1].textContent = d.active_streams_60s;
+      cells[2].textContent = d.downloads_60s;
+      cells[3].textContent = d.downloads_1h;
+      const rows = (d.activity || []).slice(0, 40).map(row => {
+        const age = Math.max(0, Math.floor(d.now - row.t));
+        const who = row.guest ? 'guest' : escapeHtml(row.email);
+        const what = row.detail ? ('' + escapeHtml(row.detail)) : '';
+        return '<tr><td>' + age + 's ago</td><td>' + escapeHtml(row.kind_label || row.kind) +
+               '</td><td>' + who + '</td><td>' + what +
+               '</td><td>' + escapeHtml(row.ip) + '</td></tr>';
+      });
+      document.getElementById('liveRows').innerHTML = rows.length ? rows.join('')
+        : '<tr><td colspan="5" style="color:#a0abc0">No stream or download in the last few minutes.</td></tr>';
+      document.getElementById('liveNote').textContent =
+        'Signed-in requests show their account; the rest appear as guest. Counters reset on restart.';
+    } else if (d.status !== 'success' && cells.length === 4) {
+      document.getElementById('liveNote').textContent = 'Live panel error: ' + (d.error || 'not an admin');
+    }
+    setTimeout(refreshLive, 5000);
+  } catch (e) {
+    setTimeout(refreshLive, 15000);
+  }
+}
+refreshLive();
 </script>
 <h2>Admin account tools (admin only)</h2>
 <p style="color:#a0abc0;max-width:640px">Default admin <code>{{ user.email }}</code> is changeable here. Changing your own password signs you out everywhere — sign in again on web + app. Use a strong password you alone control.</p>
