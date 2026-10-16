@@ -228,9 +228,11 @@ query {{
 }}
 """
 
-SEARCH_FILTER_QUERY = f"""  query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int, $yearBefore: Int) {{
+# AniList has no `seasonYear_lesser` filter; `startDate_lesser` takes a
+# FuzzyDateInt (YYYYMMDD), so the year is sent as December 31st of that year.
+SEARCH_FILTER_QUERY = f"""  query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int, $startDateBefore: FuzzyDateInt) {{
   Page(page: $page, perPage: $perPage) {{
-    media(search: $search, genre: $genre, format: $format, seasonYear_lesser: $yearBefore, sort: $sort, type: ANIME, isAdult: false) {{
+    media(search: $search, genre: $genre, format: $format, startDate_lesser: $startDateBefore, sort: $sort, type: ANIME, isAdult: false) {{
       {MEDIA_FRAGMENT}
     }}
   }}
@@ -1626,7 +1628,8 @@ def api_v1_anime_list(genre_override: Optional[str] = None):
         return _catalog_error("year_before must be between 1900 and 2100.", 400)
     variables = {"page": page, "perPage": limit, "sort": [CATALOG_SORTS[sort_key]]}
     if year_before is not None:
-        variables["yearBefore"] = year_before
+        # FuzzyDateInt: end of the requested year, so the filter is inclusive.
+        variables["startDateBefore"] = (year_before * 10000) + 1231
     if query:
         variables["search"] = query
     if genre:

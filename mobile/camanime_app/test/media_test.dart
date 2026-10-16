@@ -66,10 +66,8 @@ void main() {
 
     test('filenames cannot escape the library directory', () {
       expect(Api.safeMediaFilename('../../etc/passwd'), 'passwd');
-      expect(Api.safeMediaFilename('..\\..\\windows\\system32'),
-          'system32');
-      expect(Api.safeMediaFilename('/tmp/Show - Ep 1.mp4'),
-          'Show - Ep 1.mp4');
+      expect(Api.safeMediaFilename('..\\..\\windows\\system32'), 'system32');
+      expect(Api.safeMediaFilename('/tmp/Show - Ep 1.mp4'), 'Show - Ep 1.mp4');
       expect(Api.safeMediaFilename('a/b/c.mp4'), 'c.mp4');
       expect(Api.safeMediaFilename('..'), 'CamAnime_Episode.mp4');
       expect(Api.safeMediaFilename(''), 'CamAnime_Episode.mp4');
@@ -80,13 +78,14 @@ void main() {
     test('relative episode URLs resolve against the website', () {
       expect(Api.abs('/api/download/video?url=x'),
           '${Api.base()}/api/download/video?url=x');
-      expect(Api.abs('https://cdn.example/ep.mp4'),
-          'https://cdn.example/ep.mp4');
+      expect(
+          Api.abs('https://cdn.example/ep.mp4'), 'https://cdn.example/ep.mp4');
     });
 
     test('insecure download sources are refused before any transfer', () async {
       expect(
-        () => Api.downloadEpisodeFile('http://insecure.example/ep.mp4', 'e.mp4'),
+        () =>
+            Api.downloadEpisodeFile('http://insecure.example/ep.mp4', 'e.mp4'),
         throwsA(isA<HttpException>()),
       );
       expect(
@@ -176,8 +175,8 @@ void main() {
       expect(await MediaLibrary.list(), isEmpty);
 
       // The index is still valid JSON after the delete.
-      final manifest = await MediaLibrary.directory().then(
-          (d) => File('${d.path}/library.json'));
+      final manifest = await MediaLibrary.directory()
+          .then((d) => File('${d.path}/library.json'));
       expect(manifest.existsSync(), isTrue);
       expect(manifest.readAsStringSync().trim(), '[]');
     });
@@ -191,8 +190,8 @@ void main() {
       // listed with safe fallbacks.
       final items = await MediaLibrary.list();
       expect(items, hasLength(1));
-      expect(items.first.file.uri.pathSegments.last,
-          file.uri.pathSegments.last);
+      expect(
+          items.first.file.uri.pathSegments.last, file.uri.pathSegments.last);
       expect(items.first.audio, 'sub');
     });
   });
