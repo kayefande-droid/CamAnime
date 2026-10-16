@@ -83,6 +83,9 @@ _RATE_RULES = (
     # (path prefix, max requests, window in seconds)
     ("/api/auth/login", 10, 300),
     ("/api/auth/register", 5, 3600),
+    # The web login form is a separate endpoint from /api/auth/login and is
+    # backed by the same user store — brute-forcing it must cost exactly the same.
+    ("/login", 10, 300),
     ("/api/download/video", 30, 600),
     ("/api/proxy/", 300, 600),
     ("/api/community/comment", 20, 600),
