@@ -547,25 +547,31 @@ class Api {
     final finalFile = File('${library.path}/$id-$safe');
     final tempFile = File('${finalFile.path}.part');
     try {
-      final response = await client.send(req).timeout(const Duration(seconds: 40));
+      final response =
+          await client.send(req).timeout(const Duration(seconds: 40));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         await response.stream.drain<void>();
-        throw HttpException('CamAnime download failed (${response.statusCode})', uri: uri);
+        throw HttpException('CamAnime download failed (${response.statusCode})',
+            uri: uri);
       }
       final contentType = response.headers['content-type'] ?? '';
       if (!isPlayableVideoType(contentType)) {
         await response.stream.drain<void>();
-        throw HttpException('Source is not a downloadable video ($contentType). HLS playlists and embed pages cannot be saved as MP4.', uri: uri);
+        throw HttpException(
+            'Source is not a downloadable video ($contentType). HLS playlists and embed pages cannot be saved as MP4.',
+            uri: uri);
       }
       final total = response.contentLength ?? 0;
       if (total == 0) {
         await response.stream.drain<void>();
-        throw HttpException('The source returned an empty video file.', uri: uri);
+        throw HttpException('The source returned an empty video file.',
+            uri: uri);
       }
       if (await finalFile.exists()) {
         await response.stream.drain<void>();
         if (await finalFile.length() > 0) {
-          return MediaDownloadResult(file: finalFile, downloadedBytes: await finalFile.length());
+          return MediaDownloadResult(
+              file: finalFile, downloadedBytes: await finalFile.length());
         }
         await finalFile.delete();
       }
@@ -586,18 +592,22 @@ class Api {
         rethrow;
       }
       if (received == 0 || (total > 0 && received != total)) {
-        throw HttpException('Incomplete video transfer ($received/${total > 0 ? total : 'unknown'} bytes).');
+        throw HttpException(
+            'Incomplete video transfer ($received/${total > 0 ? total : 'unknown'} bytes).');
       }
       final handle = await tempFile.open();
       final header = await handle.read(16);
       await handle.close();
       final validHeader = header.length >= 8 &&
           (String.fromCharCodes(header.sublist(4, 8)) == 'ftyp' ||
-              (header[0] == 0x1A && header[1] == 0x45 &&
-                  header[2] == 0xDF && header[3] == 0xA3) ||
+              (header[0] == 0x1A &&
+                  header[1] == 0x45 &&
+                  header[2] == 0xDF &&
+                  header[3] == 0xA3) ||
               (header[0] == 0x00 && header[1] == 0x00 && header[2] == 0x00));
       if (!validHeader) {
-        throw HttpException('Downloaded data does not look like a supported video file.');
+        throw HttpException(
+            'Downloaded data does not look like a supported video file.');
       }
       await tempFile.rename(finalFile.path);
       return MediaDownloadResult(file: finalFile, downloadedBytes: received);
@@ -613,7 +623,8 @@ class Api {
 class MediaDownloadResult {
   final File file;
   final int downloadedBytes;
-  const MediaDownloadResult({required this.file, required this.downloadedBytes});
+  const MediaDownloadResult(
+      {required this.file, required this.downloadedBytes});
 }
 
 class MediaLibraryItem {
@@ -670,7 +681,8 @@ class MediaLibrary {
       }
     }
     final id = sha256.convert(utf8.encode('${animeId}_$episode')).toString();
-    rows.removeWhere((e) => e['id'] == id || e['file'] == file.uri.pathSegments.last);
+    rows.removeWhere(
+        (e) => e['id'] == id || e['file'] == file.uri.pathSegments.last);
     rows.add({
       'id': id,
       'title': title,
@@ -706,8 +718,10 @@ class MediaLibrary {
     final byFile = {for (final row in rows) row['file']: row};
     final items = <MediaLibraryItem>[];
     await for (final entity in library.list()) {
-      if (entity is! File || entity.path.endsWith('.part') ||
-          entity.path.endsWith('.tmp') || entity.path.endsWith('library.json')) {
+      if (entity is! File ||
+          entity.path.endsWith('.part') ||
+          entity.path.endsWith('.tmp') ||
+          entity.path.endsWith('library.json')) {
         continue;
       }
       final name = entity.uri.pathSegments.last;
@@ -724,7 +738,9 @@ class MediaLibrary {
           audio: (row?['audio'] ?? 'sub').toString(),
           file: entity,
           sizeBytes: size,
-          completedAt: DateTime.tryParse((row?['completed_at'] ?? '').toString()) ?? stat.modified,
+          completedAt:
+              DateTime.tryParse((row?['completed_at'] ?? '').toString()) ??
+                  stat.modified,
         ));
       } catch (_) {
         // Files disappearing during a refresh are omitted and can be retried.
@@ -742,7 +758,9 @@ class MediaLibrary {
     try {
       final rows = (json.decode(await manifest.readAsString()) as List)
           .whereType<Map>()
-          .where((e) => e['id'] != item.id && e['file'] != item.file.uri.pathSegments.last)
+          .where((e) =>
+              e['id'] != item.id &&
+              e['file'] != item.file.uri.pathSegments.last)
           .toList();
       final temp = File('${manifest.path}.tmp');
       await temp.writeAsString(json.encode(rows), flush: true);
@@ -1747,7 +1765,8 @@ class _DetailScreenState extends State<DetailScreen>
     final candidates = servers
         .whereType<Map>()
         .map((s) => s.cast<String, dynamic>())
-        .where((s) => s['playback_mode'] == 'mp4' || s['playback_mode'] == 'hls')
+        .where(
+            (s) => s['playback_mode'] == 'mp4' || s['playback_mode'] == 'hls')
         .toList();
     if (candidates.isEmpty) return null;
     for (final server in candidates) {
@@ -1767,7 +1786,8 @@ class _DetailScreenState extends State<DetailScreen>
     for (final raw in servers) {
       if (raw is! Map) continue;
       final server = raw.cast<String, dynamic>();
-      if (server['audio'] == audio && server['playback_mode'] == 'mp4' &&
+      if (server['audio'] == audio &&
+          server['playback_mode'] == 'mp4' &&
           (server['download_url'] ?? '').toString().isNotEmpty) {
         return server;
       }
@@ -1806,7 +1826,8 @@ class _DetailScreenState extends State<DetailScreen>
                     '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})')));
   }
 
-  Future<void> _downloadEp(int ep) async {    setState(() {
+  Future<void> _downloadEp(int ep) async {
+    setState(() {
       dlBusy = true;
       dlProgress = 0;
       dlStatus = 'Resolving Episode $ep…';
@@ -1817,7 +1838,8 @@ class _DetailScreenState extends State<DetailScreen>
       final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
       final server = _downloadSource(bundle);
       if (server == null) {
-        throw const HttpException('No direct MP4 download is available for this episode. HLS/embeds are stream-only.');
+        throw const HttpException(
+            'No direct MP4 download is available for this episode. HLS/embeds are stream-only.');
       }
       final url = Api.abs(server['download_url'].toString());
       final result = await Api.downloadEpisodeFile(url, '$title.mp4',
@@ -1840,8 +1862,9 @@ class _DetailScreenState extends State<DetailScreen>
       if (mounted) {
         setState(() => dlStatus =
             'Downloaded and verified: ${result.file.uri.pathSegments.last}');
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Download verified ✓ — available in My Library offline.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Download verified ✓ — available in My Library offline.')));
       }
     } catch (e) {
       if (mounted) setState(() => dlStatus = 'Episode $ep failed: $e');
@@ -2506,9 +2529,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Text(widget.localFile
-              ? 'Playing downloaded file offline-ready from My Library.'
-              : 'Streaming directly from CamAnime website servers — no download required.',
+          Text(
+              widget.localFile
+                  ? 'Playing downloaded file offline-ready from My Library.'
+                  : 'Streaming directly from CamAnime website servers — no download required.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: muted, fontSize: 12)),
           const SizedBox(height: 4),
@@ -2882,6 +2906,13 @@ class _LibraryTabState extends State<LibraryTab> {
                   Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: ListTile(
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => PlayerScreen(
+                                  url: e.path,
+                                  label: e.uri.pathSegments.last,
+                                  localFile: true))),
                       leading: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
@@ -2972,8 +3003,8 @@ class _ProfileTabState extends State<ProfileTab> {
       await p.setString('avatar_custom_path', dest.path);
       if (mounted) setState(() => customAvatarPath = dest.path);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile pic updated')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Profile pic updated')));
       }
     } catch (e) {
       if (mounted) {
@@ -3050,8 +3081,8 @@ class _ProfileTabState extends State<ProfileTab> {
                 return InkWell(
                   onTap: () => Navigator.pop(context, i),
                   child: CircleAvatar(
-                    backgroundColor: Color(preset['color'] as int)
-                        .withValues(alpha: 0.2),
+                    backgroundColor:
+                        Color(preset['color'] as int).withValues(alpha: 0.2),
                     child: Icon(preset['icon'] as IconData,
                         color: Color(preset['color'] as int), size: 30),
                   ),
