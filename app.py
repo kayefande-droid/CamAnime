@@ -1345,6 +1345,63 @@ def proxy_video():
         return jsonify({"error": str(e)}), 502
 
 
+# ─── Turbo download support (parallel segmented transfers) ─────────────────
+
+_pool_lock = None
+_SHARED_HTTP = None
+
+
+def _shared_http_session():
+    """One pooled HTTP session for media transfers: keep-alive connections
+    cut handshake overhead and raise sustained throughput."""
+    global _SHARED_HTTP
+    if _SHARED_HTTP is None:
+        s = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=8, pool_maxsize=32, max_retries=2)
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        s.headers.update({"User-Agent": DEFAULT_UA, "Accept": "*/*"})
+        _SHARED_HTTP = s
+    return _SHARED_HTTP
+
+
+@app.route("/api/download/probe")
+def download_probe():
+    """Turbo-download preflight: report size + range support so the client can
+    split the file into parallel segments. Cheap HEAD-first, GET fallback."""
+    url = _safe_upstream_url(request.args.get("url", ""))
+    ref = (request.args.get("ref", "https://animeheaven.me/") or "https://animeheaven.me/").strip()
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        return jsonify({"error": "Blocked: ad network URL."}), 403
+    try:
+        s = _shared_http_session()
+        r = s.head(url, headers={"Referer": ref}, timeout=10, allow_redirects=True)
+        size = r.headers.get("Content-Length")
+        ranges = (r.headers.get("Accept-Ranges", "") or "").lower()
+        ctype = (r.headers.get("Content-Type", "") or "").lower()
+        if "text/html" in ctype or "application/json" in ctype:
+            return jsonify({"error": "Source returned a block page, not a file."}), 502
+        if not size or size == "0" or "bytes" not in ranges:
+            # GET-fallback probe: some CDNs lie about HEAD
+            r = s.get(url, headers={"Referer": ref, "Range": "bytes=0-0"},
+                      timeout=10, stream=True)
+            cr = r.headers.get("Content-Range", "")
+            size = cr.split("/")[-1] if cr else None
+            ranges = "bytes" if cr else ranges
+            r.close()
+        try:
+            size_val = int(size) if size else 0
+        except ValueError:
+            size_val = 0
+        return jsonify({"status": "success", "size": size_val,
+                        "ranges": "bytes" in ranges, "content_type": ctype})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/api/download/video")
 def download_video():
     """Directly downloads the same file that is streaming (no sign-in).
@@ -1380,11 +1437,20 @@ def download_video():
         "Accept": "*/*",
         "Referer": ref,
     }
-    if request.headers.get("Range"):
-        headers["Range"] = request.headers["Range"]
+    # Byte-range passthrough: the watch page's turbo downloader requests one
+    # parallel segment per connection in the form ?range=start-end.
+    range_arg = (request.args.get("range", "") or "").strip()
+    header_range = request.headers.get("Range")
+    if header_range:
+        headers["Range"] = header_range
+    elif range_arg.isdigit() or re.fullmatch(r"\d+-\d*", range_arg):
+        s0, _, e0 = range_arg.partition("-")
+        headers["Range"] = f"bytes={s0}-" + (e0 if e0 else "")
 
     try:
-        upstream = requests.get(url, headers=headers, stream=True, timeout=25)
+        # Pooled keep-alive session + 1 MiB chunks: fewer handshakes and less
+        # per-chunk overhead = faster sustained transfer on all hosts.
+        upstream = _shared_http_session().get(url, headers=headers, stream=True, timeout=25)
         ctype = (upstream.headers.get("Content-Type", "") or "").lower()
         if upstream.status_code >= 400:
             upstream.close()
@@ -1397,9 +1463,9 @@ def download_video():
 
         def generate():
             try:
-                # Downloads stream as fast as the user's connection allows;
-                # bigger chunks cut per-chunk overhead on high-bandwidth links.
-                for chunk in upstream.iter_content(chunk_size=524288):
+                # 1 MiB chunks keep the pipe saturated on fast connections
+                # while still yielding regularly for slow clients.
+                for chunk in upstream.iter_content(chunk_size=1048576):
                     if chunk:
                         yield chunk
             finally:

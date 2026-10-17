@@ -964,6 +964,26 @@
             }
             dlMsg('Checking file…', true);
             try {
+                // Turbo preflight: size + range support. Big ranged files are
+                // pulled in 4 parallel segments (4x throughput where the CDN
+                // throttles per connection) and assembled in-browser; small or
+                // non-ranged files fall back to the normal browser download.
+                const p = await fetch(dlUrl.replace('/api/download/video', '/api/download/probe'), { credentials: 'same-origin' });
+                if (!p.ok) throw new Error('probe-failed');
+                const info = await p.json();
+                if (info.error) throw new Error(info.error);
+                total = info.size || 0;
+                ranges = !!info.ranges;
+
+                const TURBO_MIN = 8 * 1024 * 1024;   // only worth it for larger files
+                const TURBO_MAX = 420 * 1024 * 1024; // keep assembly memory sane
+                if (ranges && total >= TURBO_MIN && total <= TURBO_MAX) {
+                    await turboSegmentDownload(dlUrl, total, 4);
+                    return;
+                }
+
+                // Normal verified fallback: tiny ranged GET through the real
+                // download endpoint so block pages / 4xx never fake success.
                 const r = await fetch(dlUrl, { headers: { 'Range': 'bytes=0-2047' }, credentials: 'same-origin' });
                 const ct = (r.headers.get('Content-Type') || '').toLowerCase();
                 if (r.status === 403) {
@@ -979,7 +999,7 @@
                     dlMsg('Source returned a block page, not a video file. Switch to another server and retry.', false);
                     return;
                 }
-                // File verified — now trigger the real browser download.
+                // File verified — trigger the real browser download.
                 const a = document.createElement('a');
                 a.href = dlUrl;
                 a.rel = 'noopener';
@@ -989,8 +1009,56 @@
                 a.remove();
                 dlMsg('Download started ✓ file verified. Stays yours forever.', true);
             } catch (err) {
-                dlMsg('Connection dropped before the file could be verified. Try another server or check your network.', false);
+                // Probe not possible (e.g. blocked or offline) — still attempt the
+                // classic verified path so downloads never die from probe errors.
+                try {
+                    const r = await fetch(dlUrl, { headers: { 'Range': 'bytes=0-2047' }, credentials: 'same-origin' });
+                    const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+                    if (r.status >= 400 || ct.includes('text/html') || ct.includes('application/json')) {
+                        dlMsg((r.status >= 400 ? 'Download source returned ' + r.status : 'Source is not a video file') + ' — switch to another server and retry.', false);
+                        return;
+                    }
+                    const a = document.createElement('a');
+                    a.href = dlUrl;
+                    a.rel = 'noopener';
+                    if (dlUrl.startsWith('/')) a.download = '';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    dlMsg('Download started ✓. Stays yours forever.', true);
+                } catch (err2) {
+                    dlMsg('Connection dropped — try another server or check your network.', false);
+                }
             }
+        }
+        // 4 parallel byte-range segments merged into one MP4 Blob for max speed
+        async function turboSegmentDownload(dlUrl, total, N) {
+            const seg = Math.ceil(total / N);
+            const spans = Array.from({ length: N }, (_, i) => {
+                const start = i * seg;
+                const end = Math.min(total - 1, start + seg - 1);
+                return { start, end };
+            }).filter(s => s.end >= s.start);
+            let done = 0;
+            dlMsg('Fast download engaged: pulling ' + N + ' parallel parts… 0%', true);
+            const parts = new Array(spans.length);
+            await Promise.all(spans.map(async (s, i) => {
+                const r = await fetch(dlUrl + '&range=' + s.start + '-' + s.end, { credentials: 'same-origin' });
+                if (!r.ok) throw new Error('Segment ' + (i + 1) + ' returned ' + r.status);
+                parts[i] = await r.arrayBuffer();
+                done++;
+                dlMsg('Fast download: pulling ' + N + ' parallel parts… ' + Math.round((done / spans.length) * 100) + '%', true);
+            }));
+            const blob = new Blob(parts.filter(Boolean), { type: 'video/mp4' });
+            const a = document.createElement('a');
+            const nameMatch = (new URL(dlUrl, location.origin)).searchParams.get('title') || 'CamAnime_Episode';
+            a.download = decodeURIComponent(nameMatch).replace(/[^a-zA-Z0-9_\-\. ]/g, '').trim().replace(/\s+/g, '_') + '.mp4';
+            a.href = URL.createObjectURL(blob);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+            dlMsg('Turbo download complete ✓ saved as MP4. Stays yours forever.', true);
         }
         if (dlBtn0) dlBtn0.addEventListener('click', (e) => {
             const href = dlBtn0.getAttribute('href');
