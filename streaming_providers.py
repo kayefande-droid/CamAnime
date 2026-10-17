@@ -1281,6 +1281,21 @@ class StreamingManager:
 
         servers.sort(key=server_priority)
 
+        # Download manager promise: EVERY episode must offer at least one
+        # direct-file download path. When no scraper resolved a file, hand the
+        # watcher a one-click resolver that scrapes AnimeHeaven for this exact
+        # title, instead of a dead end.
+        if not downloads:
+            _q = quote((titles[0] if titles else f"anime {anilist_id}"), safe="")
+            downloads.append({
+                "label": f"Episode {ep_num} — resolve direct MP4 via AnimeHeaven Scraper",
+                "quality": "Scraper resolver",
+                "audio": ("SUB" if preferred_audio == "sub" else "DUB"),
+                "url": f"/scraper?q={_q}&auto_resolve={ep_num}",
+                "direct": False,
+                "provider": "AnimeHeaven resolver",
+            })
+
         return {
             "anilist_id": anilist_id,
             "mal_id": mal_id,

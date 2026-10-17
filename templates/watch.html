@@ -644,12 +644,79 @@
     let currentIntro = null;
 
     let currentServer = null;
+    let failoverTried = [];
+    const AD_HOST_PATTERNS = [
+      'doubleclick.net', 'googlesyndication', 'googletagservices', 'googleadservices',
+      'adservice', 'adnxs.com', 'adsystem', 'adsrvr.org', 'taboola.com', 'outbrain.com',
+      'criteo.com', 'zedo.com', 'rubiconproject.com', 'pubmatic.com', 'openx.net',
+      'smartadserver.com', 'adform.net', 'yieldmo.com', 'media.net', 'revcontent.com',
+      'mgid.com', 'propellerads', 'popads.net', 'popcash.net', 'adcash.com',
+      'onclickads', 'trafficjunky', 'exoclick.com', 'juicyads.com', 'ero-advertising',
+      'banner-ad', '/ads.js', '/adserver', '/pagead/', 'ad.doubleclick.org',
+    ];
+
+    /* ── ZERO-AD-TOLERANCE GUARD ─────────────────────────────────────────
+       CamAnime serves every stream through our own /api proxy and we never
+       inject an ad network. Backup embeds, however, are third-party pages.
+       We police them: kill known ad iframes/windows, neuter window.open from
+       ad origins, and strip inactive ad iframes from the DOM — immediately. */
+    function looksLikeAd(url) {
+      const u = (url || '').toLowerCase();
+      return AD_HOST_PATTERNS.some(p => u.includes(p));
+    }
+    function enforceAdPolicy() {
+      // 1. Block popup/new-tab ads opened by embeds
+      try {
+        const realOpen = window.open;
+        window.open = function (url, name, specs) {
+          if (looksLikeAd(url)) {
+            showPlayerError('Blocked an ad pop-up automatically. CamAnime is 100% ad-free.');
+            setTimeout(() => showPlayerError(''), 4000);
+            return null;
+          }
+          return realOpen.call(window, url, name, specs);
+        };
+      } catch (e) {}
+      // 2. Sweep the DOM every second for injected ad iframes/scripts
+      const doc = document;
+      doc.querySelectorAll('iframe').forEach(f => {
+        const src = f.getAttribute('src') || f.src || '';
+        if (looksLikeAd(src) && f.id !== 'embedIframe') {
+          f.remove();
+          return;
+        }
+        // Only our real embed player is allowed to display; sandbox anything else
+        if (f.id !== 'embedIframe' && (src || '').startsWith('http')) {
+          f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+        }
+      });
+      doc.querySelectorAll('script[src]').forEach(s => {
+        if (looksLikeAd(s.src)) s.remove();
+      });
+    }
+    setInterval(enforceAdPolicy, 1000);
+    enforceAdPolicy();
+
     function showPlayerError(msg) {
         const box = document.getElementById('playerError');
         if (!box) return;
         if (!msg) { box.style.display = 'none'; box.textContent = ''; return; }
         box.style.display = 'block';
         box.textContent = msg;
+    }
+    /* Failed-server notice is temporary by design: it disappears the moment a
+       good server renders video (loadeddata / MANIFEST_PARSED / frame shown). */
+    function noteServerFail(msg) {
+        showPlayerError(msg);
+        clearTimeout(showPlayerError._t);
+        showPlayerError._t = setTimeout(() => showPlayerError(''), 8000);
+    }
+    function markServerHealthy(srv) {
+        failoverTried = [];
+        showPlayerError('');
+        // Restart the temporary-error auto-hide (if one is pending from a failed server)
+        clearTimeout(showPlayerError._t);
+        try { localStorage.setItem('camanime_last_good_server_' + {{ anime.id }}, srv.id); } catch (e) {}
     }
     function downloadUrlFor(srv) {
         if (!srv) return '#';
@@ -732,23 +799,26 @@
                 hlsInstance.loadSource(srv.stream_url);
                 hlsInstance.attachMedia(video);
                 hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    markServerHealthy(srv);
                     try { window.caTrack('play', '{{ anime.id }}', '{{ ep_num }}'); } catch (e) {}
                     video.play().catch(() => {});
                 });
+                hlsInstance.on(Hls.Events.FRAG_BUFFERED, () => markServerHealthy(srv));
                 hlsInstance.on(Hls.Events.ERROR, (event, data) => {
                     if (!data.fatal) return;
                     if (srv.embed_url) {
                         video.style.display = 'none';
                         iframe.style.display = 'block';
                         iframe.src = srv.embed_url;
-                        showPlayerError('This HD stream failed, switched to backup embed automatically.');
+                        noteServerFail('This HD stream failed, switched to its backup embed automatically.');
                     } else {
-                        showPlayerError('This stream failed to load. Pick another SUB/DUB server below.');
+                        noteServerFail('This stream failed to load. Trying the next server automatically…');
                         autoTryNextServer(srv.id);
                     }
                 });
             } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                 video.src = srv.stream_url;
+                video.addEventListener('loadeddata', () => markServerHealthy(srv), { once: true });
                 video.addEventListener('loadedmetadata', () => video.play().catch(() => {}), { once: true });
             } else if (srv.embed_url) {
                 video.style.display = 'none';
@@ -759,14 +829,27 @@
             video.style.display = 'none';
             iframe.style.display = 'block';
             iframe.src = srv.stream_url;
-            if (dlBtn) { dlBtn.classList.add('disabled'); dlBtn.removeAttribute('href'); }
-            showPlayerError('Embed-only server: video plays here but cannot be saved as a file. Switch to an MP4 or CamStream server for a downloadable copy.');
+            // Embed iframes can take a moment; assume healthy once visible.
+            setTimeout(() => markServerHealthy(srv), 2500);
         }
     }
     function autoTryNextServer(failedId) {
+        if (failoverTried.includes(failedId)) return;
+        failoverTried.push(failedId);
+        if (failoverTried.length >= ALL_SERVERS.length) {
+            showPlayerError('All servers were tried and none worked right now. Open the episode again in a minute — servers refresh automatically.');
+            return;
+        }
+        // Prefer an untried direct (mp4/hls) server that the user has not failed yet
         const idx = ALL_SERVERS.findIndex(s => s.id === failedId);
-        const next = ALL_SERVERS.slice(idx + 1).find(s => s.playback_mode === 'mp4' || s.playback_mode === 'hls');
-        if (next) setTimeout(() => switchServer(next, { auto: true }), 1200);
+        const ordered = [...ALL_SERVERS.slice(idx + 1), ...ALL_SERVERS.slice(0, idx)];
+        const next = ordered.find(s => (s.playback_mode === 'mp4' || s.playback_mode === 'hls') && !failoverTried.includes(s.id));
+        const anyNext = ordered.find(s => !failoverTried.includes(s.id));
+        const pick = next || anyNext;
+        if (pick) {
+            noteServerFail('Switching to ' + pick.name + ' automatically…');
+            setTimeout(() => switchServer(pick, { auto: true }), 900);
+        }
     }
 
     // Intro skip button handler
@@ -822,8 +905,46 @@
     document.addEventListener('DOMContentLoaded', () => {
         const videoEl = document.getElementById('nativeVideo');
         videoEl.addEventListener('error', () => {
-            showPlayerError('Video file failed (source blocked or expired). Trying next working server…');
+            noteServerFail('Video file failed (source blocked or expired). Trying next working server…');
             if (currentServer) autoTryNextServer(currentServer.id);
+        });
+        videoEl.addEventListener('loadeddata', () => {
+            if (currentServer) markServerHealthy(currentServer);
+        });
+        // Device-synced watch history for signed-in users (guests keep localStorage)
+        try {
+            const pos = parseFloat(videoEl.currentTime || '0');
+        } catch (e) {}
+        let syncedProgress = false;
+        const syncProgress = () => {
+            fetch('/api/history', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    anime_id: {{ anime.id }}, ep: {{ ep_num }},
+                    position: videoEl.currentTime || 0, duration: videoEl.duration || 0,
+                    title: {{ anime.title | tojson }}, image: {{ (anime.image or '') | tojson }}
+                })
+            }).catch(() => {});
+        };
+        videoEl.addEventListener('loadeddata', () => { syncProgress(); syncedProgress = true; }, { once: true });
+        videoEl.addEventListener('timeupdate', () => {
+            if (!syncedProgress) { syncProgress(); syncedProgress = true; }
+        }, { once: true });
+        videoEl.addEventListener('pause', () => {
+            try {
+                if (videoEl.currentTime > 5 && (videoEl.duration || 0) > 0) {
+                    fetch('/api/history', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            anime_id: {{ anime.id }}, ep: {{ ep_num }},
+                            position: videoEl.currentTime, duration: videoEl.duration,
+                            title: {{ anime.title | tojson }}, image: {{ (anime.image or '') | tojson }}
+                        })
+                    }).catch(() => {});
+                }
+            } catch (e) {}
         });
         const dlBtn0 = document.getElementById('downloadCurrentBtn');
         function dlStartedMsg(okText) {

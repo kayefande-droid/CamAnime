@@ -533,6 +533,31 @@
             }
         } catch (e) {}
     }
+
+    // Direct-MP4 auto-resolve: watch page sends ?auto_resolve=<ep>, so immediately
+    // find the best matching show for the search query and stream/download that episode.
+    (async function autoResolve() {
+        const params = new URLSearchParams(window.location.search);
+        const ep = parseInt(params.get('auto_resolve') || '0', 10);
+        const q = params.get('q') || '';
+        if (!ep || ep < 1 || !q || !document.querySelector('.catalog-card')) return;
+        try {
+            const resp = await fetch('/api/heaven/search?q=' + encodeURIComponent(q));
+            const data = await resp.json();
+            if (data.status !== 'success' || !data.results || !data.results.length) return;
+            const best = data.results[0];
+            const info = await fetch('/api/heaven/anime/' + encodeURIComponent(best.id)).then(r => r.json());
+            if (info.status !== 'success' || !info.anime) return;
+            const epEntries = info.anime.episodes || [];
+            const target = epEntries.find(e => parseInt(e.num, 10) === ep) || epEntries[ep - 1] || epEntries[0];
+            if (!target) return;
+            // Reuse the normal resolver UI after jumping to the matched show
+            const url = new URL(window.location.href);
+            url.searchParams.set('id', best.id);
+            window.location.replace(url.toString());
+            setTimeout(() => resolveAndPlayHeaven(target.key, best.id, (info.anime.title || q) + ' - Ep ' + target.num, true), 1000);
+        } catch (e) {}
+    })();
 </script>
 
 </body>

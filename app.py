@@ -1,6 +1,8 @@
 import logging
 import re
 import time
+import random
+from datetime import datetime, timezone
 from collections import deque
 from typing import Dict, List, Optional
 from urllib.parse import quote, urljoin, urlparse
@@ -103,6 +105,27 @@ _BLOCKED_PATTERNS = re.compile(
     r"phpmyadmin|/\.aws/|/\.ssh/|id_rsa|/etc/passwd|base64_decode|"
     r"\.sql$|\.bak$|\.old$|/actuator|/c99\.php|/boaform/|\.DS_Store)"
 )
+
+# ── ZERO-AD-TOLERANCE: server-side ad-network blocklist ─────────────────────
+# CamAnime resolves and streams every video through our own /api/proxy/* endpoints.
+# Any URL routed through those endpoints that belongs to a known ad / tracking
+# network is refused at the server, so ad traffic can never reach the player
+# even if a third-party embed tries to load one.
+AD_NETWORK_PATTERN = re.compile(
+    r"(?i)(doubleclick\.net|googlesyndication\.com|googletagservices\.com|"
+    r"googleadservices\.com|google-analytics\.com|Analytics([^.]*?)\.edgekey|"
+    r"adnxs\.com|adsystem\.|adsrvr\.org|taboola\.com|outbrain\.com|criteo\.com|"
+    r"zedo\.com|rubiconproject\.com|pubmatic\.com|openx\.net|smartadserver\.com|"
+    r"adform\.net|yieldmo\.com|media\.net|revcontent\.com|mgid\.com|"
+    r"propellerads|popads\.net|popcash\.net|adcash\.com|onclickads\.net|"
+    r"trafficjunky|exoclick\.com|juicyads\.com|ero-advertising\.com|"
+    r"/ads\.js|/adserver|/pagead/|banner(?:s)?/.|adservice\.google|"
+    r"amazon-adsystem\.com|moatads\.com|adsafeprotected\.com|servedby-?adbutler)"
+)
+
+
+def _is_ad_url(url_text: str) -> bool:
+    return bool(AD_NETWORK_PATTERN.search(url_text or ""))
 
 _AUTHENTICATED_PATHS = ("/admin", "/settings", "/login", "/logout")
 
@@ -233,6 +256,23 @@ PLATFORM_STORE = platform.load_store()
 platform.ensure_admin(PLATFORM_STORE)
 platform.ensure_default_admin()
 PLATFORM_STORE = platform.load_store()
+
+# ─── ANIME CLASSICS SECTION (homepage) ──────────────────────────────────────
+# Curated timeless anime with verified AniList ids; each card links to the
+# normal details/watch pages so streaming & downloads work like any other row.
+ANIME_CLASSICS: List[Dict] = [
+    {"id": 16498, "title": "Attack on Titan", "year": 2013, "why": "Widely ranked the #1 modern shonen era-definer"},
+    {"id": 16429, "title": "Death Note", "year": 2006, "why": "All-time classic cat-and-mouse thriller"},
+    {"id": 21, "title": "One Piece", "year": 1999, "why": "Longest-running top adventure epic"},
+    {"id": 20, "title": "Naruto Shippuden", "year": 2007, "why": "The ninja classic that defined a generation"},
+    {"id": 11061, "title": "HUNTERxHUNTER (2011)", "year": 2011, "why": "Peerless adventure & nen power system"},
+    {"id": 5114, "title": "Fullmetal Alchemist: Brotherhood", "year": 2009, "why": "Consistently the top-rated classic shonen"},
+    {"id": 321, "title": "Samurai Champloo", "year": 2004, "why": "Hip-hop samurai classic by Watanabe"},
+    {"id": 1, "title": "Cowboy Bebop", "year": 1998, "why": "The definitive space-western jazz classic"},
+    {"id": 199, "title": "Sen to Chihiro (Spirited Away)", "year": 2001, "why": "Ghibli Oscar-winning timeless film"},
+    {"id": 5680, "title": "K-On!", "year": 2009, "why": "Beloved slice-of-life band classic"},
+    {"id": 5291, "title": "Sword Art Online", "year": 2012, "why": "Isekai VR-era modern classic"},
+]
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: Dict[str, tuple] = {}
@@ -469,6 +509,9 @@ def format_anime_card(anime: Dict) -> Dict:
             "airing_at": next_ep.get("airingAt"),
             "seconds_until_airing": next_ep.get("timeUntilAiring"),
         } if next_ep else None),
+        "airing_hour": (
+            datetime.fromtimestamp(next_ep["airingAt"], timezone.utc).strftime("%H:%M UTC")
+            if next_ep and next_ep.get("airingAt") else ""),
         "duration": f"{anime.get('duration')}m" if anime.get("duration") else "",
         "rating": rating,
         "score": score or 0,
@@ -565,17 +608,77 @@ def home():
     popular_season = [format_anime_card(a) for a in season_raw if a]
     top_rated = [format_anime_card(a) for a in top_raw if a]
 
+    # Seasons / best-of rows: put this WEEK's and this MONTH's standouts in
+    # shuffled rows so users always discover something new on every visit.
+    weekly_row = [a for a in trending if a.get("status") == "Releasing"][:10]
+    monthly_row = [a for a in top_rated if a.get("score", 0) >= 78][:10]
+    random.shuffle(weekly_row)
+    random.shuffle(monthly_row)
+
+    # Cache each card's meta for the server-side watch-history viewer + rankings
+    for card in (trending + popular_season + top_rated):
+        try:
+            platform.cache_anime_meta(
+                card.get("id"), title=card.get("title", ""), image=card.get("image", ""),
+                banner=card.get("banner", ""), format=card.get("format", ""),
+                status=card.get("status", ""), year=card.get("year") or 0,
+                episode_label=card.get("episode", ""))
+        except Exception:
+            pass
+
     hero_slides = [a for a in trending if a.get("banner")][:6] or trending[:5]
     featured = hero_slides[0] if hero_slides else None
 
+    # Global most-watched ranking feed for all three tabs (Day/Week/Month)
+    try:
+        most_viewed_day = platform.most_watched(int(time.time()) - 86400, limit=12)
+        most_viewed_week = platform.most_watched(int(time.time()) - 7*86400, limit=12)
+        most_viewed_month = platform.most_watched(int(time.time()) - 30*86400, limit=12)
+    except Exception:
+        most_viewed_day = most_viewed_week = most_viewed_month = []
+
+    # Factual public counters for homepage stat strip
+    try:
+        _c = platform.get_counters()
+        public_counters = {
+            "app_downloads": _c.get("app_downloads", 0),
+            "streams": _c.get("streams", 0) + _c.get("plays", 0),
+            "downloads": _c.get("downloads", 0),
+            "users": len(platform.load_store()["users"]),
+        }
+    except Exception:
+        public_counters = {"app_downloads": 0, "streams": 0, "downloads": 0, "users": 0}
+
+    # Next-episode release ticker: soonest RELEASING simulcasts (all users see it)
+    countdown_items = [a for a in popular_season if a.get("next_airing_episode")][:6]
+
     # Fetch live AnimeHeaven latest releases for the homepage live scraper strip
     heaven_recent = streaming_manager.animeheaven.browse_catalog("new")[:12]
+
+    # Sign-in aware continue-watching: server-synced rows when logged in, else local
+    synced_history = []
+    current_user = _current_user()
+    if current_user and not current_user.get("guest"):
+        try:
+            synced_history = platform.get_history(current_user["email"], limit=12)
+        except Exception:
+            synced_history = []
 
     return render_template(
         "index.html",
         trending=trending,
         popular_season=popular_season,
         top_rated=top_rated,
+        weekly_row=weekly_row,
+        monthly_row=monthly_row,
+        classics=ANIME_CLASSICS,
+        most_viewed_day=most_viewed_day,
+        most_viewed_week=most_viewed_week,
+        most_viewed_month=most_viewed_month,
+        public_counters=public_counters,
+        countdown_items=countdown_items,
+        synced_history=synced_history,
+        signed_in=bool(current_user and not current_user.get("guest")),
         heaven_recent=heaven_recent,
         featured=featured,
         hero_slides=hero_slides,
@@ -1090,6 +1193,9 @@ def proxy_hls():
     ref = request.args.get("ref", "").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        logger.warning(f"Ad-blocked proxy request: {url}")
+        return jsonify({"error": "Blocked: this URL belongs to an ad network. CamAnime is 100%% ad-free."}), 403
     # HLS segment fetches are frequent; log only the first playlist request so
     # the live feed shows real viewing sessions rather than one row per chunk.
     if "m3u8" in url.lower():
@@ -1157,8 +1263,15 @@ def proxy_video():
     ref = request.args.get("ref", "https://animeheaven.me/").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
-    # Live feed only — cheap, best-effort, never blocks the stream.
+    if _is_ad_url(url):
+        logger.warning(f"Ad-blocked proxy request: {url}")
+        return jsonify({"error": "Blocked: this URL belongs to an ad network. CamAnime is 100%% ad-free."}), 403
+    # Live feed + factual homepage counter — cheap, best-effort, never blocks the stream.
     _record_activity("stream", detail=urlparse(url).netloc)
+    try:
+        platform.bump_counter("streams")
+    except Exception:
+        pass
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -1218,10 +1331,17 @@ def download_video():
     ref = (request.args.get("ref", "https://animeheaven.me/") or "https://animeheaven.me/").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        logger.warning(f"Ad-blocked download request: {url}")
+        return jsonify({"error": "Blocked: this URL belongs to an ad network. CamAnime is 100%% ad-free."}), 403
 
     safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
-    # Live feed only — cheap, best-effort, never blocks the download.
+    # Live feed + factual homepage counter — cheap, best-effort, never blocks the download.
     _record_activity("download", anime=title[:80], detail=urlparse(url).netloc)
+    try:
+        platform.bump_counter("downloads")
+    except Exception:
+        pass
     wants_hls = ".m3u8" in url.lower()
     want_ext = ".m3u8" if wants_hls else ".mp4"
     if not safe_filename.lower().endswith(want_ext):
@@ -1286,6 +1406,8 @@ def proxy_subtitle():
     ref = request.args.get("ref", "https://megaplay.buzz/").strip()
     if not url:
         return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        return jsonify({"error": "Blocked: ad network URL."}), 403
 
     try:
         resp = requests.get(
@@ -1536,11 +1658,19 @@ def _serve_app_file(local_names, release_name, download_name):
 
 @app.route("/get/android")
 def get_android():
+    try:
+        platform.bump_counter("app_downloads")
+    except Exception:
+        pass
     return _serve_app_file(["CamAnime.apk"], "CamAnime.apk", "CamAnime.apk")
 
 
 @app.route("/get/windows")
 def get_windows():
+    try:
+        platform.bump_counter("app_downloads")
+    except Exception:
+        pass
     return _serve_app_file(["CamAnime-Windows.zip", "CamAnime.exe"],
                            "CamAnime-Windows.zip", "CamAnime-Windows.zip")
 
@@ -1633,6 +1763,62 @@ def api_track():
     d = _post_data()
     platform.track(store, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
     return jsonify({"status": "ok"})
+
+
+# ─── Cross-device account sync: server-side watch history + watchlist ────────
+# One account = one continue-watching list everywhere (website, Android, Windows).
+# Guests keep localStorage-only behaviour; signed-in users get true device sync.
+
+@app.route("/api/history", methods=["GET"])
+def api_history_get():
+    u = _current_user()
+    if not u:
+        return jsonify({"status": "error", "error": "Sign in to sync your watch history across devices."}), 401
+    return jsonify({"status": "success", "synced": True, "history": platform.get_history(u["email"], limit=int(request.args.get("limit", 30)))})
+
+
+@app.route("/api/history", methods=["POST"])
+def api_history_upsert():
+    u = _current_user()
+    if not u or u.get("guest"):
+        return jsonify({"status": "error", "error": "Sign in to sync your watch history across devices."}), 401
+    d = _post_data()
+    try:
+        row = platform.upsert_history(
+            u["email"], d.get("anime_id"), int(d.get("ep", 1) or 1),
+            float(d.get("position", 0) or 0), float(d.get("duration", 0) or 0),
+            d.get("title", ""), d.get("image", ""))
+        return jsonify({"status": "success", "row": row})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+
+
+@app.route("/api/history/remove", methods=["POST"])
+def api_history_remove():
+    u = _current_user()
+    if not u or u.get("guest"):
+        return jsonify({"status": "error", "error": "Sign in first."}), 401
+    d = _post_data()
+    platform.remove_history(u["email"], d.get("anime_id"))
+    return jsonify({"status": "success"})
+
+
+# ─── Home page data: factual counters + real most-watched ranking ───────────
+
+@app.route("/api/public/counters")
+def api_public_counters():
+    """Live factual counters only — streams/downloads/users counted from real
+    events in SQLite. Nothing here is a placeholder or vanity number."""
+    c = platform.get_counters()
+    store = platform.load_store()
+    return jsonify({
+        "status": "success",
+        "app_downloads": c.get("app_downloads", 0),
+        "streams": c.get("streams", 0) + c.get("plays", 0),
+        "downloads": c.get("downloads", 0),
+        "users": len(store["users"]),
+        "source": "real events only",
+    })
 
 
 # ─── Versioned shared catalogue API ─────────────────────────────────────────
@@ -1837,6 +2023,26 @@ def api_public_anime(anime_id: int):
     return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(store, anime_id)})
 
 
+@app.route("/api/public/stream/download", methods=["POST"])
+def api_public_stream_or_download():
+    """Users + apps can register a real stream/download (no auth) purely for the
+    factual homepage counters. Never used for payments or private data."""
+    d = _post_data()
+    kind = (d.get("kind", "stream") or "stream").lower()
+    if kind not in ("stream", "download"):
+        kind = "stream"
+    anime_id = (d.get("anime_id", "") or "").strip()
+    title = (d.get("title", "") or "").strip()
+    image = (d.get("image", "") or "").strip()
+    platform.bump_counter(kind)
+    if anime_id:
+        platform.track({}, kind, {"anime_id": anime_id, "ep": d.get("ep", "")})
+        if title:
+            platform.cache_anime_meta(anime_id, title=title, image=image,
+                                      episode_label=f"EP {d.get('ep', '')}" if d.get("ep") else "")
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/version")
 def api_version():
     """Update-check endpoint for native apps: current release + direct links."""
@@ -1850,6 +2056,23 @@ def api_announcements():
     """CEO announcements feed for website banner + native apps."""
     return jsonify({"status": "success",
                     "announcements": platform.list_announcements(10)})
+
+
+@app.route("/api/public/most-viewed")
+def api_public_most_viewed():
+    """Most-watched ranking per Day / Week / Month / Year, from real play events.
+
+    Only anime actually played on CamAnime appear in each window."""
+    import time as _t
+    now = int(_t.time())
+    windows = {"day": 86400, "week": 7 * 86400, "month": 30 * 86400, "year": 365 * 86400}
+    key = request.args.get("window", "day").lower()
+    if key == "all":
+        since = 0
+    else:
+        since = now - windows.get(key, windows["day"])
+    rows = platform.most_watched(since, limit=12)
+    return jsonify({"status": "success", "window": key, "items": rows})
 
 
 @app.route("/api/admin/announce", methods=["POST"])

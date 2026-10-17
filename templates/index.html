@@ -17,6 +17,10 @@
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" sizes="180x180">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Page-switch speed: warm likely next pages + poster CDN while the user browses -->
+    <link rel="prefetch" href="/scraper">
+    <link rel="prefetch" href="/download">
+    <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link href="/static/css/sync.css" rel="stylesheet">
@@ -963,6 +967,47 @@
         <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:#64708a">· {{ announcement.author }}</em></span></div>
     </div>
     {% endif %}
+
+    <!-- ─── NEXT EPISODE RELEASE TICKER (all users, live countdown) ─── -->
+    {% if page_type == 'home' and countdown_items is defined and countdown_items %}
+    <section class="section-block" id="releaseTickerSection">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="live-dot"></span>
+                <h2 class="section-title" style="font-size:1.25rem;">Next Episode Release Schedule</h2>
+            </div>
+            <a href="/schedule" class="section-link" style="color:#34d399;">Open full schedule <i class="fas fa-arrow-right"></i></a>
+        </div>
+        <div id="releaseTickerList">
+            {% for it in countdown_items %}
+            <div class="release-ticker" data-airing-epoch="{{ (it.next_airing_episode.airing_at) or 0 }}">
+                <div>
+                    <div class="rt-title">{{ it.title }}</div>
+                    <div class="rt-sub">Episode {{ it.next_airing_episode.episode }} · airs {{ it.airing_hour }} ({{ it.status }})</div>
+                </div>
+                <div class="countdown-chips" data-cd-for="{{ it.id }}">
+                    <span class="cd-chip"><b data-cd-d>-</b><span>d</span></span>
+                    <span class="cd-chip"><b data-cd-h>-</b><span>hrs</span></span>
+                    <span class="cd-chip"><b data-cd-m>-</b><span>min</span></span>
+                    <span class="cd-chip"><b data-cd-s>-</b><span>sec</span></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- ─── FACTUAL SITE COUNTER STRIP (real numbers only) ─── -->
+    {% if page_type == 'home' and public_counters is defined %}
+    <div class="stat-strip" id="siteStats">
+        <div class="st-cell"><b id="statStreams">{{ public_counters.streams }}</b><span>Streams till now</span></div>
+        <div class="st-cell"><b id="statDownloads">{{ public_counters.downloads }}</b><span>Downloads till now</span></div>
+        <div class="st-cell"><b id="statApps">{{ public_counters.app_downloads }}</b><span>App downloads</span></div>
+        <div class="st-cell"><b id="statUsers">{{ public_counters.users }}</b><span>Registered fans</span></div>
+        <span class="st-note">Real, counted events only — streams and downloads update live as users watch and save episodes.</span>
+    </div>
+    {% endif %}
+
     <div class="filter-bar">
         <div class="genre-pills">
             <a href="/" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>
@@ -972,7 +1017,10 @@
         </div>
     </div>
 
-    <!-- ─── CONTINUE WATCHING / SAVED WATCHLIST STRIP (Dynamic JS) ─── -->
+    <!-- ─── CONTINUE WATCHING / SAVED WATCHLIST STRIP ───
+         Shown only on the homepage (not on genre/format/search result pages),
+         so switching genre is not hidden behind a permanent watchlist row.
+         Signed-in users get server-side rows that sync to every device. ── -->
     <section class="section-block" id="watchlistSection" style="display: none;">
         <div class="section-head">
             <div class="section-title-wrap">
@@ -1050,6 +1098,67 @@
         </div>
         {% endif %}
     </section>
+
+    {% if page_type == 'home' and most_viewed_day is defined and most_viewed_day is not none %}
+    <!-- ─── MOST VIEWED GLOBALLY (Day / Week / Month) — real events only ─── -->
+    <section class="section-block" id="mostViewedSection">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">MOST VIEWED</h2>
+                <span class="section-subtitle">counted from real plays on CamAnime</span>
+            </div>
+            <div class="mv-tabs" role="tablist">
+                <button type="button" class="mv-tab active" data-mv-window="day">Day</button>
+                <button type="button" class="mv-tab" data-mv-window="week">Week</button>
+                <button type="button" class="mv-tab" data-mv-window="month">Month</button>
+            </div>
+        </div>
+        <div class="anime-grid" id="mvGrid">
+            {% for it in most_viewed_day %}
+            <a href="/anime/{{ it.anime_id }}" class="anime-card" style="display:flex;flex-direction:column;">
+                <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
+                    <span class="mv-rank-num">#{{ loop.index }}</span>
+                    <img src="{{ it.image }}" loading="lazy" alt="{{ it.title }}" style="width:52px;height:72px;object-fit:cover;border-radius:8px;">
+                </div>
+                <div style="padding:.6rem .8rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
+                    <div class="card-title" style="margin:0;">{{ it.title }}</div>
+                    <div class="card-submeta"><span>{{ it.plays }} plays</span><span>{{ it.format or 'TV' }}</span></div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        <p id="mvEmpty" style="color:var(--text-muted);font-size:.85rem;padding:1rem .2rem;"></p>
+    </section>
+    {% endif %}
+
+    {% if page_type == 'home' and classics %}
+    <!-- ─── ANIME CLASSICS ─── -->
+    <section class="section-block" id="classicsSection">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">Anime Classics</h2>
+                <span class="section-subtitle">timeless must-watch legends</span>
+            </div>
+            <button type="button" class="shuffle-btn" onclick="shuffleClassics()"><i class="fas fa-random"></i> Shuffle</button>
+        </div>
+        <div class="anime-grid" id="classicsGrid">
+            {% for c in classics %}
+            <a href="/anime/{{ c.id }}" class="anime-card classics-card" data-title="{{ c.title }}">
+                <img src="https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/b{{ c.id }}.jpg" loading="lazy" alt="{{ c.title }}" onerror="this.src='/static/brand/camanime-icon.svg'">
+                <div style="padding:.7rem .8rem 1rem;flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0;">
+                    <div class="card-title" style="margin:0;">{{ c.title }}</div>
+                    <div class="card-submeta"><span>{{ c.year }}</span><span>Classic</span></div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        <style>
+            .classics-card img{width:100%;aspect-ratio:2/2.9;object-fit:cover;background:var(--bg-surface)}
+        </style>
+    </section>
+    {% endif %}
 
     <!-- ─── LIVE ANIMEHEAVEN DIRECT SCRAPER FEED ─── -->
     {% if heaven_recent %}
@@ -1174,7 +1283,71 @@
     </section>
     {% endif %}
 
-    <!-- ─── NATIVE APPS DOWNLOAD BANNER ─── -->
+    {% if page_type == 'home' and weekly_row is defined and weekly_row %}
+    <!-- ─── BEST OF THE WEEK (shuffled every visit) ─── -->
+    <section class="section-block">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">Best Anime of the Week</h2>
+            </div>
+            <div class="head-controls">
+                <button type="button" class="shuffle-btn" onclick="shuffleRow('weeklyGrid')"><i class="fas fa-random"></i> Shuffle</button>
+            </div>
+        </div>
+        <div class="anime-grid" id="weeklyGrid">
+            {% for anime in weekly_row %}
+            <a href="/watch/{{ anime.id }}/1" class="anime-card">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">{{ anime.episode }}</span>
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                    </div>
+                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                </div>
+                <div class="card-body" style="text-decoration:none;">
+                    <div class="card-title">{{ anime.title }}</div>
+                    <div class="card-submeta"><span>{{ anime.format }} · Sub & Dub</span><span>{{ anime.status }}</span></div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if page_type == 'home' and monthly_row is defined and monthly_row %}
+    <!-- ─── BEST OF THE MONTH (shuffled every visit) ─── -->
+    <section class="section-block">
+        <div class="section-head">
+            <div class="section-title-wrap">
+                <span class="section-accent-bar"></span>
+                <h2 class="section-title">Best Anime of the Month</h2>
+            </div>
+            <div class="head-controls">
+                <button type="button" class="shuffle-btn" onclick="shuffleRow('monthlyGrid')"><i class="fas fa-random"></i> Shuffle</button>
+            </div>
+        </div>
+        <div class="anime-grid" id="monthlyGrid">
+            {% for anime in monthly_row %}
+            <a href="/watch/{{ anime.id }}/1" class="anime-card">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">{{ anime.episode }}</span>
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
+                    </div>
+                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                </div>
+                <div class="card-body" style="text-decoration:none;">
+                    <div class="card-title">{{ anime.title }}</div>
+                    <div class="card-submeta"><span>{{ anime.year or anime.season }}</span><span>{{ anime.format }}</span></div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <!-- ─── NATIVE APPS DOWNLOAD BANNER ──── -->
     <section class="section-block" style="background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 2rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.25rem;">
         <div>
             <h2 class="section-title" style="margin-bottom: 0.35rem;"><i class="fas fa-mobile-alt" style="color: var(--accent);"></i> Take CamAnime anywhere</h2>
@@ -1284,7 +1457,9 @@
         }
     });
 
-    // Watchlist Management
+    // Watchlist Management — rendered ONLY on the homepage (page_type === 'home').
+    // Genre / format / search pages skip it entirely so switching genre is obvious.
+    const IS_HOME_PAGE = {{ 'true' if page_type == 'home' else 'false' }};
     function loadWatchlist() {
         try {
             const list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
@@ -1292,19 +1467,13 @@
             const section = document.getElementById('watchlistSection');
             const grid = document.getElementById('watchlistGrid');
             if (badge) badge.textContent = list.length;
-            if (!section || !grid) return;
-
-            if (list.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
+            if (!section || !grid || !IS_HOME_PAGE) return;
+            if (list.length === 0) { section.style.display = 'none'; return; }
             section.style.display = 'block';
             grid.innerHTML = list.map(item => `
                 <div class="anime-card">
                     <div class="card-poster-wrap">
-                        <div class="card-badges-top">
-                            <span class="ep-badge">EP ${item.ep || 1}</span>
-                        </div>
+                        <div class="card-badges-top"><span class="ep-badge">EP ${item.ep || 1}</span></div>
                         <img src="${item.image}" alt="${item.title}" loading="lazy">
                         <div class="card-hover-actions">
                             <div class="card-action-row">
@@ -1321,6 +1490,118 @@
         } catch (e) {}
     }
 
+    // Server-synced continue watching (logged-in users): replaces local rows
+    // so the same account shows the same 'continue' list on every device.
+    async function loadSyncedHistory() {
+        if (!IS_HOME_PAGE) return;
+        try {
+            const r = await fetch('/api/history', { credentials: 'same-origin' });
+            if (r.status !== 200) return;
+            const d = await r.json();
+            if (!d.history || !d.history.length) return;
+            const section = document.getElementById('watchlistSection');
+            const grid = document.getElementById('watchlistGrid');
+            if (!section || !grid) return;
+            section.style.display = 'block';
+            if (grid.children.length) return; // local list already drawn
+            section.querySelector('.section-title').textContent = 'Continue Watching (synced to your account)';
+            grid.innerHTML = d.history.map(item => `
+                <div class="anime-card">
+                    <div class="card-poster-wrap">
+                        <div class="card-badges-top"><span class="ep-badge">EP ${item.ep || 1}</span></div>
+                        <img src="${item.image}" alt="${item.title}" loading="lazy">
+                        <div class="card-hover-actions">
+                            <div class="card-action-row">
+                                <a href="/watch/${item.anime_id}/${item.ep || 1}" class="card-btn-play"><i class="fas fa-play"></i> Continue</a>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="/anime/${item.anime_id}" class="card-body" style="text-decoration:none;">
+                        <div class="card-title">${item.title}</div>
+                        <div class="card-submeta"><span>Device-synced</span><span>Ep ${item.ep || 1}</span></div>
+                    </a>
+                </div>
+            `).join('');
+        } catch (e) {}
+    }
+
+    // ─── Live next-episode countdown (updates every second) ───
+    function tickCountdowns() {
+        document.querySelectorAll('.release-ticker[data-airing-epoch]').forEach(row => {
+            const epoch = parseInt(row.getAttribute('data-airing-epoch') || '0', 10);
+            if (!epoch) return;
+            let diff = epoch - Math.floor(Date.now() / 1000);
+            if (diff < 0) diff = 0;
+            const d = Math.floor(diff / 86400), h = Math.floor((diff % 86400) / 3600),
+                  m = Math.floor((diff % 3600) / 60), s = diff % 60;
+            const set = (sel, v) => { const el = row.querySelector(sel); if (el) el.textContent = String(v).padStart(2, '0'); };
+            set('[data-cd-d]', d); set('[data-cd-h]', h); set('[data-cd-m]', m); set('[data-cd-s]', s);
+        });
+    }
+    setInterval(tickCountdowns, 1000); tickCountdowns();
+
+    // ─── Live factual counters refresh (60s) ───
+    async function refreshStats() {
+        try {
+            const r = await fetch('/api/public/counters');
+            const d = await r.json();
+            if (d.status !== 'success') return;
+            const map = { streams: '#statStreams', downloads: '#statDownloads', app_downloads: '#statApps', users: '#statUsers' };
+            Object.entries(map).forEach(([k, sel]) => { const el = document.querySelector(sel); if (el && d[k] !== undefined) el.textContent = d[k]; });
+        } catch (e) {}
+    }
+    setInterval(refreshStats, 60000); refreshStats();
+
+    // ─── MOST VIEWED tab switching (Day/Week/Month) ───
+    document.querySelectorAll('.mv-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.mv-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            fetch('/api/public/most-viewed?window=' + tab.dataset.mvWindow)
+              .then(r => r.json())
+              .then(d => {
+                  const grid = document.getElementById('mvGrid');
+                  if (!grid) return;
+                  if (!d.items || !d.items.length) {
+                      grid.innerHTML = '';
+                      const empty = document.getElementById('mvEmpty');
+                      if (empty) empty.textContent = 'No plays counted in this window yet — be the first to watch!';
+                      return;
+                  }
+                  grid.innerHTML = d.items.map((it, i) => `
+                      <a href="/anime/${it.anime_id}" class="anime-card" style="display:flex;flex-direction:column;">
+                          <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
+                              <span class="mv-rank-num">#${i + 1}</span>
+                              <img src="${it.image}" loading="lazy" alt="" style="width:52px;height:72px;object-fit:cover;border-radius:8px;">
+                          </div>
+                          <div style="padding:.6rem .8rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
+                              <div class="card-title" style="margin:0;">${it.title}</div>
+                              <div class="card-submeta"><span>${it.plays} plays</span><span>${it.format || 'TV'}</span></div>
+                          </div>
+                      </a>`).join('');
+                  const empty = document.getElementById('mvEmpty');
+                  if (empty) empty.textContent = '';
+              }).catch(() => {});
+        });
+    });
+
+    // ─── Section shuffles ───
+    function shuffleRow(gridId) {
+        const grid = document.getElementById(gridId);
+        if (!grid) return;
+        const cards = Array.from(grid.children);
+        for (let i = cards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cards[i], cards[j]] = [cards[j], cards[i]];
+        }
+        cards.forEach(c => grid.appendChild(c));
+    }
+    function shuffleClassics() { shuffleRow('classicsGrid'); }
+    // Auto-shuffle discovery rows on every visit
+    document.addEventListener('DOMContentLoaded', () => {
+        shuffleRow('weeklyGrid'); shuffleRow('monthlyGrid'); shuffleRow('classicsGrid');
+    });
+
     function toggleWatchlistModal() {
         const section = document.getElementById('watchlistSection');
         if (section && section.style.display !== 'none') {
@@ -1335,7 +1616,7 @@
         loadWatchlist();
     }
 
-    document.addEventListener('DOMContentLoaded', loadWatchlist);
+    document.addEventListener('DOMContentLoaded', () => { loadWatchlist(); loadSyncedHistory(); });
 </script>
 
 <script>

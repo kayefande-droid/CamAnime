@@ -2,67 +2,181 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Admin — CamAnime</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<title>Admin Control Deck — CamAnime</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1100px;margin:0 auto}
-h1{font-family:'Syne';font-size:clamp(1.4rem,1.2rem + 1.5vw,1.8rem);margin-bottom:.25rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:1rem;margin:1.5rem 0}
-.stat{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1.1rem}
-.stat b{font-size:1.5rem;display:block}.stat span{color:#a0abc0;font-size:.82rem}
-table{width:100%;border-collapse:collapse;background:#0e111a;border-radius:12px;overflow:hidden}
-td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);font-size:.86rem;text-align:left}
-a{color:#FFB347}
-@media(max-width:414px){body{padding:1rem}}
+:root{--bg:#07080d;--panel:#0e111a;--panel2:#141926;--line:rgba(255,255,255,.1);--accent:#FFB347;--crimson:#FF5E62;--emerald:#10B981;--blue:#087BFF;--text:#f3f5fa;--text2:#a0abc0;--muted:#64708a}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;min-height:100vh;
+  background-image:radial-gradient(circle at 12% 0%,rgba(255,179,71,.09),transparent 42%),radial-gradient(circle at 88% 8%,rgba(8,123,255,.07),transparent 40%)}
+a{color:var(--accent)}
+.shell{max-width:1180px;margin:0 auto;padding:1.4rem 1.4rem 3.5rem}
+/* ── command header ── */
+.deck-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(255,179,71,.13),rgba(14,17,26,.94) 55%,rgba(8,123,255,.09));border:1px solid rgba(255,179,71,.3);border-radius:20px;padding:1.3rem 1.6rem;margin-bottom:1.6rem}
+.deck-head h1{font-family:'Syne';font-size:clamp(1.3rem,1rem + 1.6vw,1.9rem);display:flex;gap:.7rem;align-items:center}
+.deck-head .sub{color:var(--text2);font-size:.85rem;margin-top:.25rem}
+.backup-link{background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--text);text-decoration:none;border-radius:999px;padding:.55rem 1.1rem;font-weight:700;font-size:.85rem;display:inline-flex;gap:.5rem;align-items:center}
+.backup-link:hover{border-color:var(--accent);color:var(--accent)}
+/* ── stat tiles ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,172px),1fr));gap:.9rem;margin:1.3rem 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.1rem;position:relative;overflow:hidden}
+.stat::after{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--accent),var(--crimson));opacity:.75}
+.stat b{font-size:1.55rem;display:block;font-family:'JetBrains Mono',monospace;color:var(--accent)}
+.stat span{color:var(--text2);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+.stat .trend{margin-top:.35rem;font-size:.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.4rem;margin:1.4rem 0}
+.panel h2{font-family:'Syne';font-size:1.15rem;margin-bottom:.7rem;display:flex;align-items:center;gap:.6rem}
+.panel p.note{color:var(--text2);font-size:.85rem;max-width:720px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:14px;overflow:hidden;font-size:.85rem}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px}
+td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);text-align:left;white-space:nowrap}
+tbody tr:hover{background:rgba(255,179,71,.05)}
+/* ── tool cards (recommended admin tools) ── */
+.tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:.9rem}
+.tool-card{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.45rem;text-decoration:none;color:var(--text);transition:all .18s}
+.tool-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.5)}
+.tool-card i{font-size:1.3rem;color:var(--accent)}
+.tool-card b{font-family:'Syne';font-size:.98rem}
+.tool-card span{color:var(--text2);font-size:.8rem}
+.tool-card .tag{font-size:.66rem;font-family:'JetBrains Mono',monospace;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.35);color:#34d399;border-radius:6px;padding:.12rem .5rem;width:max-content}
+/* ── forms ── */
+.form{display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.6rem 0 1.4rem}
+.form input,.form textarea{padding:.68rem .85rem;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--panel2);color:var(--text);font-family:inherit;font-size:.9rem}
+.form input:focus,.form textarea:focus{border-color:var(--accent);outline:none}
+.btn{border:none;border-radius:999px;padding:.72rem 1.5rem;font-weight:800;cursor:pointer;font-size:.88rem;display:inline-flex;gap:.5rem;align-items:center;justify-content:center}
+.btn.gold{background:linear-gradient(135deg,var(--accent),var(--crimson));color:#07080d}
+.btn.green{background:var(--emerald);color:#04120c}
+.btn.blue{background:var(--blue);color:#fff}
+.btn.ghost{background:var(--panel2);border:1px solid rgba(255,255,255,.2);color:var(--text)}
+.form .row{display:flex;gap:.6rem;flex-wrap:wrap}
+.form .row>*{flex:1 1 180px;min-width:0}
+/* ── live feed ── */
+.live-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));gap:.9rem}
+.badge-green{color:#34d399}
+.muted{color:var(--muted)}
+@media(max-width:414px){.shell{padding:1rem}}
 </style>
 <link href="/static/css/sync.css" rel="stylesheet">
 <script src="/static/js/site.js" defer></script>
 </head>
 <body>
-<p><a href="/">← Back to site</a> · Signed in as {{ user.name }} (admin)</p>
-<h1>Admin tools &amp; live analytics</h1>
-<p style="color:#a0abc0">Live app downloads, website clicks, plays and most-watched playlist feed the Trending classifier.</p>
-<div class="grid">
-<div class="stat"><b>{{ stats.app_downloads }}</b><span>App downloads</span></div>
-<div class="stat"><b>{{ stats.clicks }}</b><span>Website clicks</span></div>
-<div class="stat"><b>{{ stats.plays }}</b><span>Episode plays</span></div>
-<div class="stat"><b>{{ stats.users }}</b><span>Users</span></div>
-<div class="stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
-<div class="stat"><b>{{ stats.ratings }}</b><span>Ratings</span></div>
+<div class="shell">
+
+  <div class="deck-head">
+    <div>
+      <h1><i class="fas fa-sliders-h" style="color:var(--accent)"></i> Admin Control Deck</h1>
+      <div class="sub">Signed in as <b>{{ user.name }}</b> ({{ user.email }}) · admin only · v1.2.0</div>
+    </div>
+    <a href="/" class="backup-link"><i class="fas fa-arrow-left"></i> Back to site</a>
+  </div>
+
+  <!-- ── dashboard: factual counters ── -->
+  <div class="grid">
+    <div class="stat"><b>{{ stats.streams or stats.plays }}</b><span>Streams till now</span><div class="trend">real count, SQLite</div></div>
+    <div class="stat"><b>{{ stats.downloads }}</b><span>Downloads till now</span><div class="trend">real count, SQLite</div></div>
+    <div class="stat"><b>{{ stats.app_downloads }}</b><span>App downloads</span><div class="trend">/get/android + /get/windows</div></div>
+    <div class="stat"><b>{{ stats.users }}</b><span>Users</span></div>
+    <div class="stat"><b>{{ stats.comments }}</b><span>Comments</span></div>
+    <div class="stat"><b>{{ stats.ratings }}</b><span>Ratings</span></div>
+  </div>
+
+  <!-- ── recommended admin tools ── -->
+  <div class="panel">
+    <h2><i class="fas fa-toolbox" style="color:var(--accent)"></i> Recommended admin tools</h2>
+    <div class="tool-grid">
+      <a class="tool-card" href="#livePanel"><i class="fas fa-satellite-dish"></i><b>Live activity radar</b><span>Who is streaming / downloading right now</span><span class="tag">LIVE</span></a>
+      <a class="tool-card" href="/api/public/counters"><i class="fas fa-chart-line"></i><b>Counter API</b><span>Factual JSON counters used by the homepage</span><span class="tag">API</span></a>
+      <a class="tool-card" href="#annPanel"><i class="fas fa-bullhorn"></i><b>CEO announcements</b><span>Push website banner + app feed messages</span><span class="tag">PUBLISH</span></a>
+      <a class="tool-card" href="#pwForm"><i class="fas fa-key"></i><b>Password vault</b><span>Change own password, reset users, create admins</span><span class="tag">SECURITY</span></a>
+      <a class="tool-card" href="#syncPanel"><i class="fas fa-cloud-arrow-up"></i><b>Sync status</b><span>Secret + admin DB health check</span><span class="tag">HEALTH</span></a>
+      <a class="tool-card" href="/api/admin/live-activity"><i class="fas fa-download"></i><b>Live feed JSON</b><span>Raw live activity endpoint for the apps</span><span class="tag">API</span></a>
+    </div>
+  </div>
+
+  <!-- ── live radar ── -->
+  <div class="panel" id="livePanel">
+    <h2><i class="fas fa-tower-broadcast badge-green"></i> Live now — streams, downloads, who is online</h2>
+    <p class="note">Refreshes every 5 s. Anonymous visitors show as <i>guest</i>; counters cover the last minute, online visitors the last 2 minutes. In-memory feed — resets on restart.</p>
+    <div class="live-grid" id="liveGrid">
+      <div class="stat"><b>-</b><span>Online now (2 min)</span></div>
+      <div class="stat"><b>-</b><span>Active streams (1 min)</span></div>
+      <div class="stat"><b>-</b><span>Downloads (1 min)</span></div>
+      <div class="stat"><b>-</b><span>Downloads (1 hour)</span></div>
+    </div>
+    <div class="table-scroll" style="margin-top:1rem">
+    <table id="liveTable">
+      <thead><tr><th>When</th><th>Type</th><th>Who</th><th>What</th><th>From</th></tr></thead>
+      <tbody id="liveRows"><tr><td colspan="5" class="muted">Loading live activity…</td></tr></tbody>
+    </table>
+    </div>
+    <p id="liveNote" class="muted" style="font-size:.76rem;margin-top:.5rem">Signed-in requests show their account; the rest appear as guest.</p>
+  </div>
+
+  <!-- ── announcements ── -->
+  <div class="panel" id="annPanel">
+    <h2><i class="fas fa-bullhorn" style="color:var(--accent)"></i> CEO announcements (website banner + app feed)</h2>
+    <form id="annForm" class="form">
+      <input id="annTitle" placeholder="Announcement title" maxlength="120">
+      <textarea id="annBody" placeholder="Message to all users…" maxlength="2000" rows="3"></textarea>
+      <button class="btn gold">Publish announcement</button>
+    </form>
+  </div>
+
+  <!-- ── account tools ── -->
+  <div class="panel" id="pwForm">
+    <h2><i class="fas fa-key" style="color:var(--accent)"></i> Account security tools (admin only)</h2>
+    <p class="note">Changing your own password signs you out everywhere — sign in again on web + app.</p>
+    <form id="ownPwForm" class="form">
+      <div class="row">
+        <input id="pwCurrent" type="password" placeholder="Current password" autocomplete="current-password">
+        <input id="pwNew" type="password" placeholder="New password (min 8)" autocomplete="new-password">
+      </div>
+      <button class="btn green">Change my admin password</button>
+    </form>
+    <form id="resetForm" class="form">
+      <div class="row">
+        <input id="resetEmail" placeholder="User email to reset">
+        <input id="resetPw" type="password" placeholder="New password for that user" autocomplete="new-password">
+      </div>
+      <button class="btn ghost">Reset user password</button>
+    </form>
+    <form id="adminForm" class="form">
+      <div class="row">
+        <input id="newAdminEmail" placeholder="New admin email">
+        <input id="newAdminName" placeholder="Display name (optional)">
+        <input id="newAdminPw" type="password" placeholder="Password (min 8)" autocomplete="new-password">
+      </div>
+      <button class="btn blue">Create admin</button>
+    </form>
+    <div class="stat" id="syncPanel" style="margin-top:.4rem"><b style="font-size:.95rem">Sync status</b><span id="syncStatus">Checking secret + admin sync…</span></div>
+  </div>
+
+  <!-- ── most watched + schedule ── -->
+  <div class="panel">
+    <h2><i class="fas fa-fire" style="color:var(--accent)"></i> Most watched anime (all time)</h2>
+    <div class="table-scroll">
+    <table><tr><th>#</th><th>Anime</th><th>Plays</th><th>Open</th></tr>
+    {% for m in stats.most_watched %}{% set _ = loop.index %}<tr><td>{{ loop.index }}</td><td><a href="/anime/{{ m.anime_id }}">Anime #{{ m.anime_id }}</a></td><td>{{ m.plays }}</td><td><a href="/anime/{{ m.anime_id }}">Open</a></td></tr>{% endfor %}
+    </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2><i class="fas fa-calendar-days" style="color:var(--accent)"></i> Release schedule (premieres + classics)</h2>
+    <div class="table-scroll">
+    <table><tr><th>Day</th><th>Time</th><th>Title</th><th>Kind</th></tr>
+    {% for d in schedule %}{% for s in d.slots %}<tr><td>{{ d.day }}</td><td>{{ s.time }}</td><td>{{ s.title }}</td><td>{{ s.kind }}</td></tr>{% endfor %}{% endfor %}
+    </table>
+    </div>
+  </div>
+
+  <p class="muted" style="margin-top:2rem">Made by kayefande-droid &amp; co.</p>
 </div>
 
-<h2>Live now — streams, downloads, who is online</h2>
-<p style="color:#a0abc0;max-width:700px">Refreshes every 5 s. Anonymous visitors show as <i>guest</i>, signed-in users show their account. Totals cover the last minute; online visitors cover the last 2 minutes.</p>
-<div class="grid" id="liveGrid">
-<div class="stat"><b>-</b><span>Online now (last 2 min)</span></div>
-<div class="stat"><b>-</b><span>Active streams (last 1 min)</span></div>
-<div class="stat"><b>-</b><span>Downloads (last 1 min)</span></div>
-<div class="stat"><b>-</b><span>Downloads (last hour)</span></div>
-</div>
-<table id="liveTable">
-<thead><tr><th>When</th><th>Type</th><th>Who</th><th>What</th><th>From</th></tr></thead>
-<tbody id="liveRows"><tr><td colspan="5" style="color:#a0abc0">Loading live activity…</td></tr></tbody>
-</table>
-<p id="liveNote" style="color:#a0abc0;font-size:.78rem;margin:.4rem 0 1.4rem">Live feed is in-memory and resets on restart — it shows what is happening now, not a history.</p>
-<h2>CEO announcements (website banner + app feed)</h2>
-<form id="annForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
-<input id="annTitle" placeholder="Announcement title" maxlength="120" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<textarea id="annBody" placeholder="Message to all users…" maxlength="2000" rows="3" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff"></textarea>
-<button style="background:linear-gradient(135deg,#FFB347,#FF5E62);border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer">Publish announcement</button>
-</form>
 <script>
-document.getElementById('annForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const r = await fetch('/api/admin/announce', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value})});
-  const d = await r.json();
-  alert(d.status === 'success' ? 'Published to website + apps.' : ('Failed: ' + (d.error || 'unknown')));
-  if (d.status === 'success') location.reload();
-};
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
 
-// Live streams/downloads/visitors panel (admin only)
-const escapeHtml = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function refreshLive() {
   try {
     const r = await fetch('/api/admin/live-activity', {credentials:'same-origin'});
@@ -76,16 +190,14 @@ async function refreshLive() {
       const rows = (d.activity || []).slice(0, 40).map(row => {
         const age = Math.max(0, Math.floor(d.now - row.t));
         const who = row.guest ? 'guest' : escapeHtml(row.email);
-        const what = row.detail ? ('' + escapeHtml(row.detail)) : '';
+        const what = row.detail ? escapeHtml(row.detail) : '';
         return '<tr><td>' + age + 's ago</td><td>' + escapeHtml(row.kind_label || row.kind) +
                '</td><td>' + who + '</td><td>' + what +
                '</td><td>' + escapeHtml(row.ip) + '</td></tr>';
       });
       document.getElementById('liveRows').innerHTML = rows.length ? rows.join('')
-        : '<tr><td colspan="5" style="color:#a0abc0">No stream or download in the last few minutes.</td></tr>';
-      document.getElementById('liveNote').textContent =
-        'Signed-in requests show their account; the rest appear as guest. Counters reset on restart.';
-    } else if (d.status !== 'success' && cells.length === 4) {
+        : '<tr><td colspan="5" class="muted">No stream or download in the last few minutes.</td></tr>';
+    } else if (d.status !== 'success') {
       document.getElementById('liveNote').textContent = 'Live panel error: ' + (d.error || 'not an admin');
     }
     setTimeout(refreshLive, 5000);
@@ -94,32 +206,18 @@ async function refreshLive() {
   }
 }
 refreshLive();
-</script>
-<h2>Admin account tools (admin only)</h2>
-<p style="color:#a0abc0;max-width:640px">Default admin <code>{{ user.email }}</code> is changeable here. Changing your own password signs you out everywhere — sign in again on web + app. Use a strong password you alone control.</p>
-<form id="pwForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0">
-<input id="pwCurrent" type="password" placeholder="Current password" autocomplete="current-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<input id="pwNew" type="password" placeholder="New password (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<button style="background:#10b981;border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#04120c">Change my admin password</button>
-</form>
-<form id="resetForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
-<input id="resetEmail" placeholder="User email to reset" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<input id="resetPw" type="password" placeholder="New password for that user (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<button style="background:#0e111a;border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#fff">Reset user password</button>
-</form>
-<form id="adminForm" style="display:flex;flex-direction:column;gap:.6rem;max-width:640px;margin:.8rem 0 2rem">
-<input id="newAdminEmail" placeholder="New admin email" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<input id="newAdminName" placeholder="Display name (optional)" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<input id="newAdminPw" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" style="padding:.6rem .8rem;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:#141926;color:#fff">
-<button style="background:#087bff;border:none;border-radius:999px;padding:.7rem;font-weight:800;cursor:pointer;color:#fff">Create admin</button>
-</form>
-<div class="stat" style="max-width:640px;margin-bottom:2rem"><b style="font-size:1rem">Sync status</b><span id="syncStatus">Checking secret + admin sync…</span></div>
-<script>
+
 async function postAdmin(url, body) {
   const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
   return r.json();
 }
-document.getElementById('pwForm').onsubmit = async (e) => {
+document.getElementById('annForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const d = await postAdmin('/api/admin/announce', {title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value});
+  alert(d.status === 'success' ? 'Published to website + apps.' : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') location.reload();
+};
+document.getElementById('ownPwForm').onsubmit = async (e) => {
   e.preventDefault();
   const d = await postAdmin('/api/admin/password', {current_password: document.getElementById('pwCurrent').value, new_password: document.getElementById('pwNew').value});
   alert(d.status === 'success' ? 'Password changed. Please sign in again everywhere.' : ('Failed: ' + (d.error || 'unknown')));
@@ -141,14 +239,5 @@ fetch('/api/admin/sync').then(r=>r.json()).then(d=>{
     : ('Failed: ' + (d.error || 'unknown'));
 }).catch(()=>{ document.getElementById('syncStatus').textContent = 'Could not reach sync endpoint.'; });
 </script>
-<h2>Most watched anime playlist</h2>
-<table><tr><th>Anime ID</th><th>Plays</th><th>Open</th></tr>
-{% for m in stats.most_watched %}<tr><td>{{ m.anime_id }}</td><td>{{ m.plays }}</td><td><a href="/anime/{{ m.anime_id }}">Open</a></td></tr>{% endfor %}
-</table>
-<h2 style="margin-top:2rem">Release schedule (organised premieres + classics)</h2>
-<table><tr><th>Day</th><th>Time</th><th>Title</th><th>Kind</th></tr>
-{% for d in schedule %}{% for s in d.slots %}<tr><td>{{ d.day }}</td><td>{{ s.time }}</td><td>{{ s.title }}</td><td>{{ s.kind }}</td></tr>{% endfor %}{% endfor %}
-</table>
-<p style="margin-top:2rem;color:#64708a">Made by kayefande-droid &amp; co.</p>
 </body>
 </html>

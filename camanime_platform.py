@@ -146,10 +146,27 @@ def _init() -> None:
           t INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_ann_t ON announcements(t);
+        CREATE TABLE IF NOT EXISTS anime_cache (
+          id INTEGER PRIMARY KEY,
+          title TEXT NOT NULL DEFAULT '',
+          image TEXT NOT NULL DEFAULT '',
+          banner TEXT NOT NULL DEFAULT '',
+          format TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT '',
+          year INTEGER NOT NULL DEFAULT 0,
+          episode_label TEXT NOT NULL DEFAULT '',
+          t INTEGER NOT NULL
+        );
         """)
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('site_clicks', 0)")
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('plays', 0)")
-        conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('app_downloads', 12840)")
+        conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('app_downloads', 0)")
+        conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('streams', 0)")
+        conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('downloads', 0)")
+        # Honest-numbers migration: a previous seed claimed 12,840 app
+        # downloads that never happened. Reset it once so the public counter
+        # starts from zero and then only counts real /get/* transfers.
+        conn.execute("UPDATE counters SET value = 0 WHERE key = 'app_downloads' AND value = 12840")
 
 
 def _migrate_legacy_once() -> None:
@@ -442,7 +459,11 @@ def track(data: Dict, kind: str, meta: Dict = None) -> None:
             conn.execute("UPDATE counters SET value = value + 1 WHERE key='site_clicks'")
         elif kind == "play":
             conn.execute("UPDATE counters SET value = value + 1 WHERE key='plays'")
-        conn.execute("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 5000)")
+        elif kind == "stream":
+            conn.execute("UPDATE counters SET value = value + 1 WHERE key='streams'")
+        elif kind == "download":
+            conn.execute("UPDATE counters SET value = value + 1 WHERE key='downloads'")
+        conn.execute("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY id DESC LIMIT 5000)", )
 
 
 def add_comment(data: Dict, anime_id: str, ep: str, user: Dict, text: str,
@@ -520,4 +541,176 @@ def admin_stats(data: Dict = None) -> Dict:
     return {"users": users, "comments": comments, "ratings": ratings,
             "clicks": counters.get("site_clicks", 0), "plays": counters.get("plays", 0),
             "app_downloads": counters.get("app_downloads", 0),
+            "streams": counters.get("streams", 0), "downloads": counters.get("downloads", 0),
             "most_watched": [{"anime_id": r["anime_id"], "plays": r["plays"]} for r in top]}
+
+
+# ─── factual public counters (SQLite-backed, no fabricated numbers) ─────────
+
+def bump_counter(key: str, n: int = 1) -> None:
+    """Atomically increment a named counter. Only called by real user actions."""
+    with _db() as conn:
+        conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES (?, 0)", (key,))
+        conn.execute("UPDATE counters SET value = value + ? WHERE key = ?", (int(n or 1), key))
+
+
+def get_counters() -> Dict:
+    with _db() as conn:
+        return {r["key"]: r["value"] for r in conn.execute("SELECT * FROM counters")}
+
+
+def app_download_count() -> int:
+    return get_counters().get("app_downloads", 0)
+
+
+# ─── anime meta cache (so real plays / history rows can show titles) ────────
+
+def cache_anime_meta(anime_id, title: str = "", image: str = "", banner: str = "",
+                     format: str = "", status: str = "", year=0, episode_label: str = "") -> None:
+    try:
+        aid = int(anime_id)
+    except (TypeError, ValueError):
+        return
+    now = int(time.time())
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO anime_cache(id,title,image,banner,format,status,year,episode_label,t) "
+            "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "title=excluded.title, image=excluded.image, banner=excluded.banner, "
+            "format=excluded.format, status=excluded.status, "
+            "year=MAX(COALESCE((SELECT year FROM anime_cache WHERE id=excluded.id),0), excluded.year), "
+            "episode_label=CASE WHEN excluded.episode_label != '' THEN excluded.episode_label "
+            "ELSE anime_cache.episode_label END, t=excluded.t",
+            (aid, (title or "")[:160], image or "", banner or "", format or "",
+             status or "", int(year or 0), (episode_label or "")[:32], now),
+        )
+
+
+def get_anime_meta(anime_ids) -> Dict[int, Dict]:
+    """Batched meta lookup for history/ranking rows; missing ids return {}."""
+    ids = []
+    for a in anime_ids or []:
+        try:
+            v = int(a)
+            if v > 0 and v not in ids:
+                ids.append(v)
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
+    marks = ",".join("?" for _ in ids)
+    with _db() as conn:
+        rows = conn.execute(
+            f"SELECT id,title,image,banner,format,status,year,episode_label FROM anime_cache WHERE id IN ({marks})",
+            ids).fetchall()
+    return {r["id"]: {"title": r["title"], "image": r["image"], "banner": r["banner"],
+                      "format": r["format"], "status": r["status"],
+                      "year": r["year"], "episode_label": r["episode_label"]}
+            for r in rows}
+
+
+def most_watched(since_ts: int = 0, limit: int = 10) -> List[Dict]:
+    """Real most-played ranking inside a time window from the events table.
+
+    Only anime with at least one actual play event appear — never fabricated."""
+    q = "SELECT anime_id, COUNT(*) AS plays FROM events WHERE kind IN ('play','stream') AND anime_id != ''"
+    args = []
+    if since_ts:
+        q += " AND t >= ?"
+        args.append(int(since_ts))
+    q += " GROUP BY anime_id ORDER BY plays DESC LIMIT ?"
+    args.append(max(1, min(int(limit or 10), 50)))
+    with _db() as conn:
+        rows = conn.execute(q, args).fetchall()
+    metas = get_anime_meta([r["anime_id"] for r in rows])
+    out = []
+    for r in rows:
+        try:
+            aid = int(r["anime_id"])
+        except (TypeError, ValueError):
+            continue
+        m = metas.get(aid, {})
+        out.append({"anime_id": aid, "plays": r["plays"],
+                    "title": m.get("title") or f"Anime #{aid}",
+                    "image": m.get("image") or "", "format": m.get("format") or ""})
+    return out
+
+
+# ─── cross-device watch history / watchlist sync (one account, all devices) ─
+
+_HISTORY_DDL = """
+CREATE TABLE IF NOT EXISTS user_history (
+  email TEXT NOT NULL,
+  anime_id INTEGER NOT NULL,
+  ep INTEGER NOT NULL DEFAULT 1,
+  position REAL NOT NULL DEFAULT 0,
+  duration REAL NOT NULL DEFAULT 0,
+  title TEXT NOT NULL DEFAULT '',
+  image TEXT NOT NULL DEFAULT '',
+  t INTEGER NOT NULL,
+  PRIMARY KEY (email, anime_id)
+);
+CREATE INDEX IF NOT EXISTS idx_history_email ON user_history(email, t);
+"""
+
+
+def _ensure_history() -> None:
+    with _db() as conn:
+        conn.executescript(_HISTORY_DDL)
+
+
+def upsert_history(email: str, anime_id, ep: int = 1, position: float = 0,
+                   duration: float = 0, title: str = "", image: str = "") -> Dict:
+    """Server-side continue-watching row; survives restarts and syncs all devices"""
+    _ensure_history()
+    try:
+        aid = int(anime_id)
+    except (TypeError, ValueError):
+        raise ValueError("anime_id must be an integer")
+    ep = max(1, int(ep or 1))
+    key = (email or "").lower()
+    now = int(time.time())
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO user_history(email,anime_id,ep,position,duration,title,image,t) "
+            "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(email, anime_id) DO UPDATE SET "
+            "ep=excluded.ep, position=excluded.position, duration=excluded.duration, "
+            "title=excluded.title, image=excluded.image, t=excluded.t",
+            (key, aid, ep, float(position or 0), float(duration or 0), (title or "")[:160],
+             image or "", now),
+        )
+    return {"anime_id": aid, "ep": ep, "position": float(position or 0),
+            "duration": float(duration or 0), "title": title, "image": image, "t": now}
+
+
+def remove_history(email: str, anime_id) -> None:
+    _ensure_history()
+    try:
+        aid = int(anime_id)
+    except (TypeError, ValueError):
+        return
+    with _db() as conn:
+        conn.execute("DELETE FROM user_history WHERE email = ? AND anime_id = ?",
+                     ((email or "").lower(), aid))
+
+
+def get_history(email: str, limit: int = 30) -> List[Dict]:
+    """Signed-in continue-watching list, newest first, meta-rich."""
+    _ensure_history()
+    key = (email or "").lower()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT anime_id, ep, position, duration, title, image, t FROM user_history "
+            "WHERE email = ? ORDER BY t DESC LIMIT ?", (key, max(1, min(int(limit or 30), 60)))).fetchall()
+    metas = get_anime_meta([r["anime_id"] for r in rows])
+    out = []
+    for r in rows:
+        m = metas.get(r["anime_id"], {})
+        out.append({
+            "anime_id": r["anime_id"], "id": r["anime_id"], "ep": r["ep"],
+            "position": r["position"], "duration": r["duration"],
+            "title": (r["title"] or m.get("title") or f"Anime #{r['anime_id']}"),
+            "image": r["image"] or m.get("image") or "",
+            "t": r["t"], "synced": True,
+        })
+    return out

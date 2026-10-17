@@ -183,3 +183,48 @@ body .sg-sub { font-size: .7rem; color: #64708a; flex-shrink: 0; }
 
 /* ── CEO announcement banner ── */
 body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; background: linear-gradient(135deg, rgba(255,179,71,.12), rgba(255,94,98,.08)); border: 1px solid rgba(255,179,71,.35); border-radius: 14px; padding: .9rem 1.1rem; margin-bottom: 1.4rem; font-size: .9rem; }
+
+/* ── Next-episode release countdown (all users) ── */
+.release-ticker{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(255,179,71,.13),rgba(14,17,26,.94) 55%,rgba(255,94,98,.10));border:1px solid rgba(255,179,71,.35);border-radius:16px;padding:1rem 1.25rem;margin-bottom:1.5rem}
+.release-ticker .rt-title{font-weight:800;font-family:var(--ca-font-display,'Sora',sans-serif);font-size:1rem;min-width:0;overflow-wrap:anywhere}
+.release-ticker .rt-sub{color:var(--text-secondary,#a0abc0);font-size:.8rem;font-family:var(--ca-font-mono,monospace)}
+.countdown-chips{display:flex;gap:.45rem;margin-left:auto;flex-wrap:wrap}
+.cd-chip{background:rgba(7,8,13,.7);border:1px solid rgba(255,179,71,.4);border-radius:10px;padding:.4rem .65rem;min-width:64px;text-align:center}
+.cd-chip b{display:block;font-family:var(--ca-font-mono,monospace);font-size:1.15rem;color:#FFB347;line-height:1.1}
+.cd-chip span{font-size:.62rem;letter-spacing:.08em;color:var(--text-muted,#64708a);text-transform:uppercase}
+
+/* ── Most-viewed tabs (Day/Week/Month) ── */
+.mv-tabs{display:flex;gap:.4rem;align-items:center}
+.mv-tab{background:var(--bg-input,#141926);color:var(--text-secondary,#a0abc0);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:999px;padding:.35rem .85rem;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .18s}
+.mv-tab.active{background:var(--accent,#FFB347);border-color:var(--accent);color:#07080d}
+.mv-rank-num{font-family:var(--ca-font-mono,monospace);font-weight:800;font-size:1.05rem;color:#FFB347;min-width:1.6rem;text-align:center}
+
+/* ── Shuffle row button ── */
+.shuffle-btn{display:inline-flex;align-items:center;gap:.45rem;background:rgba(255,179,71,.14);border:1px solid rgba(255,179,71,.4);color:#FFB347;border-radius:999px;padding:.4rem .95rem;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .18s}
+.shuffle-btn:hover{background:rgba(255,179,71,.24);transform:translateY(-1px)}
+
+/* ── Factual live counters strip (homepage) ── */
+.stat-strip{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center;background:var(--bg-elevated,#0e111a);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:16px;padding:1.1rem 1.4rem;margin-bottom:2rem}
+.stat-strip .st-cell{display:flex;flex-direction:column;align-items:center;min-width:100px}
+.stat-strip .st-cell b{font-family:var(--ca-font-mono,monospace);font-size:1.35rem;color:#FFB347}
+.stat-strip .st-cell span{font-size:.72rem;color:var(--text-secondary,#a0abc0);text-transform:uppercase;letter-spacing:.06em}
+.stat-strip .st-note{width:100%;text-align:center;color:var(--text-muted,#64708a);font-size:.72rem}
+
+/* ── Header search: guaranteed visible on desktop + not squashed on phones ── */
+@media (min-width:901px){
+  body .header-inner{flex-wrap:nowrap}
+  body .search-form{flex:0 1 320px;min-width:220px}
+  body .header-actions{flex-shrink:0}
+}
+
+/* ── Hero ratio fix for Android / phone aspect screens ── */
+@media (max-width:600px){
+  body .hero-spotlight,body .hero-slide.active{min-height:min(62vh,420px)}
+  body .hero-body{padding:1.4rem 1.1rem 2.2rem}
+  body .hero-title{font-size:clamp(1.6rem,7.4vw,2.2rem)}
+  body .hero-ctas .btn-primary,body .hero-ctas .btn-secondary{padding:.75rem 1.1rem;font-size:.85rem}
+  body .hero-dots{bottom:.9rem}
+}
+
+/* ── Rajk row controls wrapper ── */
+.section-head .head-controls{display:flex;gap:.5rem;align-items:center}
