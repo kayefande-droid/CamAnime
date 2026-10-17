@@ -2263,8 +2263,38 @@ def api_admin_create():
 
 @app.route("/sitemap.xml")
 def sitemap():
-    xml = "<?xml version='1.0' encoding='UTF-8'?><urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>" + "".join(f"<url><loc>{request.host_url.rstrip('/')}{p}</loc></url>" for p in ["/", "/scraper", "/schedule", "/promo", "/download", "/login"]) + "</urlset>"
-    return Response(xml, mimetype="application/xml")
+    """SEO sitemap: static pages + every anime page we have metadata for
+    (from the anime_cache table), each with real lastmod timestamps."""
+    base = request.host_url.rstrip("/")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    entries = [
+        ("/", 1.0, "daily", now),
+        ("/scraper", 0.9, "hourly", now),
+        ("/schedule", 0.8, "weekly", now),
+        ("/download", 0.8, "weekly", now),
+        ("/promo", 0.7, "monthly", now),
+    ]
+    try:
+        import sqlite3 as _sq
+        with platform._db() as conn:
+            rows = conn.execute(
+                "SELECT id, t FROM anime_cache ORDER BY t DESC LIMIT 2000").fetchall()
+        for r in rows:
+            last = datetime.fromtimestamp(r["t"], timezone.utc).strftime("%Y-%m-%d")
+            entries.append((f"/anime/{r['id']}", 0.7, "weekly", last))
+    except Exception:
+        pass
+    xml = ("<?xml version='1.0' encoding='UTF-8'?>"
+           "<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>")
+    for path, prio, freq, lastmod in entries:
+        xml += (f"<url><loc>{base}{path}</loc>"
+                f"<lastmod>{lastmod}</lastmod>"
+                f"<changefreq>{freq}</changefreq>"
+                f"<priority>{prio}</priority></url>")
+    xml += "</urlset>"
+    resp = Response(xml, mimetype="application/xml")
+    resp.headers["Cache-Control"] = "public, max-age=1800"
+    return resp
 
 
 @app.route("/robots.txt")
