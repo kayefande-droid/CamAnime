@@ -27,7 +27,8 @@ from flask import session
 
 import camanime_platform as platform
 
-logging.basicConfig(level=logging.INFO)
+# Quiet by default on Render free tier (LOG_LEVEL=INFO to debug). Cuts log volume/spam.
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -236,6 +237,7 @@ PLATFORM_STORE = platform.load_store()
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: Dict[str, tuple] = {}
 ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
+ANILIST_CACHE_MAX = 200  # cap: prevents unbounded memory growth on the free tier
 
 MEDIA_FRAGMENT = """
   id
@@ -391,6 +393,8 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
         response.raise_for_status()
         data = response.json().get("data", {})
         if data:
+            if len(_anilist_cache) >= ANILIST_CACHE_MAX:
+                _anilist_cache.pop(next(iter(_anilist_cache)))
             _anilist_cache[cache_key] = (data, now)
         return data
     except Exception as e:
@@ -1957,6 +1961,12 @@ def robots():
 @app.route("/google78cbf317abe48f6e.html")
 def google_verify():
     return app.send_static_file("google78cbf317abe48f6e.html")
+
+
+@app.route("/healthz")
+def healthz():
+    """Render health check: no DB, no upstream calls — cheap and log-quiet."""
+    return jsonify({"status": "ok", "version": APP_VERSION if "APP_VERSION" in globals() else "1.2.0"}), 200
 
 
 if __name__ == "__main__":

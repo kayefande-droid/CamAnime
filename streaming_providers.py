@@ -17,6 +17,7 @@ Real, live-tested multi-provider anime streaming & downloading integration:
 import base64
 import json
 import logging
+import os
 import re
 import time
 from typing import Dict, List, Optional, Tuple
@@ -26,7 +27,7 @@ import requests
 from bs4 import BeautifulSoup
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
 logger = logging.getLogger(__name__)
 
 DEFAULT_UA = (

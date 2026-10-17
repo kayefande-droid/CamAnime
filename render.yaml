@@ -3,13 +3,26 @@ services:
     name: camanime
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 2 --threads 2 --timeout 60
+    # --no-cache-dir: pip cache can eat 100s of MB of the free-tier disk during build.
+    # rm -rf: the Flutter app, Windows app, promo kit, tools, tests and docs are NOT
+    # needed to run the website — deleting them from the build checkout keeps the
+    # runtime disk slim. All site functions are served from app.py + templates + static.
+    # Binaries (/download, /get/*) fall back to GitHub Releases automatically.
+    buildCommand: pip install --no-cache-dir -r requirements.txt && rm -rf mobile windows promo tools tests docs .idea __pycache__ .pytest_cache mobile/camanime_app/.pytest_cache && find . -name "__pycache__" -type d -prune -exec rm -rf {} +
+    # 1 worker x 4 threads fits the 512MB free instance; max-requests recycles the
+    # worker to stop slow memory growth; warning log level keeps Render logs small.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --max-requests 500 --max-requests-jitter 100 --access-logfile - --log-level warning
     autoDeploy: true
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PIP_NO_CACHE_DIR
+        value: "1"
+      - key: LOG_LEVEL
+        value: warning
       - key: CAMANIME_SECRET
         generateValue: true
       # Set CAMANIME_ADMIN_EMAIL and CAMANIME_ADMIN_PASSWORD together in the Render dashboard.

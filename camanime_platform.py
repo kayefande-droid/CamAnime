@@ -407,6 +407,8 @@ def issue_token(email: str) -> Dict:
     token = secrets.token_hex(24)
     now = int(time.time())
     with _db() as conn:
+        # Opportunistic cleanup on login keeps the SQLite file small on free-tier disks.
+        conn.execute("DELETE FROM tokens WHERE expires <= ?", (now,))
         conn.execute("INSERT INTO tokens(token,email,created,expires) VALUES (?,?,?,?)",
                      (token, email.lower(), now, now + TOKEN_TTL))
     return {"token": token, "expires": now + TOKEN_TTL}

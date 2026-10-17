@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 camanime_store.json
 camanime.db*
+*.db-wal
+*.db-shm
+*.db-journal
 camanime_secret.key
 .env
 *.log
