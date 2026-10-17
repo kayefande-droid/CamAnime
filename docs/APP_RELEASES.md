@@ -19,8 +19,12 @@ cp CamAnime-Windows.zip static/downloads/
 git add static/downloads && git commit -m "Ship app binaries" && git push
 ```
 
-> Note: files in `static/downloads/` are public. Binaries are intentionally
-> NOT committed by CI here — add them from your PC when ready.
+> Do NOT commit APK/ZIP/EXE files to git: past APK commits (~55MB each)
+> bloated the repo history past Render's free-tier size limits and got the
+> service suspended. Binaries are gitignored on purpose — always ship them
+> via GitHub Releases (Option B below); the site falls back to Releases
+> automatically. Files in `static/downloads/` are public, so a Release-asset
+> link keeps downloads working without touching the repo.
 
 ## Option B — GitHub Releases (recommended for large files)
 
