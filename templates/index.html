@@ -1146,17 +1146,29 @@
         <div class="anime-grid" id="classicsGrid">
             {% for c in classics %}
             <a href="/anime/{{ c.id }}" class="anime-card classics-card" data-title="{{ c.title }}">
-                <img src="https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/b{{ c.id }}.jpg" loading="lazy" alt="{{ c.title }}" onerror="this.src='/static/brand/camanime-icon.svg'">
+                <div class="card-poster-wrap">
+                    <div class="card-badges-top">
+                        <span class="ep-badge">CLASSIC</span>
+                        {% if c.rating and c.rating != 'N/A' %}
+                        <span class="score-badge"><i class="fas fa-star"></i> {{ c.rating }}</span>
+                        {% endif %}
+                    </div>
+                    <img src="{{ c.image }}" loading="lazy" alt="{{ c.title }}" onerror="this.src='/static/brand/camanime-icon.svg'">
+                    <div class="card-hover-actions">
+                        <div class="card-action-row">
+                            <a href="/watch/{{ c.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
+                            <a href="/anime/{{ c.id }}" class="card-btn-trailer" title="Episodes & Direct Download"><i class="fas fa-download"></i></a>
+                        </div>
+                    </div>
+                </div>
                 <div style="padding:.7rem .8rem 1rem;flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0;">
                     <div class="card-title" style="margin:0;">{{ c.title }}</div>
-                    <div class="card-submeta"><span>{{ c.year }}</span><span>Classic</span></div>
+                    <div class="card-submeta"><span>{{ c.year or c.season }}</span><span>Classic</span></div>
                 </div>
             </a>
             {% endfor %}
         </div>
-        <style>
-            .classics-card img{width:100%;aspect-ratio:2/2.9;object-fit:cover;background:var(--bg-surface)}
-        </style>
+
     </section>
     {% endif %}
 

@@ -947,22 +947,68 @@
             } catch (e) {}
         });
         const dlBtn0 = document.getElementById('downloadCurrentBtn');
-        function dlStartedMsg(okText) {
+        function dlMsg(text, ok) {
             const st = document.getElementById('dlStatus');
-            if (st) {
-                st.style.display = 'block';
-                st.style.color = '#6ee7b7';
-                st.textContent = okText;
+            if (!st) return;
+            st.style.display = 'block';
+            st.style.color = ok ? '#6ee7b7' : '#fca5a5';
+            st.textContent = text;
+        }
+        // Verified downloads: probe the file with a tiny ranged request BEFORE
+        // promising anything, so "Download started" only appears when the source
+        // is really delivering a video file — never a fake success popup.
+        async function startVerifiedDownload(dlUrl) {
+            if (!dlUrl || dlUrl === '#') {
+                dlMsg('This server has no downloadable file. Switch to an MP4 or CamStream server.', false);
+                return;
+            }
+            dlMsg('Checking file…', true);
+            try {
+                const r = await fetch(dlUrl, { headers: { 'Range': 'bytes=0-2047' }, credentials: 'same-origin' });
+                const ct = (r.headers.get('Content-Type') || '').toLowerCase();
+                if (r.status === 403) {
+                    dlMsg('That download was blocked at the network. Switch to another server below and try again.', false);
+                    return;
+                }
+                if (r.status >= 400) {
+                    const d = await r.json().catch(() => ({}));
+                    dlMsg((d.error || ('Download source returned ' + r.status)) + ' — switch to another server and try again.', false);
+                    return;
+                }
+                if (ct.includes('text/html') || ct.includes('application/json')) {
+                    dlMsg('Source returned a block page, not a video file. Switch to another server and retry.', false);
+                    return;
+                }
+                // File verified — now trigger the real browser download.
+                const a = document.createElement('a');
+                a.href = dlUrl;
+                a.rel = 'noopener';
+                if (dlUrl.startsWith('/')) a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                dlMsg('Download started ✓ file verified. Stays yours forever.', true);
+            } catch (err) {
+                dlMsg('Connection dropped before the file could be verified. Try another server or check your network.', false);
             }
         }
         if (dlBtn0) dlBtn0.addEventListener('click', (e) => {
-            if (!dlBtn0.getAttribute('href') || dlBtn0.getAttribute('href') === '#') {
+            const href = dlBtn0.getAttribute('href');
+            if (!href || href === '#') {
                 e.preventDefault();
-                const st = document.getElementById('dlStatus');
-                if (st) { st.style.display = 'block'; st.textContent = 'This embed server has no downloadable file. Switch to an MP4 or CamStream server.'; }
-            } else {
-                dlStartedMsg('Download started ✓ check your downloads folder. Stays yours forever.');
+                dlMsg('This embed server has no downloadable file. Switch to an MP4 or CamStream server.', false);
+                return;
             }
+            e.preventDefault();
+            startVerifiedDownload(href);
+        });
+        // Every Direct Episode Download Manager row uses the same verified flow.
+        // (External mirror links keep normal target=_blank behaviour.)
+        document.querySelectorAll('.dl-action[href^="/api/download/"]').forEach(a => {
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                startVerifiedDownload(a.getAttribute('href'));
+            });
         });
         // Download hits are recorded server-side by /api/download/video, so
         // the live admin feed shows the real transfer, not a click that may abort.

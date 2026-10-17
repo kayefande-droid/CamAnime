@@ -269,9 +269,9 @@ ANIME_CLASSICS: List[Dict] = [
     {"id": 5114, "title": "Fullmetal Alchemist: Brotherhood", "year": 2009, "why": "Consistently the top-rated classic shonen"},
     {"id": 321, "title": "Samurai Champloo", "year": 2004, "why": "Hip-hop samurai classic by Watanabe"},
     {"id": 1, "title": "Cowboy Bebop", "year": 1998, "why": "The definitive space-western jazz classic"},
-    {"id": 199, "title": "Sen to Chihiro (Spirited Away)", "year": 2001, "why": "Ghibli Oscar-winning timeless film"},
+    {"id": 199, "title": "Spirited Away", "year": 2001, "why": "Ghibli Oscar-winning timeless film"},
     {"id": 5680, "title": "K-On!", "year": 2009, "why": "Beloved slice-of-life band classic"},
-    {"id": 5291, "title": "Sword Art Online", "year": 2012, "why": "Isekai VR-era modern classic"},
+    {"id": 11719, "title": "Sword Art Online", "year": 2012, "why": "Isekai VR-era modern classic"},
 ]
 
 ANILIST_API_URL = "https://graphql.anilist.co"
@@ -298,6 +298,16 @@ MEDIA_FRAGMENT = """
   studios(isMain: true) { nodes { name } }
   trailer { id site thumbnail }
   nextAiringEpisode { episode airingAt timeUntilAiring }
+"""
+
+CLASSICS_CARD_QUERY = f"""
+query ($ids: [Int]) {{
+  Page(perPage: 14) {{
+    media(id_in: $ids, type: ANIME, sort: POPULARITY_DESC, isAdult: false) {{
+      {MEDIA_FRAGMENT}
+    }}
+  }}
+}}
 """
 
 HOME_DASHBOARD_QUERY = f"""
@@ -629,6 +639,21 @@ def home():
     hero_slides = [a for a in trending if a.get("banner")][:6] or trending[:5]
     featured = hero_slides[0] if hero_slides else None
 
+    # Anime Classics: real AniList cards (covers auto-refresh hourly via the
+    # metadata cache) fused with the curated 'why it's a classic' notes.
+    classics_raw = (fetch_anilist(CLASSICS_CARD_QUERY, {"ids": [c["id"] for c in ANIME_CLASSICS]})
+                    .get("Page", {}).get("media") or [])
+    why_map = {c["id"]: c.get("why", "") for c in ANIME_CLASSICS}
+    classics = []
+    for a in classics_raw:
+        ccard = format_anime_card(a)
+        ccard["why"] = why_map.get(ccard["id"], "")
+        classics.append(ccard)
+    if not classics:
+        # AniList hiccup fallback: still show the section with raw curated ids
+        classics = [{**c, "image": "", "rating": "", "episode": "CLASSIC", "format": "TV"}
+                    for c in ANIME_CLASSICS]
+
     # Global most-watched ranking feed for all three tabs (Day/Week/Month)
     try:
         most_viewed_day = platform.most_watched(int(time.time()) - 86400, limit=12)
@@ -671,7 +696,7 @@ def home():
         top_rated=top_rated,
         weekly_row=weekly_row,
         monthly_row=monthly_row,
-        classics=ANIME_CLASSICS,
+        classics=classics,
         most_viewed_day=most_viewed_day,
         most_viewed_week=most_viewed_week,
         most_viewed_month=most_viewed_month,
