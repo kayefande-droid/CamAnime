@@ -1153,15 +1153,16 @@
                 <span class="section-accent-bar"></span>
                 <h2 class="section-title">Anime Classics</h2>
                 <span class="section-subtitle">timeless must-watch legends</span>
+                <span class="section-subtitle" style="color:#f59e0b">+ Avatar: Seven Havens (2026)</span>
             </div>
             <button type="button" class="shuffle-btn" onclick="shuffleClassics()"><i class="fas fa-random"></i> Shuffle</button>
         </div>
         <div class="anime-grid" id="classicsGrid">
             {% for c in classics %}
-            <a href="/anime/{{ c.id }}" class="anime-card classics-card" data-title="{{ c.title }}">
+            <a href="{{ c.external_url if c.external_url else '/anime/' ~ c.id }}" class="anime-card classics-card" data-title="{{ c.title }}" {% if c.external_url %}target="_blank" rel="noopener noreferrer"{% endif %}>
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
-                        <span class="ep-badge">CLASSIC</span>
+                        <span class="ep-badge">{{ c.episode or 'CLASSIC' }}</span>
                         {% if c.rating and c.rating != 'N/A' %}
                         <span class="score-badge"><i class="fas fa-star"></i> {{ c.rating }}</span>
                         {% endif %}
@@ -1169,14 +1170,19 @@
                     <img src="{{ c.image }}" loading="lazy" alt="{{ c.title }}" onerror="this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
+                            {% if c.external_url %}
+                            <span class="card-btn-play" aria-label="Open official streaming page"><i class="fas fa-arrow-up-right-from-square"></i> Official page</span>
+                            <span class="card-btn-trailer" aria-label="Official episodes depend on licensed providers"><i class="fas fa-circle-info"></i></span>
+                            {% else %}
                             <a href="/watch/{{ c.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
                             <a href="/anime/{{ c.id }}" class="card-btn-trailer" title="Episodes & Direct Download"><i class="fas fa-download"></i></a>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
                 <div style="padding:.7rem .8rem 1rem;flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0;">
                     <div class="card-title" style="margin:0;">{{ c.title }}</div>
-                    <div class="card-submeta"><span>{{ c.year or c.season }}</span><span>Classic</span></div>
+                    <div class="card-submeta"><span>{{ c.year or c.season }}</span><span>{{ 'New series' if c.external_url else 'Classic' }}</span></div>
                 </div>
             </a>
             {% endfor %}

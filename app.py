@@ -3,7 +3,7 @@ import re
 import time
 import random
 from datetime import datetime, timezone
-from collections import deque
+from collections import OrderedDict, deque
 from typing import Dict, List, Optional
 from urllib.parse import quote, urljoin, urlparse
 
@@ -83,6 +83,8 @@ app.config.update(
 
 # ── Lightweight in-memory rate limiting (stdlib only, no new deps) ──
 _RATE_BUCKETS: Dict[str, List[float]] = {}
+_RATE_BUCKETS_MAX = 4096
+_RATE_BUCKET_EVICT = 256
 _RATE_RULES = (
     # (path prefix, max requests, window in seconds)
     ("/api/auth/login", 10, 300),
@@ -142,6 +144,13 @@ def _rate_limited(path: str) -> bool:
     for prefix, limit, window in _RATE_RULES:
         if path.startswith(prefix):
             key = f"{prefix}|{_client_ip()}"
+            if key not in _RATE_BUCKETS and len(_RATE_BUCKETS) >= _RATE_BUCKETS_MAX:
+                cutoff = now - max(rule[2] for rule in _RATE_RULES)
+                for old_key, timestamps in list(_RATE_BUCKETS.items())[:_RATE_BUCKET_EVICT]:
+                    if not timestamps or timestamps[-1] < cutoff:
+                        _RATE_BUCKETS.pop(old_key, None)
+                while len(_RATE_BUCKETS) >= _RATE_BUCKETS_MAX:
+                    _RATE_BUCKETS.pop(next(iter(_RATE_BUCKETS)))
             bucket = _RATE_BUCKETS.setdefault(key, [])
             cutoff = now - window
             bucket[:] = [t for t in bucket if t >= cutoff]
@@ -158,6 +167,7 @@ def _rate_limited(path: str) -> bool:
 # Recording is wrapped so a failure can never break the media path.
 _LIVE_ACTIVITY: deque = deque(maxlen=300)
 _RECENT_VISITORS: Dict[str, float] = {}
+_RECENT_VISITORS_MAX = 4000
 _KIND_LABELS = {"stream": "Stream", "download": "Download", "play": "Played"}
 
 
@@ -182,10 +192,12 @@ def _see_visitor():
     """Cheapest possible online counter: ip -> last seen, no storage growth."""
     try:
         _RECENT_VISITORS[_client_ip()] = time.time()
-        if len(_RECENT_VISITORS) > 4000:
+        if len(_RECENT_VISITORS) > _RECENT_VISITORS_MAX:
             cutoff = time.time() - 600
             for key in [k for k, v in _RECENT_VISITORS.items() if v < cutoff][:1500]:
                 _RECENT_VISITORS.pop(key, None)
+            while len(_RECENT_VISITORS) > _RECENT_VISITORS_MAX:
+                _RECENT_VISITORS.pop(next(iter(_RECENT_VISITORS)))
     except Exception:
         pass
 
@@ -252,10 +264,8 @@ def _speed_headers(resp):
     return resp
 
 
-PLATFORM_STORE = platform.load_store()
-platform.ensure_admin(PLATFORM_STORE)
+platform.ensure_admin()
 platform.ensure_default_admin()
-PLATFORM_STORE = platform.load_store()
 
 # ─── ANIME CLASSICS SECTION (homepage) ──────────────────────────────────────
 # Curated timeless anime with verified AniList ids; each card links to the
@@ -274,10 +284,24 @@ ANIME_CLASSICS: List[Dict] = [
     {"id": 11719, "title": "Sword Art Online", "year": 2012, "why": "Isekai VR-era modern classic"},
 ]
 
+# Avatar: Seven Havens premiered in 2026, but is not currently indexed by AniList.
+# Keep it discoverable with an honest metadata-only card; never invent a playable ID.
+AVATAR_SEVEN_HAVENS = {
+    "id": "avatar-seven-havens",
+    "title": "Avatar: Seven Havens",
+    "year": 2026,
+    "why": "New animated Avatar series (2026) — official episodes depend on licensed providers.",
+    "external_url": "https://www.paramountplus.com/shows/avatar-seven-havens/",
+    "image": "",
+    "rating": "",
+    "episode": "2026 SERIES",
+    "format": "TV",
+}
+
 ANILIST_API_URL = "https://graphql.anilist.co"
-_anilist_cache: Dict[str, tuple] = {}
+_anilist_cache: OrderedDict[str, tuple] = OrderedDict()
 ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
-ANILIST_CACHE_MAX = 200  # cap: prevents unbounded memory growth on the free tier
+ANILIST_CACHE_MAX = 64  # detail responses include large relations/character lists; cap worker memory
 
 MEDIA_FRAGMENT = """
   id
@@ -425,13 +449,15 @@ POPULAR_GENRES = [
 
 
 def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
-    """Fetch AniList data with per-process TTL caching; not durable catalogue storage."""
+    """Fetch AniList data with bounded per-process TTL/LRU caching."""
     cache_key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
     now = time.time()
     if cache_key in _anilist_cache:
         data, ts = _anilist_cache[cache_key]
         if now - ts < ANILIST_CACHE_TTL:
+            _anilist_cache.move_to_end(cache_key)
             return data
+        _anilist_cache.pop(cache_key, None)
 
     try:
         response = requests.post(
@@ -443,9 +469,10 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
         response.raise_for_status()
         data = response.json().get("data", {})
         if data:
-            if len(_anilist_cache) >= ANILIST_CACHE_MAX:
-                _anilist_cache.pop(next(iter(_anilist_cache)))
             _anilist_cache[cache_key] = (data, now)
+            _anilist_cache.move_to_end(cache_key)
+            while len(_anilist_cache) > ANILIST_CACHE_MAX:
+                _anilist_cache.popitem(last=False)
         return data
     except Exception as e:
         logger.error(f"AniList API Error: {e}")
@@ -654,6 +681,9 @@ def home():
         classics = [{**c, "image": "", "rating": "", "episode": "CLASSIC", "format": "TV"}
                     for c in ANIME_CLASSICS]
 
+    # Add the 2026 Avatar series explicitly because it is not in AniList yet.
+    classics.append(dict(AVATAR_SEVEN_HAVENS))
+
     # Global most-watched ranking feed for all three tabs (Day/Week/Month)
     try:
         most_viewed_day = platform.most_watched(int(time.time()) - 86400, limit=12)
@@ -669,7 +699,7 @@ def home():
             "app_downloads": _c.get("app_downloads", 0),
             "streams": _c.get("streams", 0) + _c.get("plays", 0),
             "downloads": _c.get("downloads", 0),
-            "users": len(platform.load_store()["users"]),
+            "users": platform.get_user_count(),
         }
     except Exception:
         public_counters = {"app_downloads": 0, "streams": 0, "downloads": 0, "users": 0}
@@ -1556,8 +1586,7 @@ def _current_user():
     email = session.get("user_email", "")
     if not email:
         return None
-    store = platform.load_store()
-    u = store["users"].get(email.lower())
+    u = platform.get_user(email)
     return platform.public_user(u) if u else None
 
 
@@ -1639,8 +1668,7 @@ def api_auth_me():
     u = _current_user()
     if not u:
         return jsonify({"status": "error", "error": "Not signed in."}), 401
-    store = platform.load_store()
-    items = [n for n in store["notifications"] if n["to"] == u["email"]][-20:]
+    items = platform.get_notifications(u["email"], limit=20)
     return jsonify({"status": "success", "user": u,
                     "unread": sum(1 for n in items if not n.get("read")),
                     "notifications": items})
@@ -1658,7 +1686,6 @@ def api_auth_logout():
 @app.route("/login", methods=["GET", "POST"])
 def login_page():
     from flask import session as _s
-    store = platform.load_store()
     error = ""
     mode = request.args.get("mode", "signin")
     if request.method == "POST":
@@ -1668,10 +1695,9 @@ def login_page():
         action = request.form.get("action", "signin")
         try:
             if action == "signup":
-                user = platform.register_user(store, email, name or email.split("@")[0], password)
+                user = platform.register_user(None, email, name or email.split("@")[0], password)
             else:
-                store = platform.load_store()
-                user = platform.verify_user(store, email, password)
+                user = platform.verify_user(None, email, password)
             _s["user_email"] = user["email"]
             nxt = request.args.get("next", "/")
             return redirect(nxt)
@@ -1691,8 +1717,7 @@ def admin_page():
     u = _current_user()
     if not u or u.get("role") != "admin":
         return redirect(url_for("login_page", mode="admin", next="/admin"))
-    store = platform.load_store()
-    stats = platform.admin_stats(store)
+    stats = platform.admin_stats()
     return render_template("admin.html", user=u, stats=stats, schedule=platform.CLASSICS_SCHEDULE)
 
 
@@ -1783,11 +1808,9 @@ def _post_data():
 
 @app.route("/api/community/comments")
 def api_comments():
-    store = platform.load_store()
     anime_id = request.args.get("anime_id", "")
     ep = request.args.get("ep", "")
-    items = [c for c in store["comments"] if str(c["anime_id"]) == str(anime_id) and (not ep or str(c["ep"]) == str(ep))]
-    items = sorted(items, key=lambda x: x["t"])[-100:]
+    items = platform.get_comments(anime_id, ep=ep, limit=100)
     return jsonify({"status": "success", "comments": items, "stickers": platform.CAM_STICKERS})
 
 
@@ -1799,9 +1822,8 @@ def api_comment_post():
     u = _acting_user(allow_guest=True)
     if u.get("guest") and not _guest_throttle_ok("comment", 8):
         return jsonify({"status": "error", "error": "Slow down — wait a few seconds before posting again."}), 429
-    store = platform.load_store()
     try:
-        c = platform.add_comment(store, d.get("anime_id", ""), d.get("ep", ""), {**u, "email": u["email"]}, d.get("text", ""), d.get("parent", ""), d.get("sticker", ""))
+        c = platform.add_comment(None, d.get("anime_id", ""), d.get("ep", ""), {**u, "email": u["email"]}, d.get("text", ""), d.get("parent", ""), d.get("sticker", ""))
         return jsonify({"status": "success", "comment": c, "guest": bool(u.get("guest"))})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
@@ -1810,9 +1832,8 @@ def api_comment_post():
 @app.route("/api/community/like/<cid>", methods=["POST"])
 def api_comment_like(cid):
     u = _acting_user(allow_guest=True)
-    store = platform.load_store()
     try:
-        c = platform.like_comment(store, cid, u["email"])
+        c = platform.like_comment(None, cid, u["email"])
         return jsonify({"status": "success", "likes": c["likes"]})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 404
@@ -1832,8 +1853,7 @@ def api_rate():
     u = _acting_user(allow_guest=True)
     if u.get("guest") and not _guest_throttle_ok("rate", 5):
         return jsonify({"status": "error", "error": "Slow down — wait a few seconds before rating again."}), 429
-    store = platform.load_store()
-    r = platform.rate_anime(store, _post_data().get("anime_id", ""), u["email"], score)
+    r = platform.rate_anime(None, _post_data().get("anime_id", ""), u["email"], score)
     return jsonify({"status": "success", "rating": r, "guest": bool(u.get("guest"))})
 
 
@@ -1842,17 +1862,15 @@ def api_notifications():
     u = _current_user()
     if not u:
         return jsonify({"status": "error", "notifications": []}), 401
-    store = platform.load_store()
-    items = [n for n in store["notifications"] if n["to"] == u["email"]][-20:]
+    items = platform.get_notifications(u["email"], limit=20)
     unread = sum(1 for n in items if not n.get("read"))
     return jsonify({"status": "success", "notifications": items, "unread": unread})
 
 
 @app.route("/api/track", methods=["POST"])
 def api_track():
-    store = platform.load_store()
     d = _post_data()
-    platform.track(store, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
+    platform.track(None, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
     return jsonify({"status": "ok"})
 
 
@@ -1901,13 +1919,12 @@ def api_public_counters():
     """Live factual counters only — streams/downloads/users counted from real
     events in SQLite. Nothing here is a placeholder or vanity number."""
     c = platform.get_counters()
-    store = platform.load_store()
     return jsonify({
         "status": "success",
         "app_downloads": c.get("app_downloads", 0),
         "streams": c.get("streams", 0) + c.get("plays", 0),
         "downloads": c.get("downloads", 0),
-        "users": len(store["users"]),
+        "users": platform.get_user_count(),
         "source": "real events only",
     })
 
@@ -2110,8 +2127,7 @@ def api_public_anime(anime_id: int):
     raw = data.get("Media") or {}
     titles = [raw.get("title", {}).get("english"), raw.get("title", {}).get("romaji")] if raw.get("title") else []
     bundle = streaming_manager.get_full_episode_bundle(anime_id, int(request.args.get("ep", 1)), [t for t in titles if t], mal_id=raw.get("idMal"))
-    store = platform.load_store()
-    return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(store, anime_id)})
+    return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(None, anime_id)})
 
 
 @app.route("/api/public/stream/download", methods=["POST"])

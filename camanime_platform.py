@@ -231,6 +231,51 @@ def _row_user(r) -> Dict:
             "role": r["role"], "avatar": r["avatar"], "created": r["created"]}
 
 
+def get_user(email: str) -> Optional[Dict]:
+    """Read one account row without materializing the entire platform store."""
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email=?", ((email or "").lower(),)).fetchone()
+    return _row_user(row) if row else None
+
+
+def get_user_count() -> int:
+    with _db() as conn:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def _notification_rows(rows) -> List[Dict]:
+    return [{"id": r["id"], "to": r["email"], "text": r["text"],
+             "read": bool(r["read"]), "t": r["t"]} for r in rows]
+
+
+def _ensure_user_history() -> None:
+    with _db() as conn:
+        conn.executescript(_HISTORY_DDL)
+
+
+def get_notifications(email: str, limit: int = 20) -> List[Dict]:
+    cap = max(1, min(int(limit or 20), 100))
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id,email,text,read,t FROM notifications WHERE email=? ORDER BY t DESC LIMIT ?",
+            ((email or "").lower(), cap)).fetchall()
+    return _notification_rows(reversed(rows))
+
+
+def get_comments(anime_id: str, ep: str = "", limit: int = 100) -> List[Dict]:
+    cap = max(1, min(int(limit or 100), 100))
+    query = ("SELECT * FROM comments WHERE anime_id=?" + (" AND ep=?" if ep else "") +
+             " ORDER BY t DESC LIMIT ?")
+    params = (str(anime_id), str(ep), cap) if ep else (str(anime_id), cap)
+    with _db() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return [{"id": r["id"], "anime_id": r["anime_id"], "ep": r["ep"],
+             "user": r["username"], "email": r["email"], "text": r["text"],
+             "parent": r["parent"], "sticker": r["sticker"],
+             "likes": r["likes"], "liked_by": json.loads(r["liked_by"] or "[]"),
+             "t": r["t"]} for r in reversed(rows)]
+
+
 _init()
 _migrate_legacy_once()
 
@@ -520,13 +565,13 @@ def rate_anime(data: Dict, anime_id: str, email: str, score: int) -> Dict:
 
 def anime_rating(data: Dict, anime_id: str) -> Dict:
     with _db() as conn:
-        rows = conn.execute("SELECT score FROM ratings WHERE anime_id = ?",
-                            (str(anime_id),)).fetchall()
-    scores = [r["score"] for r in rows]
-    if not scores:
+        row = conn.execute(
+            "SELECT COUNT(*) AS count, AVG(score) AS avg FROM ratings WHERE anime_id = ?",
+            (str(anime_id),)).fetchone()
+    if not row["count"]:
         return {"anime_id": str(anime_id), "count": 0, "avg": 0}
-    return {"anime_id": str(anime_id), "count": len(scores),
-            "avg": round(sum(scores) / len(scores), 1)}
+    return {"anime_id": str(anime_id), "count": row["count"],
+            "avg": round(row["avg"], 1)}
 
 
 def admin_stats(data: Dict = None) -> Dict:
@@ -655,8 +700,7 @@ CREATE INDEX IF NOT EXISTS idx_history_email ON user_history(email, t);
 
 
 def _ensure_history() -> None:
-    with _db() as conn:
-        conn.executescript(_HISTORY_DDL)
+    _ensure_user_history()
 
 
 def upsert_history(email: str, anime_id, ep: int = 1, position: float = 0,
@@ -696,7 +740,7 @@ def remove_history(email: str, anime_id) -> None:
 
 def get_history(email: str, limit: int = 30) -> List[Dict]:
     """Signed-in continue-watching list, newest first, meta-rich."""
-    _ensure_history()
+    _ensure_user_history()
     key = (email or "").lower()
     with _db() as conn:
         rows = conn.execute(

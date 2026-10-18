@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import time
+from collections import OrderedDict
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urljoin, urlparse
 
@@ -137,23 +138,37 @@ def generate_title_variants(titles: List[str]) -> List[str]:
 
 
 class StreamingProvider:
-    """Base streaming provider class with TTL cache"""
+    """Base provider with a bounded LRU/TTL cache to cap worker memory."""
+
+    CACHE_MAX_ENTRIES = 64
 
     def __init__(self, timeout: int = 12):
         self.timeout = timeout
-        self.cache: Dict[str, Tuple[object, float]] = {}
+        self.cache: OrderedDict[str, Tuple[object, float]] = OrderedDict()
         self.cache_duration = 1800  # 30 minutes
 
     def _cache_get(self, key: str, ttl: Optional[int] = None):
-        if key in self.cache:
-            data, timestamp = self.cache[key]
-            max_age = ttl if ttl is not None else self.cache_duration
-            if time.time() - timestamp < max_age:
-                return data
-        return None
+        entry = self.cache.get(key)
+        if entry is None:
+            return None
+        data, timestamp = entry
+        max_age = ttl if ttl is not None else self.cache_duration
+        if time.time() - timestamp >= max_age:
+            self.cache.pop(key, None)
+            return None
+        self.cache.move_to_end(key)
+        return data
 
     def _cache_set(self, key: str, value: object):
-        self.cache[key] = (value, time.time())
+        now = time.time()
+        cutoff = now - self.cache_duration
+        for old_key, (_old_value, timestamp) in list(self.cache.items()):
+            if timestamp < cutoff:
+                self.cache.pop(old_key, None)
+        self.cache[key] = (value, now)
+        self.cache.move_to_end(key)
+        while len(self.cache) > self.CACHE_MAX_ENTRIES:
+            self.cache.popitem(last=False)
 
 
 class AnimeHeavenProvider(StreamingProvider):
@@ -572,7 +587,8 @@ class AnikotoProvider(StreamingProvider):
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": f"{self.base_url}/",
         })
-        self._megaplay_script_cache: Dict[str, Tuple[List[bytes], List[bytes], float]] = {}
+        self._megaplay_script_cache: OrderedDict[str, Tuple[List[bytes], List[bytes], float]] = OrderedDict()
+        self._megaplay_script_cache_max = 16
 
     def search(self, query: str) -> List[Dict]:
         q = (query or "").strip()
@@ -775,7 +791,9 @@ class AnikotoProvider(StreamingProvider):
         if host in self._megaplay_script_cache:
             keys, ivs, ts = self._megaplay_script_cache[host]
             if now - ts < 1800:
+                self._megaplay_script_cache.move_to_end(host)
                 return keys, ivs
+            self._megaplay_script_cache.pop(host, None)
 
         script_urls = [
             urljoin(f"https://{host}/", m.group(1))
@@ -806,6 +824,9 @@ class AnikotoProvider(StreamingProvider):
                     ivs = [c.encode("utf-8") for c in candidates if len(c.encode("utf-8")) == 16]
                     keys = [c.encode("utf-8") for c in candidates if 0 < len(c.encode("utf-8")) <= 32]
                     self._megaplay_script_cache[host] = (keys, ivs, now)
+                    self._megaplay_script_cache.move_to_end(host)
+                    while len(self._megaplay_script_cache) > self._megaplay_script_cache_max:
+                        self._megaplay_script_cache.popitem(last=False)
                     return keys, ivs
             except Exception as e:
                 logger.debug(f"[MegaPlay] script fetch failed ({su}): {e}")
@@ -996,8 +1017,10 @@ class AnikotoProvider(StreamingProvider):
 class YouTubeTrailerResolver:
     """Resolves official YouTube trailer IDs for anime preview playback"""
 
+    CACHE_MAX_ENTRIES = 64
+
     def __init__(self):
-        self.cache: Dict[str, str] = {}
+        self.cache: OrderedDict[str, str] = OrderedDict()
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": DEFAULT_UA})
 
@@ -1013,6 +1036,7 @@ class YouTubeTrailerResolver:
             return None
         key = title.lower().strip()
         if key in self.cache:
+            self.cache.move_to_end(key)
             return self.cache[key]
 
         # 2. Live YouTube search scrape for official PV / trailer
@@ -1026,6 +1050,9 @@ class YouTubeTrailerResolver:
                 vids = list(dict.fromkeys(re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', resp.text)))
                 if vids:
                     self.cache[key] = vids[0]
+                    self.cache.move_to_end(key)
+                    while len(self.cache) > self.CACHE_MAX_ENTRIES:
+                        self.cache.popitem(last=False)
                     return vids[0]
         except Exception as e:
             logger.warning(f"[YouTube] trailer search failed for '{title}': {e}")
@@ -1048,7 +1075,8 @@ class StreamingManager:
             "animeheaven": self.animeheaven,
             "anikoto": self.anikoto,
         }
-        self._mapping_cache: Dict[str, Dict] = {}
+        self._mapping_cache: OrderedDict[str, Dict] = OrderedDict()
+        self._mapping_cache_max = 128
 
     def resolve_anime_mapping(
         self,
@@ -1059,6 +1087,7 @@ class StreamingManager:
     ) -> Dict:
         cache_key = f"map_{anilist_id}_{heaven_override or ''}"
         if cache_key in self._mapping_cache:
+            self._mapping_cache.move_to_end(cache_key)
             return self._mapping_cache[cache_key]
 
         clean_titles = [t for t in titles if t]
@@ -1073,6 +1102,9 @@ class StreamingManager:
             "anikoto_slug": anikoto_slug,
         }
         self._mapping_cache[cache_key] = mapping
+        self._mapping_cache.move_to_end(cache_key)
+        while len(self._mapping_cache) > self._mapping_cache_max:
+            self._mapping_cache.popitem(last=False)
         return mapping
 
     def get_full_episode_bundle(
@@ -1354,6 +1386,8 @@ class StreamingManager:
     def clear_cache(self):
         self.animeheaven.cache.clear()
         self.anikoto.cache.clear()
+        self.anikoto._megaplay_script_cache.clear()
+        self.youtube.cache.clear()
         self._mapping_cache.clear()
 
 
