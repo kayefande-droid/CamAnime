@@ -50,6 +50,18 @@ def test_oversized_path_is_rejected():
     assert client().get("/" + "a" * 600).status_code in (400, 404)
 
 
+def test_gzip_middleware_does_not_buffer_video_responses(monkeypatch):
+    from flask import Response
+
+    response = Response((chunk for chunk in (b"video-chunk",)), content_type="video/mp4")
+    monkeypatch.setattr(response, "get_data", lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("stream response was buffered for gzip")))
+    with camanime.app.test_request_context("/api/proxy/video", headers={"Accept-Encoding": "gzip"}):
+        result = camanime._speed_headers(response)
+    assert result is response
+    assert "Content-Encoding" not in result.headers
+
+
 def test_video_stream_preserves_range_and_streams_chunks(monkeypatch):
     class Upstream:
         status_code = 206

@@ -252,9 +252,13 @@ def _speed_headers(resp):
             resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
             return resp
         if resp.status_code == 200 and "gzip" in (request.headers.get("Accept-Encoding") or ""):
-            body = resp.get_data()
             ctype = resp.headers.get("Content-Type", "")
-            if len(body) > 1024 and ("text/html" in ctype or "application/json" in ctype or "javascript" in ctype or "text/css" in ctype):
+            compressible = any(t in ctype for t in (
+                "text/html", "application/json", "javascript", "text/css"))
+            if not compressible:
+                return resp
+            body = resp.get_data()
+            if len(body) > 1024:
                 import gzip as _gz
                 resp.set_data(_gz.compress(body, compresslevel=5))
                 resp.headers["Content-Encoding"] = "gzip"
