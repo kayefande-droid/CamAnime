@@ -192,6 +192,9 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 .cd-chip{background:rgba(7,8,13,.7);border:1px solid rgba(255,179,71,.4);border-radius:10px;padding:.4rem .65rem;min-width:64px;text-align:center}
 .cd-chip b{display:block;font-family:var(--ca-font-mono,monospace);font-size:1.15rem;color:#FFB347;line-height:1.1}
 .cd-chip span{font-size:.62rem;letter-spacing:.08em;color:var(--text-muted,#64708a);text-transform:uppercase}
+.release-state{display:inline-flex;align-items:center;color:#34d399;font-size:.76rem;font-weight:700;min-width:10rem}
+.release-provider{display:inline-flex;align-items:center;color:#FFB347;font-size:.76rem;font-weight:700;text-decoration:underline}
+.schedule-empty{padding:1rem;color:var(--text-secondary,#a0abc0);background:var(--bg-elevated,#0e111a);border-radius:12px}
 
 /* ── Most-viewed tabs (Day/Week/Month) ── */
 .mv-tabs{display:flex;gap:.4rem;align-items:center}

@@ -2,28 +2,37 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Release Schedule — CamAnime | New episodes, seasons & classics</title>
+<title>Release Schedule — CamAnime | Current season next episodes</title>
 <meta name="theme-color" content="#087BFF"><link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml"><link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
-<meta name="description" content="Organised anime release timetable: simulcast premieres, season drops and timeless classics, updated weekly on CamAnime.">
+<meta name="description" content="Live countdowns for current-season anime next episode air times, refreshed from AniList metadata.">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto}
 h1{font-family:'Syne';font-size:clamp(1.5rem,1.25rem + 2vw,2rem)}a{color:#FFB347}
-.day{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:1.1rem;margin:1rem 0}
-.slot{display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-top:1px solid rgba(255,255,255,.06);font-size:.92rem;flex-wrap:wrap}
 @media(max-width:414px){body{padding:1rem}}
 </style>
-<link href="/static/css/sync.css" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261018-schedule" rel="stylesheet">
 <script src="/static/js/site.js" defer></script>
 </head>
 <body>
 <p><a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" style="display:block;width:min(230px,70vw);height:auto"></a></p>
-<h1>Weekly release schedule</h1>
-<p style="color:#a0abc0">Premieres, season batches and classics. Times in UTC; Cameroon (WAT) is UTC+1.</p>
-{% for d in schedule %}<div class="day"><h2>{{ d.day }}</h2>
-{% for s in d.slots %}<div class="slot"><span><strong>{{ s.time }}</strong> — {{ s.title }}</span><span style="color:#34d399">{{ s.kind }}</span></div>{% endfor %}
-</div>{% endfor %}
-<p style="color:#64708a;margin-top:2rem">Made by kayefande-droid &amp; co. · Free anime streaming website worldwide.</p>
+<h1>{{ season_name }} {{ season_year }} anime release schedule</h1>
+<p style="color:#a0abc0">Current-season TV and short-series next-episode times from AniList. Countdown metadata refreshes every five minutes. Air times do not guarantee a playable CamAnime episode; only a matched official outbound provider listing is shown.</p>
+<div id="releaseTickerList" data-schedule-url="/api/v1/schedule" data-season="{{ season_name }} {{ season_year }}">
+{% for it in countdown_items %}
+{% set air = it.next_airing_episode %}
+<div class="release-ticker" data-anime-id="{{ it.id }}" data-airing-epoch="{{ air.airing_at if air else 0 }}" data-airing-episode="{{ air.episode if air else '' }}" data-countdown-state="{{ 'upcoming' if air and air.airing_at > now_ts else ('aired_checking' if air else 'date_unknown') }}">
+  <div><div class="rt-title">{{ it.title }}</div><div class="rt-sub">Episode {{ air.episode if air else '?' }} · {{ (it.airing_hour | replace(' UTC', '') ~ ' UTC') if it.airing_hour else 'Air date not listed' }} · {{ season_name }} {{ season_year }}</div></div>
+  <div class="countdown-chips" data-cd-for="{{ it.id }}">
+    {% if air %}<span class="cd-chip"><b data-cd-d>00</b><span>d</span></span><span class="cd-chip"><b data-cd-h>00</b><span>hrs</span></span><span class="cd-chip"><b data-cd-m>00</b><span>min</span></span><span class="cd-chip"><b data-cd-s>00</b><span>sec</span></span>{% else %}<span class="release-state">Next-episode date not listed</span>{% endif %}
+    <span class="release-state" data-release-state>{{ 'Countdown' if air and air.airing_at > now_ts else ('Provider listing found · verify release' if it.official_link_available else ('Aired · checking provider' if air else 'Awaiting schedule from AniList')) }}</span>
+    {% if it.official_episode_link %}<a class="release-provider" rel="nofollow noopener noreferrer" target="_blank" href="{{ it.official_episode_link.url }}">Watch episode {{ it.released_episode }} on {{ it.official_episode_link.provider }}</a>{% endif %}
+  </div>
+</div>
+{% else %}<p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>{% endfor %}
+</div>
+<script src="/static/js/release-schedule.js?v=20261018-schedule" defer></script>
+<p style="color:#64708a;margin-top:2rem">Made by kayefande-droid &amp; co. · Free anime release metadata is supplied by AniList.</p>
 </body>
 </html>

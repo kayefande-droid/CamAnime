@@ -64,6 +64,7 @@ All catalogue endpoints use AniList IDs as canonical IDs and normalize fields th
 
 - `GET /api/v1/health`
 - `GET /api/v1/catalog/home` — `catalog.featured`, `trending`, `popular`, `top_rated`, `recently_added`, `movies`, `series`
+- `GET /api/v1/schedule` — current AniList season airing metadata and next-episode timestamps (outbound provider metadata only; not CamAnime playback availability)
 - `GET /api/v1/anime?q=&genre=&format=&sort=&page=&limit=` — paginated; `limit` 1–50
 - `GET /api/v1/search?q=<query>`
 - `GET /api/v1/genres`
@@ -71,7 +72,7 @@ All catalogue endpoints use AniList IDs as canonical IDs and normalize fields th
 - `GET /api/v1/anime/<anilist-id>` — metadata, alternate titles and AniList episode preview metadata
 - `GET /api/v1/anime/<anilist-id>/episodes?page=&limit=` — metadata only; explicitly `playable:false` and `download_allowed:false`
 
-The legacy endpoints below remain separate and are not mapped from AniList IDs unless a valid provider mapping exists.
+The legacy endpoints below remain separate and are not mapped from AniList IDs unless a valid provider mapping exists. The homepage and `/schedule` countdowns refresh locally every second, without a request, and fetch new schedule metadata at most once every 15 minutes. Server-side, each worker caches its own compact schedule snapshot for 15 minutes and fetches at most two AniList pages (50 entries each) on a cache miss; concurrent misses are coalesced, provider failures cool down for five minutes, and HTTP responses are cacheable for 15 minutes. Timer rollover shows an aired/checking-provider state without claiming or creating playback access.
 
 - `GET /api/public/anime/<id>?ep=<n>` — legacy provider bundle (must be audited for authorization before use)
 - `POST /api/auth/register|login|logout`, `GET /api/auth/me` — token auth

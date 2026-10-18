@@ -1,5 +1,7 @@
 import importlib
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -159,6 +161,221 @@ def test_homepage_exposes_avatar_seven_havens_officially(api):
     assert b"New series" in response.data
     assert b"2026 SERIES" in response.data
     assert b"/watch/avatar-seven-havens/1" not in response.data
+
+
+def test_release_schedule_api_includes_all_current_season_airings(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    media = []
+    for index in range(9):
+        item = anime(anime_id=500 + index, title=f"Seasonal {index}")
+        item.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
+        item["nextAiringEpisode"] = {
+            "episode": index + 2,
+            "airingAt": 1793000000 + index * 3600,
+            "timeUntilAiring": 1800 + index * 3600,
+        }
+        media.append(item)
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    with patch.object(api, "fetch_anilist", return_value={"Page": {"media": media}}) as fetch:
+        response = api.app.test_client().get("/api/v1/schedule")
+    assert response.status_code == 200
+    assert response.json["season"] == {"name": "FALL", "year": 2026}
+    assert len(response.json["items"]) == 9
+    assert response.json["items"][-1]["next_airing_episode"]["episode"] == 10
+    assert all(item["upcoming"] is True for item in response.json["items"])
+    assert fetch.call_args_list[0].args[1] == {"season": "FALL", "seasonYear": 2026, "page": 1, "perPage": 50}
+    assert all(call.kwargs["cache_ttl"] == api._SEASON_SCHEDULE_CACHE_TTL for call in fetch.call_args_list)
+    assert all(item["playback_available"] is False for item in response.json["items"])
+    assert response.headers["Cache-Control"].startswith("public, max-age=900")
+
+
+def test_schedule_page_cache_bounds_repeated_requests_and_isolates_cache(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    monkeypatch.setattr(api.time, "monotonic", lambda: 1000)
+    empty_page = {"Page": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=empty_page) as fetch:
+        client = api.app.test_client()
+        first = client.get("/api/v1/schedule")
+        second = client.get("/api/v1/schedule")
+    assert first.status_code == second.status_code == 200
+    assert fetch.call_count == 1
+    assert api._SEASON_SCHEDULE_CACHE[("FALL", 2026)][1] == api._SEASON_SCHEDULE_CACHE_TTL
+
+
+def test_schedule_failure_cooldown_prevents_upstream_retry_storm(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    monkeypatch.setattr(api.time, "monotonic", lambda: 1000)
+    with patch.object(api, "fetch_anilist", return_value={}) as fetch:
+        client = api.app.test_client()
+        first = client.get("/api/v1/schedule")
+        second = client.get("/api/v1/schedule")
+    assert first.status_code == second.status_code == 200
+    assert fetch.call_count == 1
+    assert api._SEASON_SCHEDULE_CACHE[("FALL", 2026)][1] == api._SEASON_SCHEDULE_FAILURE_TTL
+
+
+def test_schedule_cache_expires_after_fifteen_minutes(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    now = [1000]
+    monkeypatch.setattr(api.time, "monotonic", lambda: now[0])
+    empty_page = {"Page": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=empty_page) as fetch:
+        client = api.app.test_client()
+        client.get("/api/v1/schedule")
+        now[0] += api._SEASON_SCHEDULE_CACHE_TTL
+        client.get("/api/v1/schedule")
+    assert fetch.call_count == 2
+
+
+def test_schedule_caps_work_to_two_pages_of_50_titles(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "_utc_now_timestamp", lambda: 100)
+
+    def page_items(start):
+        rows = []
+        for anime_id in range(start, start + 50):
+            row = anime(anime_id=anime_id, title=f"Bounded {anime_id}")
+            row.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
+            row["nextAiringEpisode"] = {"episode": 2, "airingAt": 200, "timeUntilAiring": 100}
+            rows.append(row)
+        return {"Page": {"media": rows}}
+
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    with patch.object(api, "fetch_anilist", side_effect=[page_items(1000), page_items(1050)]) as fetch:
+        response = api.app.test_client().get("/api/v1/schedule")
+    assert response.status_code == 200
+    assert len(response.json["items"]) == 100
+    assert fetch.call_count == 2
+    assert [call.args[1]["page"] for call in fetch.call_args_list] == [1, 2]
+
+
+def test_schedule_query_is_small_and_uses_legal_streaming_metadata(api):
+    assert "description" not in api.SEASON_MEDIA_FRAGMENT
+    assert "characters" not in api.SEASON_MEDIA_FRAGMENT
+    assert "recommendations" not in api.SEASON_MEDIA_FRAGMENT
+    assert "streamingEpisodes { title url site }" in api.SEASON_MEDIA_FRAGMENT
+    assert "perPage: 1" in api.SEASON_MEDIA_FRAGMENT
+    assert "status_in: [RELEASING, NOT_YET_RELEASED]" in api.SEASON_AIRING_QUERY
+
+
+def test_current_anime_season_uses_utc_quarter_boundaries(api):
+    assert api.current_anime_season(datetime(2026, 1, 1, tzinfo=timezone.utc)) == ("WINTER", 2026)
+    assert api.current_anime_season(datetime(2026, 4, 1, tzinfo=timezone.utc)) == ("SPRING", 2026)
+    assert api.current_anime_season(datetime(2026, 7, 1, tzinfo=timezone.utc)) == ("SUMMER", 2026)
+    assert api.current_anime_season(datetime(2026, 10, 1, tzinfo=timezone.utc)) == ("FALL", 2026)
+    assert api.current_anime_season(datetime(2026, 12, 15, tzinfo=timezone.utc)) == ("FALL", 2026)
+
+
+def test_release_schedule_handles_aired_unknown_and_finished_titles(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    active = anime(anime_id=701, title="Still Airing")
+    active.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
+    active["nextAiringEpisode"] = {"episode": 5, "airingAt": 1793000000, "timeUntilAiring": 10}
+    past = anime(anime_id=703, title="Past Air Time")
+    past.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
+    past["nextAiringEpisode"] = {"episode": 6, "airingAt": 1700000000, "timeUntilAiring": 0}
+    unknown = anime(anime_id=704, title="Unknown Schedule")
+    unknown.update({"status": "NOT_YET_RELEASED", "season": "FALL", "seasonYear": 2026})
+    unknown["episodes"] = None
+    finished = anime(anime_id=702, title="Finished")
+    finished.update({"status": "FINISHED", "season": "FALL", "seasonYear": 2026})
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    with patch.object(api, "fetch_anilist", return_value={"Page": {"media": [active, past, unknown, finished]}}):
+        response = api.app.test_client().get("/api/v1/schedule")
+    assert response.status_code == 200
+    by_id = {item["id"]: item for item in response.json["items"]}
+    assert set(by_id) == {701, 703, 704}
+    assert by_id[701]["availability"] == "upcoming"
+    assert by_id[703]["availability"] == "air_time_passed"
+    assert by_id[704]["availability"] == "date_unknown"
+    assert by_id[704]["next_airing_episode"] is None
+    assert by_id[704]["upcoming"] is False
+
+
+def test_schedule_links_only_a_matching_already_released_official_episode(api, monkeypatch):
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    raw = anime(anime_id=705, title="Official Episode")
+    raw.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
+    raw["nextAiringEpisode"] = {"episode": 12, "airingAt": int(time.time()) - 100, "timeUntilAiring": 0}
+    raw["streamingEpisodes"] = [
+        {"title": "Episode 11", "url": "https://official.example/11", "site": "Official"},
+        {"title": "Episode 12", "url": "https://official.example/12", "site": "Official"},
+    ]
+    with patch.object(api, "current_anime_season", return_value=("FALL", 2026)), \
+         patch.object(api, "fetch_anilist", return_value={"Page": {"media": [raw]}}):
+        response = api.app.test_client().get("/api/v1/schedule")
+    item = response.json["items"][0]
+    assert item["released_episode"] == 12
+    assert item["official_episode_link"] == {
+        "url": "https://official.example/12", "provider": "Official"
+    }
+    assert item["official_link_available"] is True
+    assert item["playback_available"] is False
+    assert item["download_available"] is False
+
+
+def test_homepage_renders_every_season_countdown_and_live_refresh_hook(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    schedule = []
+    for index in range(8):
+        schedule.append({
+            **api.format_anime_card({
+                **anime(anime_id=800 + index, title=f"Countdown {index}"),
+                "status": "RELEASING", "season": "FALL", "seasonYear": 2026,
+                "nextAiringEpisode": {"episode": 2, "airingAt": 1793000000 + index,
+                                      "timeUntilAiring": 30 + index},
+            }),
+        })
+    payload = {"trending": {"media": []}, "popularSeason": {"media": []},
+               "topRated": {"media": []}, "recentlyAdded": {"media": []},
+               "featuredMovie": {"media": []}, "series": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=payload), \
+         patch.object(api, "get_current_season_schedule", return_value=schedule), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+        response = api.app.test_client().get("/")
+    assert response.status_code == 200
+    assert response.data.count(b'class="release-ticker"') == 8
+    assert b"/api/v1/schedule" in response.data
+    assert b"release-schedule.js?v=20261018-schedule" in response.data
+    assert b"Countdown 7" in response.data
+
+
+def test_schedule_page_renders_dynamic_airing_rows(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    card = api.format_anime_card({
+        **anime(anime_id=901, title="Schedule Entry"),
+        "status": "RELEASING", "season": "FALL", "seasonYear": 2026,
+        "nextAiringEpisode": {"episode": 7, "airingAt": 1793000000, "timeUntilAiring": 90},
+    })
+    with patch.object(api, "get_current_season_schedule", return_value=[card]):
+        response = api.app.test_client().get("/schedule")
+    assert response.status_code == 200
+    assert b"Schedule Entry" in response.data
+    assert b"Episode 7" in response.data
+    assert b"data-airing-epoch=\"1793000000\"" in response.data
+    assert b"/api/v1/schedule" in response.data
+    assert b"release-schedule.js?v=20261018-schedule" in response.data
+    assert b"Episode 7" in response.data
+    assert b"data-cd-d" in response.data
+
+
+def test_schedule_page_marks_unknown_airing_time_without_countdown(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    card = api.format_anime_card({
+        **anime(anime_id=902, title="No Air Date"),
+        "status": "RELEASING", "season": "FALL", "seasonYear": 2026,
+    })
+    card["next_airing_episode"] = None
+    card["airing_hour"] = ""
+    with patch.object(api, "get_current_season_schedule", return_value=[card]):
+        response = api.app.test_client().get("/schedule")
+    assert response.status_code == 200
+    assert b"No Air Date" in response.data
+    assert b"Next-episode date not listed" in response.data
+    assert b"data-cd-d" not in response.data
 
 
 def test_ongoing_anime_episode_metadata_refreshes_from_provider(api):

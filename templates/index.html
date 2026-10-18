@@ -36,7 +36,7 @@
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/sync.css" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261018-schedule" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
@@ -982,7 +982,7 @@
     {% endif %}
 
     <!-- ─── NEXT EPISODE RELEASE TICKER (all users, live countdown) ─── -->
-    {% if page_type == 'home' and countdown_items is defined and countdown_items %}
+    {% if page_type == 'home' and countdown_items is defined %}
     <section class="section-block" id="releaseTickerSection">
         <div class="section-head">
             <div class="section-title-wrap">
@@ -991,22 +991,27 @@
             </div>
             <a href="/schedule" class="section-link" style="color:#34d399;">Open full schedule <i class="fas fa-arrow-right"></i></a>
         </div>
-        <div id="releaseTickerList">
+        <div id="releaseTickerList" data-schedule-url="/api/v1/schedule" data-season="{{ season_name }} {{ season_year }}">
             {% for it in countdown_items %}
-            <div class="release-ticker" data-airing-epoch="{{ (it.next_airing_episode.airing_at) or 0 }}">
+            {% set air = it.next_airing_episode %}
+            <div class="release-ticker" data-anime-id="{{ it.id }}" data-airing-epoch="{{ air.airing_at if air else 0 }}" data-airing-episode="{{ air.episode if air else '' }}" data-countdown-state="{{ 'upcoming' if air and air.airing_at > now_ts else ('aired_checking' if air else 'date_unknown') }}">
                 <div>
                     <div class="rt-title">{{ it.title }}</div>
-                    <div class="rt-sub">Episode {{ it.next_airing_episode.episode }} · airs {{ it.airing_hour }} ({{ it.status }})</div>
+                    <div class="rt-sub">Episode {{ air.episode if air else '?' }} · {{ (it.airing_hour | replace(' UTC', '')) if it.airing_hour else 'Air date not listed' }} UTC · {{ season_name }} {{ season_year }}</div>
                 </div>
                 <div class="countdown-chips" data-cd-for="{{ it.id }}">
                     <span class="cd-chip"><b data-cd-d>-</b><span>d</span></span>
                     <span class="cd-chip"><b data-cd-h>-</b><span>hrs</span></span>
                     <span class="cd-chip"><b data-cd-m>-</b><span>min</span></span>
                     <span class="cd-chip"><b data-cd-s>-</b><span>sec</span></span>
+                    <span class="release-state" data-release-state>{{ 'Countdown' if air and air.airing_at > now_ts else ('Provider listing found · verify release' if it.official_link_available else ('Aired · checking provider' if air else 'Awaiting schedule from AniList')) }}</span>
                 </div>
             </div>
+            {% else %}
+            <p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>
             {% endfor %}
         </div>
+        <script src="/static/js/release-schedule.js?v=20261018-schedule" defer></script>
     </section>
     {% endif %}
 
@@ -1555,21 +1560,6 @@
             `).join('');
         } catch (e) {}
     }
-
-    // ─── Live next-episode countdown (updates every second) ───
-    function tickCountdowns() {
-        document.querySelectorAll('.release-ticker[data-airing-epoch]').forEach(row => {
-            const epoch = parseInt(row.getAttribute('data-airing-epoch') || '0', 10);
-            if (!epoch) return;
-            let diff = epoch - Math.floor(Date.now() / 1000);
-            if (diff < 0) diff = 0;
-            const d = Math.floor(diff / 86400), h = Math.floor((diff % 86400) / 3600),
-                  m = Math.floor((diff % 3600) / 60), s = diff % 60;
-            const set = (sel, v) => { const el = row.querySelector(sel); if (el) el.textContent = String(v).padStart(2, '0'); };
-            set('[data-cd-d]', d); set('[data-cd-h]', h); set('[data-cd-m]', m); set('[data-cd-s]', s);
-        });
-    }
-    setInterval(tickCountdowns, 1000); tickCountdowns();
 
     // ─── Live factual counters refresh (60s) ───
     async function refreshStats() {

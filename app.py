@@ -3,6 +3,7 @@ import re
 import time
 import random
 from datetime import datetime, timezone
+from threading import Lock
 from collections import OrderedDict, deque
 from typing import Dict, List, Optional
 from urllib.parse import quote, urljoin, urlparse
@@ -28,6 +29,11 @@ import os
 from flask import session
 
 import camanime_platform as platform
+
+
+def _utc_now_timestamp() -> int:
+    return int(time.time())
+
 
 # Quiet by default on Render free tier (LOG_LEVEL=INFO to debug). Cuts log volume/spam.
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
@@ -306,6 +312,10 @@ ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: OrderedDict[str, tuple] = OrderedDict()
 ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
 ANILIST_CACHE_MAX = 64  # detail responses include large relations/character lists; cap worker memory
+_SEASON_SCHEDULE_LOCK = Lock()
+_SEASON_SCHEDULE_CACHE = {}
+_SEASON_SCHEDULE_CACHE_TTL = 900
+_SEASON_SCHEDULE_FAILURE_TTL = 300
 
 MEDIA_FRAGMENT = """
   id
@@ -452,13 +462,14 @@ POPULAR_GENRES = [
 ]
 
 
-def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
+def fetch_anilist(query: str, variables: Optional[Dict] = None,
+                  cache_ttl: int = ANILIST_CACHE_TTL) -> Dict:
     """Fetch AniList data with bounded per-process TTL/LRU caching."""
     cache_key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
     now = time.time()
     if cache_key in _anilist_cache:
         data, ts = _anilist_cache[cache_key]
-        if now - ts < ANILIST_CACHE_TTL:
+        if now - ts < max(0, int(cache_ttl)):
             _anilist_cache.move_to_end(cache_key)
             return data
         _anilist_cache.pop(cache_key, None)
@@ -481,6 +492,177 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None) -> Dict:
     except Exception as e:
         logger.error(f"AniList API Error: {e}")
         return {}
+
+
+def current_anime_season(now: Optional[datetime] = None):
+    """Return AniList's initial-release season for the current UTC date."""
+    now = now or datetime.now(timezone.utc)
+    season = ("WINTER" if now.month in (1, 2, 3) else
+              "SPRING" if now.month in (4, 5, 6) else
+              "SUMMER" if now.month in (7, 8, 9) else "FALL")
+    return season, now.year
+
+
+SEASON_MEDIA_FRAGMENT = """
+  id
+  idMal
+  title { romaji english native }
+  coverImage { large extraLarge color }
+  bannerImage
+  episodes
+  status
+  format
+  season
+  seasonYear
+  averageScore
+  genres
+  nextAiringEpisode { episode airingAt timeUntilAiring }
+  streamingEpisodes { title url site }
+  airingSchedule(notYetAired: true, page: 1, perPage: 1) {
+    nodes { episode airingAt timeUntilAiring }
+  }
+"""
+
+SEASON_AIRING_QUERY = f"""
+query ($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {{
+  Page(page: $page, perPage: $perPage) {{
+    media(type: ANIME, status_in: [RELEASING, NOT_YET_RELEASED],
+          season: $season, seasonYear: $seasonYear,
+          format_in: [TV, TV_SHORT], sort: POPULARITY_DESC, isAdult: false) {{
+      {SEASON_MEDIA_FRAGMENT}
+    }}
+  }}
+}}
+"""
+
+
+def get_current_season_schedule(now_ts: Optional[int] = None) -> List[Dict]:
+    """Serve a per-worker cached schedule and coalesce concurrent upstream fetches."""
+    season, year = current_anime_season()
+    cache_key = (season, year)
+    with _SEASON_SCHEDULE_LOCK:
+        cached = _SEASON_SCHEDULE_CACHE.get(cache_key)
+        if cached and time.monotonic() - cached[0] < cached[1]:
+            return cached[2]
+        schedule = _load_current_season_schedule(now_ts, season, year)
+        # On provider errors, cool down instead of retrying on every homepage
+        # or API request. Successful (including empty) seasons cache for 15m.
+        if schedule is None:
+            schedule = []
+            ttl = _SEASON_SCHEDULE_FAILURE_TTL
+        else:
+            ttl = _SEASON_SCHEDULE_CACHE_TTL
+        _SEASON_SCHEDULE_CACHE[cache_key] = (time.monotonic(), ttl, schedule)
+        return schedule
+
+
+def _load_current_season_schedule(now_ts: Optional[int] = None,
+                                  season: Optional[str] = None,
+                                  year: Optional[int] = None) -> Optional[List[Dict]]:
+    """Fetch every currently airing or upcoming TV series for this season."""
+    if season is None or year is None:
+        season, year = current_anime_season()
+    now_ts = _utc_now_timestamp() if now_ts is None else int(now_ts)
+    per_page = 50
+    schedule = []
+    # Two bounded pages cover current seasons (71 Fall 2026 titles observed)
+    # without unbounded work. Cache each page for 15m so visitor refreshes don't
+    # multiply AniList requests per worker.
+    for page in range(1, 3):
+        data = fetch_anilist(SEASON_AIRING_QUERY, {
+            "season": season, "seasonYear": year, "page": page, "perPage": per_page,
+        }, cache_ttl=_SEASON_SCHEDULE_CACHE_TTL)
+        if "Page" not in data:
+            return None
+        page_data = data.get("Page") or {}
+        media = page_data.get("media") or []
+        for anime in media:
+            if anime.get("status") not in ("RELEASING", "NOT_YET_RELEASED"):
+                continue
+            next_ep = anime.get("nextAiringEpisode") or {}
+            next_time = next_ep.get("airingAt")
+            if not isinstance(next_time, int) or next_time <= now_ts:
+                future = [ep for ep in ((anime.get("airingSchedule") or {}).get("nodes") or [])
+                          if isinstance(ep.get("airingAt"), int) and ep["airingAt"] > now_ts]
+                if future:
+                    next_ep = future[0]
+                    next_time = next_ep.get("airingAt")
+            card = format_anime_card(anime)
+            if isinstance(next_time, int):
+                card["next_airing_episode"] = {
+                    "episode": next_ep.get("episode"),
+                    "airing_at": next_time,
+                    "seconds_until_airing": max(0, next_time - now_ts),
+                }
+                card["airing_hour"] = datetime.fromtimestamp(next_time, timezone.utc).strftime("%H:%M UTC")
+                card["availability"] = "upcoming" if next_time > now_ts else "air_time_passed"
+            else:
+                card["next_airing_episode"] = None
+                card["airing_hour"] = ""
+                card["availability"] = "date_unknown"
+            card["upcoming"] = card["availability"] == "upcoming"
+            next_episode_number = next_ep.get("episode") if isinstance(next_ep, dict) else None
+            if isinstance(next_episode_number, int) and isinstance(next_time, int):
+                released_episode_number = (
+                    next_episode_number if next_time <= now_ts
+                    else (next_episode_number - 1 if next_episode_number > 1 else None)
+                )
+            else:
+                released_episode_number = None
+            official_link = None
+            if isinstance(released_episode_number, int):
+                for source in anime.get("streamingEpisodes") or []:
+                    match = re.search(r"\b(?:episode|ep)\s*0*(\d+)\b", source.get("title") or "", re.I)
+                    source_url = (source.get("url") or "").strip()
+                    parsed_source = urlparse(source_url)
+                    if (match and int(match.group(1)) == released_episode_number
+                            and parsed_source.scheme in ("http", "https") and parsed_source.hostname
+                            and not parsed_source.username and not parsed_source.password):
+                        official_link = {"url": source_url, "provider": source.get("site") or "Official provider"}
+                        break
+            if not official_link:
+                # A link to an episode known to have released is still useful,
+                # but must never be advertised as an upcoming playable source.
+                last_aired_episode = next_ep.get("episode") if isinstance(next_ep, dict) else None
+                if isinstance(last_aired_episode, int) and isinstance(next_time, int) and next_time > now_ts:
+                    for source in anime.get("streamingEpisodes") or []:
+                        match = re.search(r"\b(?:episode|ep)\s*0*(\d+)\b", source.get("title") or "", re.I)
+                        source_url = (source.get("url") or "").strip()
+                        parsed_source = urlparse(source_url)
+                        if (match and int(match.group(1)) == last_aired_episode - 1
+                                and parsed_source.scheme in ("http", "https") and parsed_source.hostname
+                                and not parsed_source.username and not parsed_source.password):
+                            official_link = {"url": source_url, "provider": source.get("site") or "Official provider"}
+                            released_episode_number = last_aired_episode - 1
+                            break
+            card["released_episode"] = released_episode_number
+            card["official_episode_link"] = official_link
+            card["official_link_available"] = bool(official_link)
+            # AniList metadata links out to legal providers; it does not grant
+            # CamAnime rights to host, embed, or download the episode itself.
+            card["playback_available"] = False
+            card["download_available"] = False
+            # Keep responses and server-rendered pages small: schedule views
+            # need no poster, banner, genre, or general catalogue metadata.
+            schedule.append({
+                "id": card["id"],
+                "title": card["title"],
+                "next_airing_episode": card["next_airing_episode"],
+                "airing_hour": card["airing_hour"],
+                "availability": card["availability"],
+                "upcoming": card["upcoming"],
+                "released_episode": card["released_episode"],
+                "official_episode_link": card["official_episode_link"],
+                "official_link_available": card["official_link_available"],
+                "playback_available": False,
+                "download_available": False,
+            })
+        if len(media) < per_page:
+            break
+    schedule.sort(key=lambda item: (
+        item["next_airing_episode"]["airing_at"] if item["next_airing_episode"] else float("inf"),
+        item["title"].casefold()))
+    return schedule
 
 
 def clean_html_description(desc: Optional[str]) -> str:
@@ -708,8 +890,8 @@ def home():
     except Exception:
         public_counters = {"app_downloads": 0, "streams": 0, "downloads": 0, "users": 0}
 
-    # Next-episode release ticker: soonest RELEASING simulcasts (all users see it)
-    countdown_items = [a for a in popular_season if a.get("next_airing_episode")][:6]
+    # Complete current-season schedule; the client refreshes it as air times pass.
+    countdown_items = get_current_season_schedule()
 
     # Fetch live AnimeHeaven latest releases for the homepage live scraper strip
     heaven_recent = streaming_manager.animeheaven.browse_catalog("new")[:12]
@@ -736,6 +918,9 @@ def home():
         most_viewed_month=most_viewed_month,
         public_counters=public_counters,
         countdown_items=countdown_items,
+        season_name=current_anime_season()[0].title(),
+        season_year=current_anime_season()[1],
+        now_ts=_utc_now_timestamp(),
         synced_history=synced_history,
         signed_in=bool(current_user and not current_user.get("guest")),
         heaven_recent=heaven_recent,
@@ -1727,7 +1912,10 @@ def admin_page():
 
 @app.route("/schedule")
 def schedule_page():
-    return render_template("schedule.html", schedule=platform.CLASSICS_SCHEDULE, user=_current_user())
+    season, year = current_anime_season()
+    return render_template("schedule.html", season_name=season.title(), season_year=year,
+                           now_ts=_utc_now_timestamp(), countdown_items=get_current_season_schedule(),
+                           user=_current_user())
 
 
 @app.route("/promo")
@@ -1959,6 +2147,19 @@ def _catalog_media(data: Dict) -> List[Dict]:
 def api_v1_health():
     return jsonify({"status": "ok", "api_version": "v1", "catalog_source": "AniList",
                     "persistence": "SQLite for user/community records; catalogue metadata is provider-cached"})
+
+
+@app.route("/api/v1/schedule")
+def api_v1_schedule():
+    season, year = current_anime_season()
+    response = jsonify({
+        "status": "success", "season": {"name": season, "year": year},
+        "items": get_current_season_schedule(),
+        "playback_available": False,
+        "availability_note": "Matched outbound official-provider metadata is only a listing, not confirmation the episode is playable; CamAnime does not host or embed these episodes.",
+    })
+    response.headers["Cache-Control"] = "public, max-age=900, stale-while-revalidate=300"
+    return response
 
 
 @app.route("/api/v1/catalog/home")
