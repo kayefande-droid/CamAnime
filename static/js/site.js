@@ -1,12 +1,16 @@
 /*! CamAnime (c) 2026 kayefande-droid. All rights reserved. Unauthorised copying, scraping or redistribution prohibited. */
 /* CamAnime site JS: theme memory, search popup slide, play/click tracking, SW register */
 (function () {
+  var THEMES = ["midnight", "light", "vibrant", "sakura", "forest"];
   try {
     var t = localStorage.getItem("camanime-theme");
+    if (THEMES.indexOf(t) === -1) t = null;
     if (t) document.documentElement.setAttribute("data-theme", t);
+    else document.documentElement.setAttribute("data-theme", "midnight");
     if (localStorage.getItem("camanime-motion") === "1") document.documentElement.dataset.motion = "reduced";
   } catch (e) {}
   window.caSetTheme = function (name) {
+    if (THEMES.indexOf(name) === -1) name = "midnight";
     document.documentElement.setAttribute("data-theme", name);
     try { localStorage.setItem("camanime-theme", name); } catch (e) {}
   };

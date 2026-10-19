@@ -8,22 +8,23 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.1),transparent 45%),radial-gradient(circle at 80% 20%,rgba(16,185,129,.08),transparent 40%)}
-.card{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:22px;max-width:460px;width:100%;padding:2.25rem;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:rise .5s ease}
+body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.1),transparent 45%),radial-gradient(circle at 80% 20%,rgba(16,185,129,.08),transparent 40%)}
+.card{background:var(--bg-elevated,#0e111a);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:22px;max-width:460px;width:100%;padding:2.25rem;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:rise .5s ease}
 @keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
 h1{font-family:'Syne',sans-serif;font-size:1.7rem;margin:.5rem 0 .25rem}
 p.sub{color:#a0abc0;font-size:.92rem;margin-bottom:1.25rem}
 label{display:block;font-size:.8rem;color:#a0abc0;margin:.7rem 0 .3rem}
-input{width:100%;background:#141926;border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:.7rem .9rem;font-size:.95rem;outline:none}
+input{width:100%;background:var(--bg-input,#141926);border:1px solid var(--line,rgba(255,255,255,.12));color:var(--text,#fff);border-radius:10px;padding:.7rem .9rem;font-size:.95rem;outline:none}
 input:focus{border-color:#FFB347;box-shadow:0 0 0 3px rgba(255,179,71,.15)}
 button.primary{width:100%;margin-top:1.1rem;background:linear-gradient(135deg,#FFB347,#FF5E62);border:none;color:#07080d;font-weight:800;padding:.85rem;border-radius:999px;cursor:pointer;font-size:.95rem}
 .err{background:rgba(255,94,98,.12);border:1px solid rgba(255,94,98,.4);color:#fda4af;border-radius:10px;padding:.6rem .8rem;font-size:.85rem;margin-bottom:.8rem}
 a{color:#FFB347}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs a:focus-visible, input:focus-visible, button:focus-visible{outline:3px solid #FFB347;outline-offset:3px}
-.tabs a{flex:1;text-align:center;padding:.55rem;border-radius:999px;text-decoration:none;font-weight:700;font-size:.85rem;background:#141926;color:#a0abc0;border:1px solid rgba(255,255,255,.1)}
+.tabs a{flex:1;text-align:center;padding:.55rem;border-radius:999px;text-decoration:none;font-weight:700;font-size:.85rem;background:var(--bg-input,#141926);color:var(--text-secondary,#a0abc0);border:1px solid var(--line,rgba(255,255,255,.1))}
 .tabs a.active{background:rgba(255,179,71,.16);color:#FFB347;border-color:#FFB347}
 .credit{margin-top:1.25rem;text-align:center;color:#64708a;font-size:.78rem}
 @media(max-width:414px){.card{padding:1.5rem}}
 </style>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/sync.css" rel="stylesheet">
 <script src="/static/js/site.js" defer></script>
 </head>
