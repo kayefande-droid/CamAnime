@@ -140,6 +140,50 @@ def test_episode_card_uses_fallback_artwork_and_details_without_confirmed_episod
     assert b"/anime/124" in response.data
 
 
+def test_web_catalog_filters_are_validated_and_forwarded(api):
+    payload = {"Page": {"media": [anime()]}}
+    with patch.object(api, "fetch_anilist", return_value=payload) as fetch:
+        response = api.app.test_client().get(
+            "/?genre=Action&format=TV&status=FINISHED&year_before=2020&sort=rating"
+        )
+    assert response.status_code == 200
+    variables = fetch.call_args.args[1]
+    assert variables["genre"] == "Action"
+    assert variables["format"] == "TV"
+    assert variables["status"] == "FINISHED"
+    assert variables["startDateBefore"] == 20201231
+    assert variables["sort"] == ["SCORE_DESC"]
+    assert b'name="year_before"' in response.data
+    assert b'value="2020"' in response.data
+
+
+def test_search_preserves_filters_and_ignores_invalid_filter_values(api):
+    payload = {"Page": {"media": [anime()]}}
+    with patch.object(api, "fetch_anilist", return_value=payload) as fetch, \
+         patch.object(api.streaming_manager.animeheaven, "search", return_value=[]):
+        response = api.app.test_client().get(
+            "/search?q=Canonical&genre=Action&format=movie&status=RELEASING&year_before=1899&sort=trending"
+        )
+    assert response.status_code == 200
+    variables = fetch.call_args.args[1]
+    assert variables["search"] == "Canonical"
+    assert variables["genre"] == "Action"
+    assert variables["format"] == "MOVIE"
+    assert variables["status"] == "RELEASING"
+    assert variables["sort"] == ["TRENDING_DESC"]
+    assert "startDateBefore" not in variables
+    assert b'name="q" value="Canonical"' in response.data
+
+
+def test_login_page_does_not_advertise_unconfigured_oauth(api):
+    response = api.app.test_client().get("/login?mode=signup")
+    assert response.status_code == 200
+    assert b"Google, Apple, and social-provider OAuth sign-in are not configured" in response.data
+    assert b'Gmail</a>' not in response.data and b'Apple</a>' not in response.data
+    assert b"autocomplete=\"new-password\"" in response.data
+    assert b"aria-current=&#34;page&#34;" in response.data
+
+
 def test_anime_detail_uses_canonical_provider_id(api):
     with patch.object(api, "fetch_anilist", return_value={"Media": anime()}):
         response = api.app.test_client().get("/api/v1/anime/123")
@@ -173,6 +217,10 @@ def test_details_and_watch_use_only_exact_provider_episode_numbers(api, monkeypa
     assert b'data-ep="1"' in details.data
     assert b'data-ep="3"' in details.data
     assert b'data-ep="2"' not in details.data
+    assert 'Provider listing · check player' in details.get_data(as_text=True)
+    assert 'Provider listing' in details.get_data(as_text=True)
+    assert 'Aired' not in details.get_data(as_text=True)
+    assert b'aria-pressed="false"' in details.data
     assert invalid_episode.status_code == 302
     assert invalid_episode.headers["Location"].endswith("/anime/123")
     assert valid_episode.status_code == 200
@@ -478,7 +526,7 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"id=\"liveScheduleDrawer\"" in response.data
     assert b"aria-label=\"Live release schedule\"" in response.data
     assert b"aria-expanded=\"false\"" in response.data
-    assert b"sync.css?v=20261019-responsive" in response.data
+    assert b"sync.css?v=20261019-discovery" in response.data
     assert b"release-schedule.js?v=20261019-drawer" in response.data
 
 
@@ -517,7 +565,7 @@ def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
         assert b"min-width: 768px" in response.data
         assert b"max-width: 1023px" in response.data
         assert b"max-width: 767px" in response.data
-        assert b"sync.css?v=20261019-responsive" in response.data
+        assert b"sync.css?v=20261019-discovery" in response.data
 
 
 def test_legacy_schedule_url_opens_shared_drawer(api, monkeypatch):

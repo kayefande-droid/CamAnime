@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ anime.title }} — Stream & Download Full Season | CamAnime</title>
+    <title>{{ anime.title }} — Episode Guide | CamAnime</title>
     <meta name="theme-color" content="#087BFF">
     <meta name="keywords" content="{{ anime.title }} anime, {{ anime.title }} episodes, {{ anime.title }} episode guide, CamAnime {{ anime.title }}{% for t in (anime.tags or [])[:3] %}, {{ t }} anime{% endfor %}">
     <meta property="og:title" content="{{ anime.title }} — Episode Guide | CamAnime">
@@ -22,7 +22,7 @@
     <link rel="dns-prefetch" href="https://s4.anilist.co">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261019-discovery" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         :root {
@@ -325,6 +325,8 @@
         }
 
         /* ─── EPISODE GRID & SEARCH ─── */
+        .availability-note { color: var(--text-muted); font-size: .82rem; margin: -.4rem 0 .9rem; }
+        .ep-no-match { grid-column: 1 / -1; color: var(--text-secondary); padding: 1rem; }
         .ep-controls {
             display: flex;
             flex-wrap: wrap;
@@ -385,6 +387,8 @@
             font-size: 0.68rem;
             background: rgba(16, 185, 129, 0.16);
             color: #34d399;
+            text-align: right;
+            max-width: 65%;
             padding: 0.1rem 0.4rem;
             border-radius: 4px;
             font-family: 'JetBrains Mono', monospace;
@@ -581,10 +585,10 @@
             <div class="scraper-status-box">
                 {% if anime.heaven_id %}
                     <strong><i class="fas fa-check-circle"></i> Provider catalog matched</strong>
-                    Episodes listed by AnimeHeaven: <code>{{ anime.episodes | selectattr('provider_listed') | list | length }}</code>
+                    AnimeHeaven episode listings: <code>{{ anime.episodes | selectattr('provider_listed') | list | length }}</code> · playback not verified
                 {% elif anime.episodes %}
-                    <strong><i class="fas fa-circle-check"></i> Episode schedule available</strong>
-                    {{ anime.episodes | length }} episodes confirmed as aired or provider-listed.
+                    <strong><i class="fas fa-circle-check"></i> Episode metadata available</strong>
+                    {{ anime.episodes | length }} episodes confirmed as aired or listed by a provider. Playback has not been verified.
                 {% else %}
                     <strong><i class="fas fa-circle-info"></i> Episodes not confirmed</strong>
                     No released episode count is currently available.
@@ -598,7 +602,7 @@
                     <span class="badge gold"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     <span class="badge">{{ anime.format }}</span>
                     <span class="badge">{{ anime.status }}</span>
-                    {% if anime.episodes %}<span class="badge">{{ anime.episodes | length }} Released Episodes</span>{% else %}<span class="badge">Episodes not released</span>{% endif %}
+                    {% if anime.episodes %}<span class="badge">{{ anime.episodes | length }} Confirmed Episodes</span>{% else %}<span class="badge">Episodes not confirmed</span>{% endif %}
                     {% if anime.season %}
                     <span class="badge">{{ anime.season }}</span>
                     {% endif %}
@@ -622,23 +626,25 @@
                 {% if anime.episodes %}
                 {% set first_episode = anime.episodes | map(attribute='num') | min %}
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=sub" class="btn-watch">
-                    <i class="fas fa-play"></i> Watch Ep {{ first_episode }} (SUB)
+                    <i class="fas fa-play"></i> Check Ep {{ first_episode }} (SUB)
                 </a>
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=dub" class="btn-outline">
-                    <i class="fas fa-headphones"></i> Try Ep {{ first_episode }} (Dub)
+                    <i class="fas fa-headphones"></i> Check Ep {{ first_episode }} (Dub)
                 </a>
                 {% else %}
                 <span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>
                 {% endif %}
-                {% if anime.heaven_id and anime.episodes %}
-                <button type="button" class="btn-outline emerald" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')">
-                    <i class="fas fa-cloud-download-alt"></i> Direct Season MP4 Pack
+
+                <button type="button" class="btn-outline" id="bookmarkBtn" aria-pressed="false" onclick="toggleBookmark()">
+                    <i class="fas fa-bookmark" aria-hidden="true"></i> <span id="bookmarkText">Add to Watchlist</span>
+                </button>
+                {% if anime.next_airing_episode and anime.next_airing_episode.airing_at %}
+                <button type="button" class="btn-outline release-follow-toggle" data-anime-id="{{ anime.id }}" data-anime-title="{{ anime.title }}" data-airing-epoch="{{ anime.next_airing_episode.airing_at }}" data-airing-episode="{{ anime.next_airing_episode.episode or '' }}" aria-pressed="false" aria-describedby="releaseReminderHelp">
+                    <i class="fas fa-bell" aria-hidden="true"></i> <span>Remind me about releases</span>
                 </button>
                 {% endif %}
-                <button type="button" class="btn-outline" id="bookmarkBtn" onclick="toggleBookmark()">
-                    <i class="fas fa-bookmark"></i> <span id="bookmarkText">Add to Watchlist</span>
-                </button>
             </div>
+            {% if anime.next_airing_episode and anime.next_airing_episode.airing_at %}<p id="releaseReminderHelp" class="availability-note">Saved in this browser only. Grant notification permission to save a reminder; browser notices require the site open and are not push notifications.</p>{% endif %}
         </div>
     </div>
 
@@ -651,20 +657,23 @@
                     Released episodes ({{ anime.episodes | length }})
                 </div>
                 <div class="ep-controls">
-                    <input type="text" id="epSearchInput" class="ep-filter-input" placeholder="Jump to episode #..." oninput="filterEpisodes(this.value)">
-                    <button type="button" class="nav-pill" onclick="reverseEpisodes()" style="cursor:pointer;">
+                    <label class="sr-only" for="epSearchInput">Filter episodes by number or title</label>
+                    <input type="search" id="epSearchInput" class="ep-filter-input" placeholder="Jump to episode #..." aria-controls="epGrid" oninput="filterEpisodes(this.value)">
+                    <button type="button" class="nav-pill" id="reverseEpisodesButton" aria-pressed="false" onclick="reverseEpisodes()">
                         <i class="fas fa-sort"></i> Reverse Order
                     </button>
                 </div>
             </div>
 
+            <p class="availability-note">Episode numbers are confirmed by release metadata. Provider listings are not proof a playable stream is currently available.</p>
             <div class="ep-grid" id="epGrid">
                 {% if not anime.episodes %}<p class="schedule-empty">No released episodes are confirmed yet. This will update when an episode airs or a provider lists it.</p>{% endif %}
+                <p class="ep-no-match" id="epNoMatch" role="status" hidden></p>
                 {% for ep in anime.episodes %}
                 <a href="/watch/{{ anime.id }}/{{ ep.num }}" class="ep-card" data-ep="{{ ep.num }}">
                     <div class="ep-card-top">
                         <span class="ep-num">EP {{ ep.num }}</span>
-                        <span class="ep-dl-tag">{% if ep.heaven_key %}MP4 + HLS{% else %}1080p{% endif %}</span>
+                        <span class="ep-dl-tag" title="{{ ep.availability_label }}">{{ 'Provider listing · check player' if ep.provider_listed else 'Aired · source unchecked' }}</span>
                     </div>
                     <div class="ep-name" title="{{ ep.title }}">{{ ep.title }}</div>
                 </a>
@@ -690,29 +699,29 @@
                     {% endif %}
                 </div>
                 <p style="font-size: 0.8rem; color: var(--text-muted);">
-                    Previewed via YouTube Official PV feed. Full episodes stream ad-free via CamAnime's multi-scraper engine.
+                    The embedded trailer is provided by YouTube. CamAnime does not place ads on its own pages or through its media proxy. External video services and embeds may show their own ads, which we cannot control.
                 </p>
             </div>
 
             <div class="panel-card" id="seasonDownloadPanel">
                 <div class="panel-header" style="margin-bottom: 0.5rem;">
                     <div class="panel-title" style="font-size: 1.1rem;">
-                        <i class="fas fa-download" style="color: var(--emerald);"></i> Direct Season Downloader
+                        <i class="fas fa-list-check" style="color: var(--emerald);"></i> Provider episode listings
                     </div>
                 </div>
-                <p style="font-size: 0.82rem; color: var(--text-secondary);">
+                <p class="availability-note" id="seasonDownloadNote">
                     {% if anime.heaven_id %}
-                        AnimeHeaven Scraper matched <code>{{ anime.heaven_id }}</code>. Click below to resolve direct MP4 download links for episodes in this season.
+                        Provider catalog matched. Listings and any resulting links are not verified playback or download guarantees.
                     {% else %}
-                        Open an episode to check its provider-listed playback and audio options. Availability can vary by episode.
+                        Episode links open a status page that checks configured sources; availability can vary by episode.
                     {% endif %}
                 </p>
                 {% if anime.heaven_id %}
-                <button type="button" class="btn-outline emerald" style="width:100%;justify-content:center;margin-top:0.85rem;" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')">
-                    <i class="fas fa-bolt"></i> Resolve Direct MP4 Season Links
+                <button type="button" class="btn-outline emerald" style="width:100%;justify-content:center;margin-top:0.85rem;" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')" aria-describedby="seasonDownloadNote">
+                    <i class="fas fa-magnifying-glass"></i> Check provider listings
                 </button>
                 {% endif %}
-                <div class="season-pack-list" id="seasonPackList"></div>
+                <div class="season-pack-list" id="seasonPackList" role="status" aria-live="polite"></div>
             </div>
         </div>
     </div>
@@ -770,6 +779,7 @@
     {% endif %}
 </div>
 
+<script src="/static/js/release-reminders.js?v=20261019-1" defer></script>
 <script>
     const ANIME_META = {
         id: {{ anime.id }},
@@ -780,69 +790,118 @@
 
     function filterEpisodes(q) {
         const clean = q.trim().toLowerCase();
-        document.querySelectorAll('#epGrid .ep-card').forEach(card => {
+        const grid = document.getElementById('epGrid');
+        if (!grid) return;
+        let visible = 0;
+        grid.querySelectorAll('.ep-card').forEach(card => {
             const ep = card.getAttribute('data-ep') || '';
             const text = card.textContent.toLowerCase();
-            card.style.display = (!clean || ep.includes(clean) || text.includes(clean)) ? 'flex' : 'none';
+            const matches = !clean || ep.includes(clean) || text.includes(clean);
+            card.hidden = !matches;
+            if (matches) visible += 1;
         });
+        const empty = document.getElementById('epNoMatch');
+        if (empty) {
+            empty.hidden = visible > 0 || !clean;
+            empty.textContent = visible ? '' : `No episode matches “${q.trim()}”.`;
+        }
     }
 
+    let episodesReversed = false;
     function reverseEpisodes() {
         const grid = document.getElementById('epGrid');
-        const cards = Array.from(grid.children);
-        cards.reverse().forEach(c => grid.appendChild(c));
+        if (!grid) return;
+        const cards = Array.from(grid.querySelectorAll('.ep-card'));
+        cards.reverse().forEach(card => grid.appendChild(card));
+        episodesReversed = !episodesReversed;
+        const button = document.getElementById('reverseEpisodesButton');
+        if (button) button.setAttribute('aria-pressed', String(episodesReversed));
     }
 
     async function loadSeasonDownloads(siteId) {
         const listEl = document.getElementById('seasonPackList');
-        listEl.innerHTML = `<div style="padding:0.8rem;color:var(--text-secondary);font-size:0.85rem;"><i class="fas fa-circle-notch fa-spin"></i> Scraping direct MP4 links from AnimeHeaven gate.php...</div>`;
+        if (!listEl) return;
+        listEl.textContent = 'Checking provider for season download links…';
         document.getElementById('seasonDownloadPanel').scrollIntoView({ behavior: 'smooth', block: 'center' });
 
         try {
             const resp = await fetch(`/api/heaven/season-pack/${encodeURIComponent(siteId)}?limit=12`);
             const data = await resp.json();
             if (data.status === 'success' && data.episodes && data.episodes.length) {
-                listEl.innerHTML = data.episodes.map(ep => `
-                    <div class="pack-item">
-                        <span><strong>Episode ${ep.num}</strong> • Direct MP4</span>
-                        <a href="${ep.download_url}" class="pack-dl-btn" download>
-                            <i class="fas fa-download"></i> Download MP4
-                        </a>
-                    </div>
-                `).join('');
+                const safeEpisodes = data.episodes.filter(ep => {
+                    try {
+                        const url = new URL(ep.download_url, window.location.origin);
+                        return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password;
+                    } catch (error) { return false; }
+                });
+                if (!safeEpisodes.length) {
+                    listEl.textContent = 'No safe provider download links were returned.';
+                    return;
+                }
+                listEl.replaceChildren();
+                safeEpisodes.forEach(ep => {
+                    const row = document.createElement('div');
+                    row.className = 'pack-item';
+                    const label = document.createElement('span');
+                    label.textContent = `Episode ${ep.num} · provider-listed result; confirm availability`;
+                    const link = document.createElement('a');
+                    link.className = 'pack-dl-btn';
+                    link.href = new URL(ep.download_url, window.location.origin).href;
+                    link.rel = 'nofollow noopener noreferrer';
+                    link.textContent = 'Open provider result';
+                    row.append(label, link);
+                    listEl.appendChild(row);
+                });
             } else {
-                listEl.innerHTML = `<div style="padding:0.8rem;color:var(--text-muted);">No direct batch MP4s resolved. Open individual episodes to download.</div>`;
+                listEl.textContent = 'No provider download links are available. Check individual episodes for configured sources.';
             }
         } catch (err) {
-            listEl.innerHTML = `<div style="padding:0.8rem;color:#f87171;">Failed to resolve batch links.</div>`;
+            listEl.textContent = 'Could not check provider download links. Please try again later.';
         }
     }
 
+    function readWatchlist() {
+        try {
+            const value = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+            return Array.isArray(value) ? value.filter(item => item && Number.isInteger(Number(item.id))) : [];
+        } catch (error) { return []; }
+    }
+
     function updateBookmarkUI() {
-        const list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
-        const exists = list.some(x => x.id === ANIME_META.id);
+        const list = readWatchlist();
+        const exists = list.some(x => Number(x.id) === ANIME_META.id);
         const txt = document.getElementById('bookmarkText');
         const btn = document.getElementById('bookmarkBtn');
         if (exists) {
             txt.textContent = 'In Watchlist ✓';
             btn.style.borderColor = 'var(--accent)';
             btn.style.color = 'var(--accent)';
+            btn.setAttribute('aria-pressed', 'true');
         } else {
             txt.textContent = 'Add to Watchlist';
             btn.style.borderColor = '';
             btn.style.color = '';
+            btn.setAttribute('aria-pressed', 'false');
         }
     }
 
     function toggleBookmark() {
-        let list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
-        if (list.some(x => x.id === ANIME_META.id)) {
-            list = list.filter(x => x.id !== ANIME_META.id);
+        let list = readWatchlist();
+        if (list.some(x => Number(x.id) === ANIME_META.id)) {
+            list = list.filter(x => Number(x.id) !== ANIME_META.id);
         } else {
             list.unshift(ANIME_META);
         }
-        localStorage.setItem('camanime_watchlist', JSON.stringify(list.slice(0, 30)));
+        try { localStorage.setItem('camanime_watchlist', JSON.stringify(list.slice(0, 30))); } catch (error) {}
         updateBookmarkUI();
+    }
+
+    function watchlistEvent(event) {
+        const list = readWatchlist();
+        const exists = list.some(item => Number(item.id) === ANIME_META.id);
+        if ((event.type === 'mouseenter' || event.type === 'focus') && !exists) return;
+        const button = document.getElementById('bookmarkBtn');
+        if (button && event.type === 'click') toggleBookmark();
     }
 
     document.addEventListener('DOMContentLoaded', updateBookmarkUI);

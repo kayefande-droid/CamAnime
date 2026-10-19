@@ -9,23 +9,25 @@ CamAnime pairs a responsive Flask discovery website with a Flutter Android app a
 
 ## Features
 
-- **Metadata**: AniList-backed canonical catalogue, anime artwork, search, genres, seasons/relations, and detail pages. AniList does not itself provide playable episode sources.
+- **Metadata**: AniList-backed canonical catalogue, artwork, search, validated genre/format/status/year/sort filters, seasons/relations, and detail pages. Episode listing metadata is not a guarantee of playback availability.
 - **One-click app downloads**: `/get/android` and `/get/windows` start the download immediately (bundled file or GitHub Release asset)
-- **Accounts**: Gmail/iCloud/social-style email signup, PBKDF2-hashed passwords, 90-day Bearer tokens, admin seeded via env
+- **Accounts**: email/password signup with PBKDF2-hashed passwords and 90-day Bearer tokens; third-party OAuth is not configured. Admin is seeded via env.
 - **Community**: comments + replies, likes, stickers, honest anime ratings, read/unread notifications — same forum in app and website
 - **Flutter client**: cached posters/catalogue for offline discovery, refresh when returning online, debounced API search, and explicit unavailable state unless authorized playback/download sources are configured.
 - **Website**: existing AniList-backed home, search, details, and player routes remain intact; the v1 REST API shares the website normalization and canonical AniList IDs.
 - **Admin**: download counts, site clicks, plays, most-watched playlist driving Trending classification
 - **SEO**: anime-website Cameroon / free-streaming keywords, sitemap, robots, Google Search Console ready
 - **Responsive**: 2-col narrow phones / 3-col wider phones / fluid tablet-desktop, verified 0-overflow across 9 viewports × 9 pages
+- **Ad-free policy**: CamAnime does not insert ads on its own pages or through its media proxy. External providers and embeds such as YouTube may show their own ads.
+- **Browser-local release reminders**: follow upcoming releases in the same browser profile; no server storage, push service, or extra dependency is used.
 
 ## App ↔ website link + database persistence
 
-One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and cumulative counters. It survives process restarts when the database file remains on disk, but Render's free instance filesystem is ephemeral: redeploys/restarts that replace the instance can reset SQLite data. Use durable storage or a managed database when totals must persist across deployments. The public "Player starts till now" counter counts real player-start events, not proxy chunks/retries; the admin live stream-start count is a separate rolling one-minute, in-memory metric and naturally expires.
+One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and cumulative counters. It survives process restarts when the database file remains on disk, but Render's free instance filesystem is ephemeral: redeploys/restarts that replace the instance can reset SQLite data. Use durable storage or a managed database when totals must persist across deployments. The website's watchlist and release follows/reminders use browser `localStorage`; they survive a website redeploy in the same browser profile but are not synced to an account or another device. Optional browser notifications are local-only and are not push notifications; they require browser permission and the site open. Browser storage cannot preserve users, server counters, or community data. The public "Player starts till now" counter counts real player-start events, not proxy chunks/retries; the admin live stream-start count is a separate rolling one-minute, in-memory metric and naturally expires.
 
 Legacy JSON auto-migrates once.
 
-- Website: session login at `/login`
+- Website: email/password session login at `/login` (no configured Google/Apple/social OAuth)
 - Native apps: `POST /api/auth/register|login` → Bearer token (`Authorization: Bearer <token>`)
 - Community/track endpoints accept **both JSON (apps) and form posts (website)**: `/api/community/comment`, `/api/community/rate`, `/api/track`
 

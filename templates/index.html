@@ -36,7 +36,7 @@
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261019-discovery" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
@@ -922,8 +922,8 @@
         </button>
         <div class="header-actions">
             <form action="/search" method="get" class="search-form">
-                <input type="text" name="q" class="search-input" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." required>
-                <button type="submit" class="search-btn" title="Search"><i class="fas fa-search"></i></button>
+                <input type="search" name="q" class="search-input" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." aria-label="Search anime catalogue" required>
+                <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
             </form>
             <button type="button" class="btn-watchlist-Trigger" onclick="toggleWatchlistModal()">
                 <i class="fas fa-bookmark"></i> Watchlist
@@ -1011,15 +1011,53 @@
         <div class="st-cell"><b id="statDownloads">{{ public_counters.downloads }}</b><span>Downloads till now</span></div>
         <div class="st-cell"><b id="statApps">{{ public_counters.app_downloads }}</b><span>App downloads</span></div>
         <div class="st-cell"><b id="statUsers">{{ public_counters.users }}</b><span>Registered fans</span></div>
-        <span class="st-note">Real, counted events only — player starts and downloads update as users watch and save episodes.</span>
+        <span class="st-note">Counts record events on this instance; free Render redeploys can reset account and counter data.</span>
     </div>
+    {% endif %}
+
+    <div class="ad-free-note" role="note">CamAnime pages are ad-free. Third-party providers and YouTube embeds may display their own ads.</div>
+    {% if page_type in ['home', 'filter', 'search'] %}
+    <form class="discovery-filters" action="{{ '/search' if page_type == 'search' else '/' }}" method="get" aria-label="Filter anime catalogue">
+        {% if page_type == 'search' %}<input type="hidden" name="q" value="{{ search_query }}">{% endif %}
+        <label>Genre
+            <select name="genre"><option value="">All genres</option>{% for g in genres %}<option value="{{ g }}" {{ 'selected' if active_genre == g else '' }}>{{ g }}</option>{% endfor %}</select>
+        </label>
+        <label>Format
+            <select name="format">
+                <option value="">Any format</option>
+                {% for value, label in [('TV','TV'),('TV_SHORT','TV short'),('MOVIE','Movie'),('OVA','OVA'),('ONA','ONA'),('SPECIAL','Special')] %}
+                <option value="{{ value }}" {{ 'selected' if active_format == value else '' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Status
+            <select name="status">
+                <option value="">Any status</option>
+                {% for value, label in [('RELEASING','Airing'),('FINISHED','Finished'),('NOT_YET_RELEASED','Upcoming'),('CANCELLED','Cancelled')] %}
+                <option value="{{ value }}" {{ 'selected' if active_status == value else '' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>Released before
+            <input type="number" name="year_before" min="1900" max="2100" step="1" inputmode="numeric" value="{{ active_year_before or '' }}" placeholder="Any year">
+        </label>
+        <label>Sort
+            <select name="sort">
+                {% for value, label in [('popular','Popular'),('trending','Trending'),('rating','Top rated'),('recent','Newest'),('alphabetical','A–Z')] %}
+                <option value="{{ value }}" {{ 'selected' if active_sort == value else '' }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button class="discovery-filter-submit" type="submit">Apply filters</button>
+        {% if page_type != 'home' or active_genre or active_format or active_status or active_year_before or active_sort != 'popular' %}<a class="discovery-filter-reset" href="{{ '/' if page_type != 'search' else '/search?q=' ~ (search_query | urlencode) }}">Clear filters</a>{% endif %}
+    </form>
     {% endif %}
 
     <div class="filter-bar">
         <div class="genre-pills">
-            <a href="/" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>
+            <a href="{{ '/search?q=' ~ (search_query | urlencode) if page_type == 'search' else '/' }}" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>
             {% for g in genres %}
-            <a href="/?genre={{ g | urlencode }}" class="genre-pill {{ 'active' if active_genre == g else '' }}">{{ g }}</a>
+            <a href="{{ '/search?q=' ~ (search_query | urlencode) ~ '&genre=' ~ (g | urlencode) if page_type == 'search' else '/?genre=' ~ (g | urlencode) }}" class="genre-pill {{ 'active' if active_genre == g else '' }}">{{ g }}</a>
             {% endfor %}
         </div>
     </div>
@@ -1057,9 +1095,9 @@
                         Trending & Top Airing Now
                     {% endif %}
                 </h2>
-                <span class="section-subtitle">Direct 1080p Stream + YouTube Previews</span>
+                <span class="section-subtitle" role="status" aria-live="polite">{{ search_result_count if page_type == 'search' else (trending | length) }} catalogue results · playback availability shown per episode</span>
             </div>
-            <a href="/scraper" class="section-link">Open Direct MP4 Scraper <i class="fas fa-arrow-right"></i></a>
+            <a href="/scraper" class="section-link">Browse provider listings <i class="fas fa-arrow-right"></i></a>
         </div>
 
         {% if trending %}
@@ -1076,19 +1114,13 @@
                     <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
-                            {% if anime.latest_ep %}
-                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play">
-                                <i class="fas fa-play"></i> Stream
-                            </a>
-                            {% else %}
                             <a href="/anime/{{ anime.id }}" class="card-btn-play">
-                                <i class="fas fa-circle-info"></i> Details
+                                <i class="fas fa-circle-info"></i> Episode details
                             </a>
-                            {% endif %}
                             <button type="button" class="card-btn-trailer" title="Watch YouTube Trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
-                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer" title="Episodes & Direct Download">
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer" title="Episode details">
                                 <i class="fas fa-download"></i>
                             </a>
                         </div>
@@ -1098,16 +1130,17 @@
                     <div class="card-title">{{ anime.title }}</div>
                     <div class="card-submeta">
                         <span>{{ anime.format or 'TV' }}</span>
-                        <span>{{ anime.season or anime.status or 'HD' }}</span>
+                        <span>{{ anime.season or anime.status or 'Anime' }}</span>
                     </div>
                 </a>
             </div>
             {% endfor %}
         </div>
         {% else %}
-        <div style="padding: 3rem; text-align: center; background: var(--bg-elevated); border-radius: var(--radius-lg); border: 1px solid var(--border-subtle);">
-            <p style="color: var(--text-secondary); margin-bottom: 1rem;">No AniList results matched your query. Try searching directly in the AnimeHeaven Engine below!</p>
-            <a href="/scraper?q={{ (search_query or '') | urlencode }}" class="btn-primary">Search AnimeHeaven Scraper</a>
+        <div class="discovery-empty" role="status">
+            <p>No AniList titles matched these filters. Try a different genre, format, year, or status.</p>
+            {% if page_type == 'search' %}<p>{{ provider_result_count or 0 }} additional provider catalog matches are listed below when available.</p>{% endif %}
+            <a href="{{ '/' if page_type != 'search' else '/search?q=' ~ (search_query | urlencode) }}" class="btn-primary">Clear filters</a>
         </div>
         {% endif %}
     </section>
@@ -1121,13 +1154,13 @@
                 <h2 class="section-title">MOST VIEWED</h2>
                 <span class="section-subtitle">counted from real plays on CamAnime</span>
             </div>
-            <div class="mv-tabs" role="tablist">
-                <button type="button" class="mv-tab active" data-mv-window="day">Day</button>
-                <button type="button" class="mv-tab" data-mv-window="week">Week</button>
-                <button type="button" class="mv-tab" data-mv-window="month">Month</button>
+            <div class="mv-tabs" role="group" aria-label="Most viewed time range">
+                <button type="button" class="mv-tab active" aria-pressed="true" data-mv-window="day">Day</button>
+                <button type="button" class="mv-tab" aria-pressed="false" data-mv-window="week">Week</button>
+                <button type="button" class="mv-tab" aria-pressed="false" data-mv-window="month">Month</button>
             </div>
         </div>
-        <div class="anime-grid" id="mvGrid">
+        <div class="anime-grid" id="mvGrid" aria-live="polite" aria-busy="false">
             {% for it in most_viewed_day %}
             <a href="/anime/{{ it.anime_id }}" class="anime-card" style="display:flex;flex-direction:column;">
                 <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
@@ -1170,10 +1203,7 @@
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             {% if c.external_url %}
-                            <a href="{{ c.external_url }}" class="card-btn-play" target="_blank" rel="noopener noreferrer" aria-label="Open official streaming page"><i class="fas fa-arrow-up-right-from-square"></i> Official page</a>
-                            {% elif c.latest_ep %}
-                            <a href="/watch/{{ c.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
-                            <a href="/anime/{{ c.id }}" class="card-btn-trailer" title="Episodes & Direct Download"><i class="fas fa-download"></i></a>
+                            <a href="{{ c.external_url }}" class="card-btn-play" target="_blank" rel="noopener noreferrer" aria-label="Open official page">Official page</a>
                             {% else %}
                             <a href="/anime/{{ c.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
                             {% endif %}
@@ -1201,7 +1231,7 @@
                     {% if page_type == 'search' %}
                         AnimeHeaven Direct Scraper Matches
                     {% else %}
-                        AnimeHeaven Live Feed — Direct MP4 Stream & Download Ready
+                        AnimeHeaven provider catalog listings
                     {% endif %}
                 </h2>
             </div>
@@ -1210,18 +1240,18 @@
             </a>
         </div>
         <p style="color: var(--text-secondary); font-size: 0.85rem;">
-            Reverse-engineered live from <code style="color:#34d399;">animeheaven.me</code> — click any release to stream or download raw MP4 episodes directly.
+            Provider catalog metadata from <code style="color:#34d399;">animeheaven.me</code>. Individual episode playback and download availability must be checked in the player.
         </p>
 
         <div class="heaven-strip-grid">
             {% for item in heaven_recent %}
-            <a href="/scraper?id={{ item.id }}" class="heaven-mini-card">
+            <a href="/scraper?id={{ item.id }}" class="heaven-mini-card" aria-label="Open provider listing for {{ item.title }}">
                 <img src="{{ item.image }}" loading="lazy" alt="{{ item.title }}">
                 <div class="heaven-mini-info">
                     <div class="heaven-mini-title">{{ item.title }}</div>
                     <div class="heaven-mini-meta">
                         <span>EP {{ item.episode or 'LIVE' }}</span>
-                        <span>{{ item.updated or 'MP4 Ready' }}</span>
+                        <span>{{ item.updated or 'Provider listing' }}</span>
                     </div>
                 </div>
             </a>
@@ -1251,11 +1281,11 @@
                     <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
-                            {% if anime.latest_ep %}<a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>{% else %}<a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>{% endif %}
+                            <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
                             <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
-                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer"><i class="fas fa-download"></i></a>
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer" aria-label="Episode details"><i class="fas fa-list" aria-hidden="true"></i></a>
                         </div>
                     </div>
                 </div>
@@ -1279,7 +1309,7 @@
             <div class="section-title-wrap">
                 <span class="section-accent-bar"></span>
                 <h2 class="section-title">All-Time Highest Rated Anime</h2>
-                <span class="section-subtitle">Full Seasons & Direct Batch Downloads</span>
+                <span class="section-subtitle">Top-rated anime catalogue</span>
             </div>
         </div>
         <div class="anime-grid">
@@ -1293,11 +1323,11 @@
                     <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
-                            {% if anime.latest_ep %}<a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>{% else %}<a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>{% endif %}
+                            <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
                             <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
-                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer"><i class="fas fa-download"></i></a>
+                            <a href="/anime/{{ anime.id }}" class="card-btn-trailer" aria-label="Episode details"><i class="fas fa-list" aria-hidden="true"></i></a>
                         </div>
                     </div>
                 </div>
@@ -1328,7 +1358,7 @@
         </div>
         <div class="anime-grid" id="weeklyGrid">
             {% for anime in weekly_row %}
-            <a href="{{ '/watch/' ~ anime.id ~ '/1' if anime.latest_ep else '/anime/' ~ anime.id }}" class="anime-card">
+            <a href="/anime/{{ anime.id }}" class="anime-card">
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
                         <span class="ep-badge">{{ anime.episode }}</span>
@@ -1360,7 +1390,7 @@
         </div>
         <div class="anime-grid" id="monthlyGrid">
             {% for anime in monthly_row %}
-            <a href="{{ '/watch/' ~ anime.id ~ '/1' if anime.latest_ep else '/anime/' ~ anime.id }}" class="anime-card">
+            <a href="/anime/{{ anime.id }}" class="anime-card">
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
                         <span class="ep-badge">{{ anime.episode }}</span>
@@ -1382,7 +1412,7 @@
     <section class="section-block" style="background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(59,130,246,0.12)); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 2rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.25rem;">
         <div>
             <h2 class="section-title" style="margin-bottom: 0.35rem;"><i class="fas fa-mobile-alt" style="color: var(--accent);"></i> Take CamAnime anywhere</h2>
-            <p style="color: var(--text-secondary); margin: 0;">Free Android APK & Windows app — same account, downloads, and watchlist as the website.</p>
+            <p style="color: var(--text-secondary); margin: 0;">Free Android APK & Windows app. Watchlists are saved in this browser; account data may reset on free Render redeploys.</p>
         </div>
         <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
             <a href="/download" class="btn-primary"><i class="fas fa-download"></i> Download Apps</a>
@@ -1408,7 +1438,7 @@
 <footer>
     <div class="footer-inner">
         <div>
-            <strong style="color: var(--text-primary); font-family: 'Syne', sans-serif;">CamAnime Studio</strong> — Powered by AniList GraphQL, AnimeHeaven Direct MP4 Scraper, CamStream 1080p HLS & YouTube Trailer Previews.
+            <strong style="color: var(--text-primary); font-family: 'Syne', sans-serif;">CamAnime</strong> — Anime discovery, episode metadata, release schedule, and available provider listings.
         </div>
         <div style="display: flex; gap: 1.25rem;">
             <a href="/" style="color: var(--text-secondary); text-decoration: none;">Home</a>
@@ -1491,9 +1521,15 @@
     // Watchlist Management — rendered ONLY on the homepage (page_type === 'home').
     // Genre / format / search pages skip it entirely so switching genre is obvious.
     const IS_HOME_PAGE = {{ 'true' if page_type == 'home' else 'false' }};
+    function readWatchlist() {
+        try {
+            const value = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+            return Array.isArray(value) ? value.filter(item => item && Number.isInteger(Number(item.id))) : [];
+        } catch (error) { return []; }
+    }
     function loadWatchlist() {
         try {
-            const list = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
+            const list = readWatchlist();
             const badge = document.getElementById('watchlistBadge');
             const section = document.getElementById('watchlistSection');
             const grid = document.getElementById('watchlistGrid');
@@ -1501,23 +1537,23 @@
             if (!section || !grid || !IS_HOME_PAGE) return;
             if (list.length === 0) { section.style.display = 'none'; return; }
             section.style.display = 'block';
-            grid.innerHTML = list.map(item => `
-                <div class="anime-card">
-                    <div class="card-poster-wrap">
-                        <div class="card-badges-top"><span class="ep-badge">EP ${item.ep || 1}</span></div>
-                        <img src="${item.image}" alt="${item.title}" loading="lazy">
-                        <div class="card-hover-actions">
-                            <div class="card-action-row">
-                                <a href="/watch/${item.id}/${item.ep || 1}" class="card-btn-play"><i class="fas fa-play"></i> Resume</a>
-                            </div>
-                        </div>
-                    </div>
-                    <a href="/anime/${item.id}" class="card-body" style="text-decoration:none;">
-                        <div class="card-title">${item.title}</div>
-                        <div class="card-submeta"><span>Saved</span><span>Resume Ep ${item.ep || 1}</span></div>
-                    </a>
-                </div>
-            `).join('');
+            grid.replaceChildren();
+            list.forEach(item => {
+                const card = document.createElement('article');
+                card.className = 'anime-card';
+                const link = document.createElement('a');
+                link.className = 'card-body';
+                link.href = '/anime/' + encodeURIComponent(item.id);
+                const title = document.createElement('span');
+                title.className = 'card-title';
+                title.textContent = item.title || 'Saved anime';
+                const saved = document.createElement('span');
+                saved.className = 'card-submeta';
+                saved.textContent = 'Saved to this browser';
+                link.append(title, saved);
+                card.appendChild(link);
+                grid.appendChild(card);
+            });
         } catch (e) {}
     }
 
@@ -1573,11 +1609,15 @@
         tab.addEventListener('click', () => {
             document.querySelectorAll('.mv-tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
+            document.querySelectorAll('.mv-tab').forEach(t => t.setAttribute('aria-pressed', String(t === tab)));
+            const mvGrid = document.getElementById('mvGrid');
+            if (mvGrid) mvGrid.setAttribute('aria-busy', 'true');
             fetch('/api/public/most-viewed?window=' + tab.dataset.mvWindow)
               .then(r => r.json())
               .then(d => {
                   const grid = document.getElementById('mvGrid');
                   if (!grid) return;
+                  grid.setAttribute('aria-busy', 'false');
                   if (!d.items || !d.items.length) {
                       grid.innerHTML = '';
                       const empty = document.getElementById('mvEmpty');
@@ -1597,7 +1637,12 @@
                       </a>`).join('');
                   const empty = document.getElementById('mvEmpty');
                   if (empty) empty.textContent = '';
-              }).catch(() => {});
+              }).catch(() => {
+                  const grid = document.getElementById('mvGrid');
+                  if (grid) grid.setAttribute('aria-busy', 'false');
+                  const empty = document.getElementById('mvEmpty');
+                  if (empty) empty.textContent = 'Could not refresh this ranking. Please try again.';
+              });
         });
     });
 
@@ -1628,12 +1673,13 @@
     }
 
     function clearWatchlist() {
-        localStorage.removeItem('camanime_watchlist');
+        try { localStorage.removeItem('camanime_watchlist'); } catch (error) {}
         loadWatchlist();
     }
 
     document.addEventListener('DOMContentLoaded', () => { loadWatchlist(); loadSyncedHistory(); });
 </script>
+<script src="/static/js/release-reminders.js?v=20261019-1" defer></script>
 
 <script>
 /* Header search autocomplete: AnimeHeaven catalog (covers old + niche titles), match highlighted */
@@ -1643,6 +1689,35 @@
   var input = form.querySelector('.search-input');
   var box = document.createElement('div');
   box.className = 'search-suggest'; box.hidden = true;
+  box.id = 'searchSuggestions';
+  box.setAttribute('role', 'group');
+  input.setAttribute('aria-controls', box.id);
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-expanded', 'false');
+  box.setAttribute('aria-label', 'Search suggestions');
+  function setSuggestionsVisible(visible) {
+    box.hidden = !visible;
+    input.setAttribute('aria-expanded', String(visible));
+  }
+  function closeSuggestions() { setSuggestionsVisible(false); }
+  function moveSuggestion(delta) {
+    var links = Array.from(box.querySelectorAll('a'));
+    if (!links.length) return false;
+    var index = links.indexOf(document.activeElement);
+    if (delta < 0 && index <= 0) { input.focus(); return true; }
+    var next = Math.max(0, Math.min(links.length - 1, index + delta));
+    links[next].focus();
+    return true;
+  }
+  box.addEventListener('keydown', function (event) {
+    if (event.key === 'ArrowDown') { event.preventDefault(); moveSuggestion(1); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); moveSuggestion(-1); }
+    else if (event.key === 'Escape') { closeSuggestions(); input.focus(); }
+  });
+  input.addEventListener('keydown', function (event) {
+    if (event.key === 'ArrowDown' && !box.hidden) { event.preventDefault(); moveSuggestion(1); }
+    else if (event.key === 'Escape') closeSuggestions();
+  });
   form.appendChild(box);
   var t = null;
   function esc(x) { return (x || '').replace(/[&<>"]/g, function (m) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[m]; }); }
@@ -1654,25 +1729,24 @@
   input.addEventListener('input', function () {
     clearTimeout(t);
     var q = input.value.trim();
-    if (q.length < 2) { box.hidden = true; return; }
+    if (q.length < 2) { closeSuggestions(); return; }
     t = setTimeout(function () {
       fetch('/api/heaven/search?q=' + encodeURIComponent(q))
         .then(function (r) { return r.json(); })
         .then(function (d) {
           var items = (d.results || []).slice(0, 7);
-          if (!items.length) { box.hidden = true; return; }
+          if (!items.length) { closeSuggestions(); return; }
           box.innerHTML = items.map(function (x) {
             return '<a class="sg-item" href="/heaven/' + encodeURIComponent(x.id) + '">'
               + '<span class="sg-title">' + hi(x.title || 'Unknown anime', q) + '</span>'
               + '<span class="sg-sub">AnimeHeaven</span></a>';
           }).join('');
-          box.hidden = false;
+          setSuggestionsVisible(true);
         })
-        .catch(function () { box.hidden = true; });
+        .catch(function () { closeSuggestions(); });
     }, 250);
   });
-  document.addEventListener('click', function (e) { if (!form.contains(e.target)) box.hidden = true; });
-  input.addEventListener('keydown', function (e) { if (e.key === 'Escape') box.hidden = true; });
+  document.addEventListener('click', function (e) { if (!form.contains(e.target)) closeSuggestions(); });
 })();
 </script>
 </body>

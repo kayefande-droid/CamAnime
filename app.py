@@ -303,18 +303,18 @@ def _inject_live_schedule_drawer(response):
         stylesheet_pattern = r'(href=["\'])/static/css/sync\.css(?:\?[^"\']*)?(["\'])'
         body, stylesheet_count = re.subn(
             stylesheet_pattern,
-            r'\1/static/css/sync.css?v=20261019-responsive\2',
+            r'\1/static/css/sync.css?v=20261019-discovery\2',
             body,
             count=1,
         )
         body = body.replace(
             "/static/css/sync.css?v=20261019-drawer",
-            "/static/css/sync.css?v=20261019-responsive",
+            "/static/css/sync.css?v=20261019-discovery",
         )
         if not stylesheet_count and "</head>" in body:
             body = body.replace(
                 "</head>",
-                '<link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet"></head>',
+                '<link href="/static/css/sync.css?v=20261019-discovery" rel="stylesheet"></head>',
                 1,
             )
         script = ''
@@ -427,9 +427,9 @@ query {{
 
 # AniList has no `seasonYear_lesser` filter; `startDate_lesser` takes a
 # FuzzyDateInt (YYYYMMDD), so the year is sent as December 31st of that year.
-SEARCH_FILTER_QUERY = f"""  query ($search: String, $genre: String, $format: MediaFormat, $sort: [MediaSort], $page: Int, $perPage: Int, $startDateBefore: FuzzyDateInt) {{
+SEARCH_FILTER_QUERY = f"""  query ($search: String, $genre: String, $format: MediaFormat, $status: MediaStatus, $sort: [MediaSort], $page: Int, $perPage: Int, $startDateBefore: FuzzyDateInt) {{
   Page(page: $page, perPage: $perPage) {{
-    media(search: $search, genre: $genre, format: $format, startDate_lesser: $startDateBefore, sort: $sort, type: ANIME, isAdult: false) {{
+    media(search: $search, genre: $genre, format: $format, status: $status, startDate_lesser: $startDateBefore, sort: $sort, type: ANIME, isAdult: false) {{
       {MEDIA_FRAGMENT}
     }}
   }}
@@ -887,18 +887,51 @@ def rewrite_hls_playlist(body: str, source_url: str, ref: Optional[str] = None) 
 # ─── WEB PAGES ───────────────────────────────────────────────────────────────
 
 
+def _web_catalog_filters(search_query: str = "") -> Dict:
+    """Validate the small set of discovery filters accepted by the web UI."""
+    genre = request.args.get("genre", "").strip()
+    if genre not in POPULAR_GENRES:
+        genre = ""
+    media_format = request.args.get("format", "").strip().upper()
+    if media_format not in CATALOG_FORMATS:
+        media_format = ""
+    status = request.args.get("status", "").strip().upper()
+    if status not in {"FINISHED", "RELEASING", "NOT_YET_RELEASED", "CANCELLED"}:
+        status = ""
+    year_before = request.args.get("year_before", type=int)
+    if year_before is not None and not 1900 <= year_before <= 2100:
+        year_before = None
+    sort_key = request.args.get("sort", "popular").strip().lower()
+    if sort_key not in CATALOG_SORTS:
+        sort_key = "popular"
+    variables: Dict = {"page": 1, "perPage": 24, "sort": [CATALOG_SORTS[sort_key]]}
+    if search_query:
+        variables["search"] = search_query
+    if genre:
+        variables["genre"] = genre
+    if media_format:
+        variables["format"] = media_format
+    if status:
+        variables["status"] = status
+    if year_before is not None:
+        variables["startDateBefore"] = year_before * 10000 + 1231
+    return {
+        "genre": genre,
+        "format": media_format,
+        "status": status,
+        "year_before": year_before or "",
+        "sort": sort_key,
+        "variables": variables,
+    }
+
+
 @app.route("/")
 def home():
-    genre = request.args.get("genre", "").strip()
-    fmt = request.args.get("format", "").strip()
+    filters = _web_catalog_filters()
+    genre, fmt = filters["genre"], filters["format"]
 
-    if genre or fmt:
-        variables: Dict = {"page": 1, "perPage": 24, "sort": ["POPULARITY_DESC"]}
-        if genre:
-            variables["genre"] = genre
-        if fmt in ("TV", "MOVIE", "OVA", "ONA", "SPECIAL"):
-            variables["format"] = fmt
-        data = fetch_anilist(SEARCH_FILTER_QUERY, variables)
+    if any((genre, fmt, filters["status"], filters["year_before"])) or filters["sort"] != "popular":
+        data = fetch_anilist(SEARCH_FILTER_QUERY, filters["variables"])
         raw_list = data.get("Page", {}).get("media", [])
         filtered_cards = [format_anime_card(a) for a in raw_list if a]
         featured = filtered_cards[0] if filtered_cards else None
@@ -913,6 +946,9 @@ def home():
             genres=POPULAR_GENRES,
             active_genre=genre,
             active_format=fmt,
+            active_status=filters["status"],
+            active_year_before=filters["year_before"],
+            active_sort=filters["sort"],
             page_type="filter",
         )
 
@@ -1022,6 +1058,9 @@ def home():
         genres=POPULAR_GENRES,
         active_genre="",
         active_format="",
+        active_status="",
+        active_year_before="",
+        active_sort="popular",
         page_type="home",
         announcement=(platform.list_announcements(1) or [None])[0],
     )
@@ -1033,10 +1072,8 @@ def search():
     if not query:
         return redirect(url_for("home"))
 
-    data = fetch_anilist(
-        SEARCH_FILTER_QUERY,
-        {"search": query, "page": 1, "perPage": 24, "sort": ["POPULARITY_DESC"]},
-    )
+    filters = _web_catalog_filters(query)
+    data = fetch_anilist(SEARCH_FILTER_QUERY, filters["variables"])
     raw_results = data.get("Page", {}).get("media", [])
     results = [format_anime_card(a) for a in raw_results if a]
 
@@ -1052,9 +1089,14 @@ def search():
         featured=results[0] if results else None,
         hero_slides=[],
         search_query=query,
+        search_result_count=len(results),
+        provider_result_count=len(heaven_matches),
         genres=POPULAR_GENRES,
-        active_genre="",
-        active_format="",
+        active_genre=filters["genre"],
+        active_format=filters["format"],
+        active_status=filters["status"],
+        active_year_before=filters["year_before"],
+        active_sort=filters["sort"],
         page_type="search",
     )
 
@@ -1130,6 +1172,7 @@ def details(anime_id: int):
             "thumbnail": meta.get("thumbnail") or card["banner"] or card["image"],
             "heaven_key": h_ep["key"] if h_ep else None,
             "provider_listed": i in provider_numbers,
+            "availability_label": "Provider episode listing found · playback not verified" if i in provider_numbers else "Aired · playback source not checked",
             "added": h_ep.get("added", "") if h_ep else "",
         })
 
