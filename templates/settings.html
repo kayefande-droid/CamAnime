@@ -120,6 +120,28 @@ body{background:#07080d;color:#f3f5fa;font-family:'Outfit','Inter',sans-serif;mi
     </div>
   </div>
 
+  <div class="set-card" id="scheduleSettings">
+    <h2><i class="fas fa-calendar-days"></i> Live schedule</h2>
+    <p>The live release schedule opens from a tab on the edge of the screen. Hide the tab, or move it to any edge. The schedule stays available from this page either way.</p>
+    <div class="row-toggle">
+      <span class="lab">Show schedule tab</span>
+      <label class="switch"><input type="checkbox" id="setScheduleTab"><span class="track"></span><span class="thumb"></span></label>
+      <span class="hint">Off hides the tab on every page. You can still open the schedule below.</span>
+    </div>
+    <div class="lab" style="font-weight:700;font-size:.95rem;margin:.4rem 0 .5rem">Tab position</div>
+    <div class="seg" id="schedulePosSeg" role="group" aria-label="Schedule tab position">
+      <button type="button" data-pos="left-top">Left · top</button>
+      <button type="button" data-pos="left-middle">Left · middle</button>
+      <button type="button" data-pos="left-bottom">Left · bottom</button>
+      <button type="button" data-pos="right-top">Right · top</button>
+      <button type="button" data-pos="right-middle">Right · middle</button>
+      <button type="button" data-pos="right-bottom">Right · bottom</button>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-save" href="/?schedule=open"><i class="fas fa-calendar-days"></i> Open live schedule</a>
+    </div>
+  </div>
+
   <div class="set-card">
     <h2><i class="fas fa-user"></i> Forum identity</h2>
     <p>The display name shown on your ratings and comments. No account needed.</p>
@@ -204,16 +226,36 @@ body{background:#07080d;color:#f3f5fa;font-family:'Outfit','Inter',sans-serif;mi
     measure(); say('Watchlist cleared.');
   };
   $('resetAllBtn').onclick = function () {
-    ['camanime-theme', 'camanime-motion', 'camanime-autoplay', 'camanime-audio'].forEach(function (k) {
+    ['camanime-theme', 'camanime-motion', 'camanime-autoplay', 'camanime-audio', 'camanime-schedule-tab', 'camanime-schedule-pos'].forEach(function (k) {
       try { localStorage.removeItem(k); } catch (e) {}
     });
     document.documentElement.setAttribute('data-theme', 'midnight');
     document.documentElement.dataset.motion = '';
     $('setAutoplay').checked = false; $('setMotion').checked = false;
-    paintTheme(); paintAudio(); say('All site settings reset to defaults.');
+    applySchedule(); paintTheme(); paintAudio(); paintSchedule(); say('All site settings reset to defaults.');
   };
 
-  paintTheme(); paintAudio(); measure();
+  // Live schedule tab
+  function applySchedule() { if (window.caApplySchedulePrefs) window.caApplySchedulePrefs(); }
+  function paintSchedule() {
+    var p = cur('camanime-schedule-pos', 'left-middle');
+    document.querySelectorAll('#schedulePosSeg button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.pos === p);
+    });
+    $('setScheduleTab').checked = cur('camanime-schedule-tab', '1') !== '0';
+  }
+  $('setScheduleTab').onchange = function () {
+    set('camanime-schedule-tab', this.checked ? '1' : '0'); applySchedule();
+    say(this.checked ? 'Schedule tab shown.' : 'Schedule tab hidden. Open the schedule from this page anytime.');
+  };
+  document.querySelectorAll('#schedulePosSeg button').forEach(function (b) {
+    b.onclick = function () {
+      set('camanime-schedule-pos', b.dataset.pos); applySchedule(); paintSchedule();
+      say('Schedule tab moved to ' + b.textContent.trim().toLowerCase() + '.');
+    };
+  });
+
+  paintTheme(); paintAudio(); paintSchedule(); measure();
 })();
 </script>
 </body>

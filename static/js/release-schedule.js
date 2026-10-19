@@ -1,6 +1,24 @@
   /* Live current-season schedule refresh: metadata only, bounded to every 15 minutes. */
 (function () {
   'use strict';
+
+  // Schedule tab preferences (set in Settings): visibility and screen position.
+  var SCHEDULE_POSITIONS = ['left-top', 'left-middle', 'left-bottom', 'right-top', 'right-middle', 'right-bottom'];
+  function applySchedulePrefs() {
+    var root = typeof document !== 'undefined' && document.documentElement;
+    if (!root) return;
+    var pos = 'left-middle';
+    var show = true;
+    try {
+      var saved = localStorage.getItem('camanime-schedule-pos');
+      if (SCHEDULE_POSITIONS.indexOf(saved) !== -1) pos = saved;
+      show = localStorage.getItem('camanime-schedule-tab') !== '0';
+    } catch (error) { /* storage unavailable: keep defaults */ }
+    root.setAttribute('data-schedule-pos', pos);
+    root.setAttribute('data-schedule-tab', show ? 'on' : 'off');
+  }
+  window.caApplySchedulePrefs = applySchedulePrefs;
+  applySchedulePrefs();
   var list = document.getElementById('releaseTickerList');
   var drawer = document.getElementById('liveScheduleDrawer');
   var drawerList = document.getElementById('liveScheduleList');

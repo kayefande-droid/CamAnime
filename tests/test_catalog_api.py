@@ -526,8 +526,8 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"id=\"liveScheduleDrawer\"" in response.data
     assert b"aria-label=\"Live release schedule\"" in response.data
     assert b"aria-expanded=\"false\"" in response.data
-    assert b"sync.css?v=20261019-discovery" in response.data
-    assert b"release-schedule.js?v=20261019-drawer" in response.data
+    assert b"sync.css?v=20261019-tabprefs" in response.data
+    assert b"release-schedule.js?v=20261019-tabprefs" in response.data
 
 
 def test_mobile_navigation_and_drawer_have_touch_sized_controls(api):
@@ -565,7 +565,7 @@ def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
         assert b"min-width: 768px" in response.data
         assert b"max-width: 1023px" in response.data
         assert b"max-width: 767px" in response.data
-        assert b"sync.css?v=20261019-discovery" in response.data
+        assert b"sync.css?v=20261019-tabprefs" in response.data
 
 
 def test_legacy_schedule_url_opens_shared_drawer(api, monkeypatch):

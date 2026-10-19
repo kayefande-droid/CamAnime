@@ -350,6 +350,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* Phones: keep the schedule launcher to a compact icon + count so it covers less of the poster grid. Its accessible name stays on the button. */
 @media (max-width: 767px) {
-  body .live-schedule-tab { min-height: 2.6rem; padding: .45rem .42rem .45rem .5rem; gap: .3rem; }
+  body .live-schedule-tab { min-height: 2.1rem; padding: .3rem .26rem; gap: .2rem; border-radius: 0 10px 10px 0; }
+  body .live-schedule-tab-icon { font-size: .9rem; }
+  body .live-schedule-tab-count { min-width: 1.05rem; height: 1.05rem; font-size: .52rem; padding: 0 .18rem; }
   body .live-schedule-tab-label, body .live-schedule-tab .live-schedule-pulse { display: none; }
+}
+
+/* Schedule tab preferences (Settings → Live schedule). Position and visibility are
+   set on <html> by release-schedule.js from localStorage; the default is left-middle. */
+html[data-schedule-tab="off"] body .live-schedule-tab { display: none; }
+html[data-schedule-pos^="right"] body .live-schedule-tab { left: auto; right: 0; border-left: 1px solid rgba(255,255,255,.34); border-right: 0; border-radius: 14px 0 0 14px; }
+html[data-schedule-pos^="right"] body .live-schedule-tab:hover,
+html[data-schedule-pos^="right"] body .live-schedule-tab.is-active { transform: translateX(-3px); }
+html[data-schedule-pos$="-top"] body .live-schedule-tab { top: 14%; bottom: auto; }
+html[data-schedule-pos$="-middle"] body .live-schedule-tab { top: 42%; bottom: auto; }
+html[data-schedule-pos$="-bottom"] body .live-schedule-tab { top: auto; bottom: 14%; }
+@media (max-width: 767px) {
+  html[data-schedule-pos$="-top"] body .live-schedule-tab { top: 12%; }
+  html[data-schedule-pos$="-bottom"] body .live-schedule-tab { bottom: 12%; }
 }

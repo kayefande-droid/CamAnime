@@ -303,23 +303,23 @@ def _inject_live_schedule_drawer(response):
         stylesheet_pattern = r'(href=["\'])/static/css/sync\.css(?:\?[^"\']*)?(["\'])'
         body, stylesheet_count = re.subn(
             stylesheet_pattern,
-            r'\1/static/css/sync.css?v=20261019-discovery\2',
+            r'\1/static/css/sync.css?v=20261019-tabprefs\2',
             body,
             count=1,
         )
         body = body.replace(
             "/static/css/sync.css?v=20261019-drawer",
-            "/static/css/sync.css?v=20261019-discovery",
+            "/static/css/sync.css?v=20261019-tabprefs",
         )
         if not stylesheet_count and "</head>" in body:
             body = body.replace(
                 "</head>",
-                '<link href="/static/css/sync.css?v=20261019-discovery" rel="stylesheet"></head>',
+                '<link href="/static/css/sync.css?v=20261019-tabprefs" rel="stylesheet"></head>',
                 1,
             )
         script = ''
         if "/static/js/release-schedule.js" not in body:
-            script = '<script src="/static/js/release-schedule.js?v=20261019-drawer" defer></script>'
+            script = '<script src="/static/js/release-schedule.js?v=20261019-tabprefs" defer></script>'
         response.set_data(body.replace("</body>", drawer + script + "</body>", 1))
     except Exception:
         logger.warning("live schedule drawer injection failed", exc_info=True)
