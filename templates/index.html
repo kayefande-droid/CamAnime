@@ -1080,7 +1080,7 @@
          so switching genre is not hidden behind a permanent watchlist row.
          Signed-in users get server-side rows that sync to every device. ── -->
     <section class="section-block" id="watchlistSection" style="display: none;">
-        <div class="section-head">
+        <div class="section-head" style="flex-wrap: wrap; gap: 0.5rem;">
             <div class="section-title-wrap">
                 <span class="section-accent-bar"></span>
                 <h2 class="section-title">Your Watchlist & Continue Watching</h2>
@@ -1584,6 +1584,7 @@
                 }
                 const link = document.createElement('a');
                 link.className = 'card-body';
+                link.style.textDecoration = 'none';
                 link.href = '/anime/' + encodeURIComponent(animeId);
                 const title = document.createElement('span');
                 title.className = 'card-title';
