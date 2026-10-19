@@ -347,3 +347,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* ── Rajk row controls wrapper ── */
 .section-head .head-controls{display:flex;gap:.5rem;align-items:center}
+
+/* Phones: keep the schedule launcher to a compact icon + count so it covers less of the poster grid. Its accessible name stays on the button. */
+@media (max-width: 767px) {
+  body .live-schedule-tab { min-height: 2.6rem; padding: .45rem .42rem .45rem .5rem; gap: .3rem; }
+  body .live-schedule-tab-label, body .live-schedule-tab .live-schedule-pulse { display: none; }
+}
