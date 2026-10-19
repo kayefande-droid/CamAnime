@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ anime.title }} — Stream & Download Full Season | CamAnime</title>
     <meta name="theme-color" content="#087BFF">
-    <meta name="keywords" content="watch {{ anime.title }} online free, {{ anime.title }} all episodes, {{ anime.title }} english sub, {{ anime.title }} english dub, download {{ anime.title }} episodes, {{ anime.title }} 1080p free, CamAnime {{ anime.title }}{% for t in (anime.tags or [])[:3] %}, free {{ t }} anime{% endfor %}, CamAnime free anime streaming">
-    <meta property="og:title" content="Watch {{ anime.title }} Online Free — All Episodes SUB/DUB | CamAnime">
-    <meta property="og:description" content="Stream and download every {{ anime.title }} episode free in 1080p SUB & DUB on CamAnime. Direct MP4 downloads, multi-server playback, no ads.">
+    <meta name="keywords" content="{{ anime.title }} anime, {{ anime.title }} episodes, {{ anime.title }} episode guide, CamAnime {{ anime.title }}{% for t in (anime.tags or [])[:3] %}, {{ t }} anime{% endfor %}">
+    <meta property="og:title" content="{{ anime.title }} — Episode Guide | CamAnime">
+    <meta property="og:description" content="Browse {{ anime.title }} episode information. Playback and audio options are shown when available from configured providers.">
     <meta property="og:type" content="video.episode">
     <meta property="og:image" content="{{ anime.image }}">
     <link rel="canonical" href="https://camanime.onrender.com/anime/{{ anime.id }}">
@@ -625,7 +625,7 @@
                     <i class="fas fa-play"></i> Watch Ep {{ first_episode }} (SUB)
                 </a>
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=dub" class="btn-outline">
-                    <i class="fas fa-headphones"></i> Watch Ep {{ first_episode }} (DUB)
+                    <i class="fas fa-headphones"></i> Try Ep {{ first_episode }} (Dub)
                 </a>
                 {% else %}
                 <span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>
@@ -704,7 +704,7 @@
                     {% if anime.heaven_id %}
                         AnimeHeaven Scraper matched <code>{{ anime.heaven_id }}</code>. Click below to resolve direct MP4 download links for episodes in this season.
                     {% else %}
-                        Open any episode in the Watch Player to access multi-resolution (360p / 720p / 1080p) Sub & Dub downloads.
+                        Open an episode to check its provider-listed playback and audio options. Availability can vary by episode.
                     {% endif %}
                 </p>
                 {% if anime.heaven_id %}

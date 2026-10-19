@@ -73,7 +73,7 @@ tbody tr:hover{background:rgba(255,179,71,.05)}
 
   <!-- ── dashboard: factual counters ── -->
   <div class="grid">
-    <div class="stat"><b>{{ stats.streams or stats.plays }}</b><span>Streams till now</span><div class="trend">real count, SQLite</div></div>
+    <div class="stat"><b>{{ stats.plays }}</b><span>Player starts till now</span><div class="trend">cumulative count, SQLite</div></div>
     <div class="stat"><b>{{ stats.downloads }}</b><span>Downloads till now</span><div class="trend">real count, SQLite</div></div>
     <div class="stat"><b>{{ stats.app_downloads }}</b><span>App downloads</span><div class="trend">/get/android + /get/windows</div></div>
     <div class="stat"><b>{{ stats.users }}</b><span>Users</span></div>
@@ -100,7 +100,7 @@ tbody tr:hover{background:rgba(255,179,71,.05)}
     <p class="note">Refreshes every 5 s. Anonymous visitors show as <i>guest</i>; counters cover the last minute, online visitors the last 2 minutes. In-memory feed — resets on restart.</p>
     <div class="live-grid" id="liveGrid">
       <div class="stat"><b>-</b><span>Online now (2 min)</span></div>
-      <div class="stat"><b>-</b><span>Active streams (1 min)</span></div>
+      <div class="stat"><b>-</b><span>Stream starts (last 1 min)</span></div>
       <div class="stat"><b>-</b><span>Downloads (1 min)</span></div>
       <div class="stat"><b>-</b><span>Downloads (1 hour)</span></div>
     </div>

@@ -203,7 +203,7 @@ class AnimeHeavenProvider(StreamingProvider):
         if not q:
             return []
         cache_key = f"heaven_search_{q.lower()}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -290,7 +290,7 @@ class AnimeHeavenProvider(StreamingProvider):
     def get_anime_info(self, site_id: str) -> Optional[Dict]:
         """Scrape full anime details & episode keys from anime.php?<site_id>"""
         cache_key = f"heaven_info_{site_id}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -595,7 +595,7 @@ class AnikotoProvider(StreamingProvider):
         if not q:
             return []
         cache_key = f"anikoto_search_{q.lower()}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -675,7 +675,7 @@ class AnikotoProvider(StreamingProvider):
 
     def get_episodes(self, slug: str) -> List[Dict]:
         cache_key = f"anikoto_eps_{slug}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -735,7 +735,7 @@ class AnikotoProvider(StreamingProvider):
 
     def get_servers(self, slug: str, ep_num: int, data_ids: str) -> List[Dict]:
         cache_key = f"anikoto_servers_{slug}_{ep_num}_{data_ids[:24]}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -985,7 +985,7 @@ class AnikotoProvider(StreamingProvider):
         if not mal_id or not timestamp:
             return {}
         cache_key = f"kiwi_dl_{mal_id}_{ep_num}"
-        cached = self._cache_get(cache_key)
+        cached = self._cache_get(cache_key, ttl=900)
         if cached is not None:
             return cached
 
@@ -1076,7 +1076,9 @@ class StreamingManager:
             "anikoto": self.anikoto,
         }
         self._mapping_cache: OrderedDict[str, Dict] = OrderedDict()
+        self._mapping_cache_timestamps: Dict[str, float] = {}
         self._mapping_cache_max = 128
+        self._mapping_cache_ttl = 900
 
     def resolve_anime_mapping(
         self,
@@ -1086,9 +1088,12 @@ class StreamingManager:
         heaven_override: Optional[str] = None,
     ) -> Dict:
         cache_key = f"map_{anilist_id}_{heaven_override or ''}"
-        if cache_key in self._mapping_cache:
+        cached_at = self._mapping_cache_timestamps.get(cache_key, 0)
+        if cache_key in self._mapping_cache and time.time() - cached_at < self._mapping_cache_ttl:
             self._mapping_cache.move_to_end(cache_key)
             return self._mapping_cache[cache_key]
+        self._mapping_cache.pop(cache_key, None)
+        self._mapping_cache_timestamps.pop(cache_key, None)
 
         clean_titles = [t for t in titles if t]
         heaven_id = heaven_override or self.animeheaven.find_best_id(clean_titles)
@@ -1102,9 +1107,11 @@ class StreamingManager:
             "anikoto_slug": anikoto_slug,
         }
         self._mapping_cache[cache_key] = mapping
+        self._mapping_cache_timestamps[cache_key] = time.time()
         self._mapping_cache.move_to_end(cache_key)
         while len(self._mapping_cache) > self._mapping_cache_max:
-            self._mapping_cache.popitem(last=False)
+            expired_key, _ = self._mapping_cache.popitem(last=False)
+            self._mapping_cache_timestamps.pop(expired_key, None)
         return mapping
 
     def get_full_episode_bundle(
@@ -1120,6 +1127,7 @@ class StreamingManager:
         Resolves all playable servers, direct MP4 streams, decrypted 1080p HLS streams,
         subtitles, and direct download links for a specific anime episode.
         """
+        preferred_audio = preferred_audio if preferred_audio in ("sub", "dub") else "sub"
         mapping = self.resolve_anime_mapping(anilist_id, titles, mal_id, heaven_override)
         heaven_id = mapping.get("heaven_id")
         anikoto_slug = mapping.get("anikoto_slug")
@@ -1182,7 +1190,9 @@ class StreamingManager:
                 resolved_per_audio = {"sub": 0, "dub": 0}
                 for srv in ak_servers:
                     audio = srv.get("type", "sub")
-                    if resolved_per_audio.get(audio, 0) < 2:
+                    if audio not in resolved_per_audio:
+                        continue
+                    if resolved_per_audio[audio] < 2:
                         stream_data = self.anikoto.resolve_server_stream(srv)
                         if stream_data:
                             resolved_per_audio[audio] = resolved_per_audio.get(audio, 0) + 1
@@ -1252,7 +1262,14 @@ class StreamingManager:
                                 "provider": "AnimePahe / Kiwi Mirror",
                             })
 
-        # 3. Always include reliable multi-server iframe embeds as final fallbacks
+        # A dubbed server is offered only when the provider lists that episode's
+        # audio variant and resolves a real stream or provider player for it.
+        audio_availability = {
+            "sub": any(server.get("audio") == "sub" for server in servers),
+            "dub": any(server.get("audio") == "dub" for server in servers),
+        }
+
+        # 3. Keep the legacy subtitled iframe fallback; do not invent a DUB mirror.
         servers.append({
             "id": "embed-vidsrc-sub",
             "name": "VidSrc Pro (SUB)",
@@ -1263,17 +1280,7 @@ class StreamingManager:
             "quality": "1080p Embed",
             "subtitles": [],
             "badge": "BACKUP SUB",
-        })
-        servers.append({
-            "id": "embed-vidsrc-dub",
-            "name": "VidSrc Pro (DUB)",
-            "provider": "vidsrc",
-            "audio": "dub",
-            "playback_mode": "iframe",
-            "stream_url": f"https://vidsrc.cc/v2/embed/anime/ani{anilist_id}/{ep_num}/dub",
-            "quality": "1080p Embed",
-            "subtitles": [],
-            "badge": "BACKUP DUB",
+            "fallback": True,
         })
         if mal_id:
             servers.append({
@@ -1286,17 +1293,7 @@ class StreamingManager:
                 "quality": "1080p Embed",
                 "subtitles": [],
                 "badge": "MIRROR SUB",
-            })
-            servers.append({
-                "id": "embed-vidlink-dub",
-                "name": "VidLink Ultra (DUB)",
-                "provider": "vidlink",
-                "audio": "dub",
-                "playback_mode": "iframe",
-                "stream_url": f"https://vidlink.pro/anime/{mal_id}/{ep_num}/dub",
-                "quality": "1080p Embed",
-                "subtitles": [],
-                "badge": "MIRROR DUB",
+                "fallback": True,
             })
 
         # Sort servers so preferred_audio comes first, and direct MP4/HLS comes before iframe
@@ -1316,7 +1313,7 @@ class StreamingManager:
             downloads.append({
                 "label": f"Episode {ep_num} — resolve direct MP4 via AnimeHeaven Scraper",
                 "quality": "Scraper resolver",
-                "audio": ("SUB" if preferred_audio == "sub" else "DUB"),
+                "audio": ("DUB" if audio_availability["dub"] and preferred_audio == "dub" else "SUB"),
                 "url": f"/scraper?q={_q}&auto_resolve={ep_num}",
                 "direct": False,
                 "provider": "AnimeHeaven resolver",
@@ -1331,7 +1328,13 @@ class StreamingManager:
             "anikoto_slug": anikoto_slug,
             "servers": servers,
             "downloads": downloads,
-            "active_server": servers[0] if servers else None,
+            "audio_availability": audio_availability,
+            "requested_audio": preferred_audio,
+            "audio_fallback": preferred_audio == "dub" and not audio_availability["dub"],
+            "active_server": next(
+                (server for server in servers if server.get("audio") == preferred_audio),
+                servers[0] if servers else None,
+            ),
         }
 
     # Backwards-compatible methods
@@ -1383,6 +1386,7 @@ class StreamingManager:
         self.anikoto._megaplay_script_cache.clear()
         self.youtube.cache.clear()
         self._mapping_cache.clear()
+        self._mapping_cache_timestamps.clear()
 
 
 # Global instance

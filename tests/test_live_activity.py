@@ -100,6 +100,14 @@ def test_provider_response_caches_are_bounded(monkeypatch):
         manager.resolve_anime_mapping(index + 1, [f"Anime {index}"])
     assert len(manager._mapping_cache) == manager._mapping_cache_max
 
+    manager._mapping_cache_ttl = 10
+    now = time.time()
+    manager._mapping_cache_timestamps["map_1_"] = now - 11
+    monkeypatch.setattr(manager.animeheaven, "find_best_id", lambda titles: "refreshed")
+    refreshed_mapping = manager.resolve_anime_mapping(1, ["Anime 0"])
+    assert refreshed_mapping["heaven_id"] == "refreshed"
+    assert manager._mapping_cache_timestamps["map_1_"] > now - 11
+
     manager.anikoto.session.get = lambda *args, **kwargs: SimpleNamespace(text="getSources AES-CBC")
     for index in range(manager.anikoto._megaplay_script_cache_max + 4):
         manager.anikoto._get_megaplay_keys_and_ivs(

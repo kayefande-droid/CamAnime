@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Watch {{ anime.title }} Episode {{ ep_num }} (1080p SUB/DUB) | CamAnime</title>
+    <title>Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime</title>
     <meta name="theme-color" content="#087BFF">
     <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
@@ -233,7 +233,7 @@
             color: #052e16;
         }
 
-        /* ─── SERVER & SUB/DUB SWITCHER DECK ─── */
+        /* ─── SERVER & AVAILABLE AUDIO SWITCHER DECK ─── */
         .server-deck {
             background: var(--bg-elevated);
             border: 1px solid var(--border-subtle);
@@ -537,7 +537,7 @@
                 </div>
             </div>
 
-            <!-- ─── MULTI-SERVER SWITCHER (ANIMEHEAVEN DIRECT MP4 + CAMSTREAM 1080P HLS SUB/DUB + EMBEDS) ─── -->
+            <!-- Episode sources listed by configured providers; audio options vary by episode. -->
             <div class="server-deck">
                 <div class="server-row">
                     <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> SUB SERVERS:</span>
@@ -553,8 +553,9 @@
                     {% endfor %}
                 </div>
 
+                {% if bundle.audio_availability.dub %}
                 <div class="server-row">
-                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> DUB SERVERS:</span>
+                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> PROVIDER-LISTED DUB SERVERS:</span>
                     {% for srv in servers if srv.audio == 'dub' %}
                     <button type="button"
                             class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
@@ -566,6 +567,9 @@
                     </button>
                     {% endfor %}
                 </div>
+                {% elif preferred_audio == 'dub' %}
+                <p id="audioAvailabilityNotice" role="status" style="color:var(--text-muted);font-size:.84rem;">No provider-listed dub is available for this episode. Playing available original audio instead.</p>
+                {% endif %}
             </div>
         </div>
 
@@ -668,27 +672,24 @@
       'banner-ad', '/ads.js', '/adserver', '/pagead/', 'ad.doubleclick.org',
     ];
 
-    /* ── ZERO-AD-TOLERANCE GUARD ─────────────────────────────────────────
-       CamAnime serves every stream through our own /api proxy and we never
-       inject an ad network. Backup embeds, however, are third-party pages.
-       We police them: kill known ad iframes/windows, neuter window.open from
-       ad origins, and strip inactive ad iframes from the DOM — immediately. */
+    /* ── CAMANIME-SIDE AD FILTER ─────────────────────────────────────────
+       Known ad hosts are blocked on CamAnime-controlled proxy requests and
+       popups. Cross-origin embeds cannot be inspected or fully ad-filtered. */
     function looksLikeAd(url) {
       const u = (url || '').toLowerCase();
       return AD_HOST_PATTERNS.some(p => u.includes(p));
     }
     function enforceAdPolicy() {
-      // 1. Block popup/new-tab ads opened by embeds
+      // Wrap once. Cross-origin player pages cannot be monkey-patched here.
       try {
-        const realOpen = window.open;
-        window.open = function (url, name, specs) {
-          if (looksLikeAd(url)) {
-            showPlayerError('Blocked an ad pop-up automatically. CamAnime is 100% ad-free.');
-            setTimeout(() => showPlayerError(''), 4000);
-            return null;
-          }
-          return realOpen.call(window, url, name, specs);
-        };
+        if (!window._camanimeOpenWrapped) {
+          const realOpen = window.open;
+          window.open = function (url, name, specs) {
+            if (looksLikeAd(url)) return null;
+            return realOpen.call(window, url, name, specs);
+          };
+          window._camanimeOpenWrapped = true;
+        }
       } catch (e) {}
       // 2. Sweep the DOM every second for injected ad iframes/scripts
       const doc = document;
@@ -698,7 +699,7 @@
           f.remove();
           return;
         }
-        // Only our real embed player is allowed to display; sandbox anything else
+        // Sandbox unrelated iframes; this does not inspect a cross-origin player.
         if (f.id !== 'embedIframe' && (src || '').startsWith('http')) {
           f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
         }
@@ -1096,7 +1097,7 @@
         // Settings: preferred audio rewrites the episode rail links
         try {
             const prefAudio = localStorage.getItem('camanime-audio');
-            if (prefAudio === 'sub' || prefAudio === 'dub') {
+            if (prefAudio === 'sub' || (prefAudio === 'dub' && {{ 'true' if bundle.audio_availability.dub else 'false' }})) {
                 document.querySelectorAll('#epRailList a').forEach(a => {
                     try {
                         const u = new URL(a.href, window.location.origin);
@@ -1119,6 +1120,9 @@
             }
         });
         switchServer(INITIAL_SERVER);
+        if ({{ 'true' if bundle.audio_fallback else 'false' }}) {
+            showPlayerError('No provider-listed dub is available for this episode. Playing available original audio instead.');
+        }
         recordWatchHistory();
         const activeEp = document.querySelector('#epRailList .ep-rail-item.current');
         if (activeEp) activeEp.scrollIntoView({ block: 'nearest' });

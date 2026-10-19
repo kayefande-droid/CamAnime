@@ -974,7 +974,8 @@ def home():
         _c = platform.get_counters()
         public_counters = {
             "app_downloads": _c.get("app_downloads", 0),
-            "streams": _c.get("streams", 0) + _c.get("plays", 0),
+            # Count each player-start event once. Proxy chunks and retries are not plays.
+            "streams": _c.get("plays", 0),
             "downloads": _c.get("downloads", 0),
             "users": platform.get_user_count(),
         }
@@ -1536,11 +1537,6 @@ def proxy_hls():
     if _is_ad_url(url):
         logger.warning(f"Ad-blocked proxy request: {url}")
         return jsonify({"error": "Blocked: this URL belongs to an ad network. CamAnime is 100%% ad-free."}), 403
-    # HLS segment fetches are frequent; log only the first playlist request so
-    # the live feed shows real viewing sessions rather than one row per chunk.
-    if "m3u8" in url.lower():
-        _record_activity("stream", detail=urlparse(url).netloc)
-
     headers = {
         "User-Agent": DEFAULT_UA,
         "Accept": "*/*",
@@ -1606,12 +1602,8 @@ def proxy_video():
     if _is_ad_url(url):
         logger.warning(f"Ad-blocked proxy request: {url}")
         return jsonify({"error": "Blocked: this URL belongs to an ad network. CamAnime is 100%% ad-free."}), 403
-    # Live feed + factual homepage counter — cheap, best-effort, never blocks the stream.
-    _record_activity("stream", detail=urlparse(url).netloc)
-    try:
-        platform.bump_counter("streams")
-    except Exception:
-        pass
+    # Playback starts are recorded by /api/track. Do not count proxy range
+    # requests here: seeking, retries, and HLS reloads are not new streams.
 
     headers = {
         "User-Agent": DEFAULT_UA,
@@ -2156,7 +2148,16 @@ def api_notifications():
 @app.route("/api/track", methods=["POST"])
 def api_track():
     d = _post_data()
-    platform.track(None, d.get("kind", "click"), {"anime_id": d.get("anime_id", ""), "ep": d.get("ep", "")})
+    kind = (d.get("kind", "click") or "click").strip().lower()
+    anime_id = str(d.get("anime_id", "") or "").strip()
+    ep = str(d.get("ep", "") or "").strip()
+    meta = {"anime_id": anime_id, "ep": ep}
+    platform.track(None, kind, meta)
+    if kind == "play":
+        detail = f"Anime {anime_id}" if anime_id else "Player start"
+        if ep:
+            detail += f" · Episode {ep}"
+        _record_activity("stream", anime=detail, ep=ep, detail=detail)
     return jsonify({"status": "ok"})
 
 
@@ -2202,13 +2203,16 @@ def api_history_remove():
 
 @app.route("/api/public/counters")
 def api_public_counters():
-    """Live factual counters only — streams/downloads/users counted from real
-    events in SQLite. Nothing here is a placeholder or vanity number."""
+    """Expose cumulative player starts and other real SQLite-backed counts.
+
+    Proxy requests are intentionally excluded: seeking and retries are not new plays.
+    """
     c = platform.get_counters()
     return jsonify({
         "status": "success",
         "app_downloads": c.get("app_downloads", 0),
-        "streams": c.get("streams", 0) + c.get("plays", 0),
+        # `plays` increments once when the player starts; proxy requests may retry.
+        "streams": c.get("plays", 0),
         "downloads": c.get("downloads", 0),
         "users": platform.get_user_count(),
         "source": "real events only",
@@ -2455,12 +2459,17 @@ def api_public_stream_or_download():
     anime_id = (d.get("anime_id", "") or "").strip()
     title = (d.get("title", "") or "").strip()
     image = (d.get("image", "") or "").strip()
-    platform.bump_counter(kind)
-    if anime_id:
-        platform.track({}, kind, {"anime_id": anime_id, "ep": d.get("ep", "")})
-        if title:
-            platform.cache_anime_meta(anime_id, title=title, image=image,
-                                      episode_label=f"EP {d.get('ep', '')}" if d.get("ep") else "")
+    event_kind = "play" if kind == "stream" else "download"
+    meta = {"anime_id": anime_id, "ep": d.get("ep", "")}
+    platform.track({}, event_kind, meta)
+    if kind == "stream":
+        detail = f"{title or f'Anime {anime_id}'}" if anime_id else "Player start"
+        if meta["ep"]:
+            detail += f" · Episode {meta['ep']}"
+        _record_activity("stream", anime=detail, ep=meta["ep"], detail=detail)
+    if anime_id and title:
+        platform.cache_anime_meta(anime_id, title=title, image=image,
+                                  episode_label=f"EP {meta['ep']}" if meta["ep"] else "")
     return jsonify({"status": "ok"})
 
 

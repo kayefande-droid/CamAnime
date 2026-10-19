@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CamAnime — Free Anime Streaming Website | Watch Sub & Dub Online (Cameroon & Worldwide)</title>
-    <meta name="description" content="CamAnime is a free anime streaming website for Cameroon and worldwide fans: watch anime online free in 1080p SUB/DUB, download episodes, track simulcast schedule. Made by kayefande-droid & co.">
-    <meta name="keywords" content="CamAnime, CamAnime website, CamAnime app, CamAnime download, CamAnime APK, anime Cameroon, animé Cameroun, CamAnime streaming, watch anime online free, free anime streaming website, anime websites Cameroon, free streaming websites, best free anime sites, download anime episodes, anime sub dub 1080p, animeheaven direct mp4, free anime download site, watch anime no ads, ad-free anime streaming, new anime episodes free, ongoing anime countdown, anime release schedule">
+    <title>CamAnime — Anime Discovery & Episode Guide (Cameroon & Worldwide)</title>
+    <meta name="description" content="Discover anime, browse episode guides, and track the simulcast schedule with CamAnime. Episode playback and audio options depend on available providers.">
+    <meta name="keywords" content="CamAnime, anime Cameroon, animé Cameroun, anime discovery, anime episode guide, simulcast schedule, new anime episodes, ongoing anime countdown">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta property="og:site_name" content="CamAnime">
     <meta property="og:url" content="https://camanime.onrender.com/">
     <meta property="og:image" content="https://camanime.onrender.com/static/icon-512.png">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="CamAnime — Watch Anime Online Free (SUB & DUB, No Ads)">
-    <meta name="twitter:description" content="Free anime streaming for Cameroon & worldwide: 1080p SUB/DUB, direct MP4 downloads, live release countdowns.">
+    <meta name="twitter:title" content="CamAnime — Anime Discovery & Episode Guide">
+    <meta name="twitter:description" content="Discover anime, browse episode guides, and track live release countdowns. Playback and audio options vary by episode.">
     <link rel="canonical" href="https://camanime.onrender.com/">
     <meta name="theme-color" content="#087BFF">
     <meta name="google-site-verification" content="3rRXefg_LYfyIPKcJgeXbLXBLkHx9zKOUlWcX7Fm6Tg" />
     <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"WebSite","name":"CamAnime","url":"https://camanime.onrender.com/","potentialAction":{"@type":"SearchAction","target":"https://camanime.onrender.com/search?q={search_term_string}","query-input":"required name=search_term_string"},"description":"Free anime streaming website — watch anime online free in 1080p SUB/DUB with direct MP4 downloads. No ads.","inLanguage":"en"}
+    {"@context":"https://schema.org","@type":"WebSite","name":"CamAnime","url":"https://camanime.onrender.com/","potentialAction":{"@type":"SearchAction","target":"https://camanime.onrender.com/search?q={search_term_string}","query-input":"required name=search_term_string"},"description":"Anime discovery, episode guides, and release tracking. Playback and audio options depend on the episode and configured providers.","inLanguage":"en"}
     </script>
     <meta property="og:title" content="CamAnime — Free Anime Streaming Website">
-    <meta property="og:description" content="Watch anime online free in 1080p SUB/DUB. Free streaming website for Cameroon and worldwide fans.">
+    <meta property="og:description" content="Discover anime and follow episode releases. Playback and audio options vary by episode and provider availability.">
     <meta property="og:type" content="website">
     <link rel="manifest" href="/static/manifest.webmanifest">
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
@@ -959,7 +959,7 @@
                     <span class="meta-pill gold"><i class="fas fa-star"></i> {{ slide.rating }}</span>
                     <span class="meta-pill">{{ slide.format }}</span>
                     <span class="meta-pill">{{ slide.episode }}</span>
-                    <span class="meta-pill subdub">SUB & DUB • 1080p</span>
+                    <span class="meta-pill subdub">EPISODE AUDIO OPTIONS</span>
                     {% for g in slide.genres[:3] %}
                     <span class="meta-pill">{{ g }}</span>
                     {% endfor %}
@@ -1007,11 +1007,11 @@
     <!-- ─── FACTUAL SITE COUNTER STRIP (real numbers only) ─── -->
     {% if page_type == 'home' and public_counters is defined %}
     <div class="stat-strip" id="siteStats">
-        <div class="st-cell"><b id="statStreams">{{ public_counters.streams }}</b><span>Streams till now</span></div>
+        <div class="st-cell"><b id="statStreams">{{ public_counters.streams }}</b><span>Player starts till now</span></div>
         <div class="st-cell"><b id="statDownloads">{{ public_counters.downloads }}</b><span>Downloads till now</span></div>
         <div class="st-cell"><b id="statApps">{{ public_counters.app_downloads }}</b><span>App downloads</span></div>
         <div class="st-cell"><b id="statUsers">{{ public_counters.users }}</b><span>Registered fans</span></div>
-        <span class="st-note">Real, counted events only — streams and downloads update live as users watch and save episodes.</span>
+        <span class="st-note">Real, counted events only — player starts and downloads update as users watch and save episodes.</span>
     </div>
     {% endif %}
 
@@ -1338,7 +1338,7 @@
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>
-                    <div class="card-submeta"><span>{{ anime.format }} · Sub & Dub</span><span>{{ anime.status }}</span></div>
+                    <div class="card-submeta"><span>{{ anime.format }} · Episode options vary</span><span>{{ anime.status }}</span></div>
                 </div>
             </a>
             {% endfor %}

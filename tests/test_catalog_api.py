@@ -180,6 +180,57 @@ def test_details_and_watch_use_only_exact_provider_episode_numbers(api, monkeypa
     assert b"/watch/123/3" not in valid_episode.data.split(b"Next Ep", 1)[1][:100]
 
 
+def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
+    from contextlib import ExitStack
+
+    raw = anime()
+    raw.update({"status": "FINISHED", "episodes": 1})
+
+    def render_watch_page(server, audio="dub"):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(api, "fetch_anilist", return_value={"Media": raw}))
+            stack.enter_context(patch.object(
+                api.streaming_manager, "resolve_anime_mapping",
+                return_value={"anikoto_slug": "matched"},
+            ))
+            stack.enter_context(patch.object(
+                api.streaming_manager.animeheaven, "get_anime_info", return_value=None,
+            ))
+            stack.enter_context(patch.object(
+                api.streaming_manager.anikoto, "get_episodes",
+                return_value=[{"num": 1, "data_ids": "episode-data"}],
+            ))
+            stack.enter_context(patch.object(
+                api.streaming_manager.anikoto, "get_servers", return_value=[server],
+            ))
+            stack.enter_context(patch.object(
+                api.streaming_manager.anikoto, "resolve_server_stream",
+                return_value={"m3u8": f"https://media.example/{server['type']}.m3u8", "subtitles": []},
+            ))
+            stack.enter_context(patch.object(
+                api.streaming_manager.youtube, "get_trailer_id", return_value=None,
+            ))
+            return api.app.test_client().get(f"/watch/123/1?audio={audio}")
+
+    sub_page = render_watch_page({
+        "name": "HD-1", "type": "sub", "link_id": "sub-id", "slug": "matched", "ep_num": 1,
+    })
+    assert sub_page.status_code == 200
+    assert b"No provider-listed dub is available" in sub_page.data
+    assert b"PROVIDER-LISTED DUB SERVERS" not in sub_page.data
+    assert b"if (true) {\n            showPlayerError('No provider-listed dub is available" in sub_page.data
+    assert b"embed-vidsrc-dub" not in sub_page.data
+    assert b"Active Server: CamStream HD-1 (SUB)" in sub_page.data
+
+    dub_page = render_watch_page({
+        "name": "Dub-HD", "type": "dub", "link_id": "dub-id", "slug": "matched", "ep_num": 1,
+    })
+    assert dub_page.status_code == 200
+    assert b"PROVIDER-LISTED DUB SERVERS" in dub_page.data
+    assert b"CamStream Dub-HD (DUB)" in dub_page.data
+    assert b"if (false) {\n            showPlayerError('No provider-listed dub is available" in dub_page.data
+
+
 def test_confirmed_episodes_distinguish_airing_finished_and_unknown(api):
     airing = anime()
     airing.update({"status": "RELEASING", "episodes": 24})
@@ -543,6 +594,76 @@ def test_comment_and_notification_reads_are_bounded(api):
     notifications = api.platform.get_notifications(user["email"], limit=20)
     assert len(notifications) == 20
     assert notifications[-1]["text"] == "Notification 124"
+
+
+def test_player_start_total_persists_separately_from_live_activity(api, monkeypatch):
+    client = api.app.test_client()
+
+    started = client.post("/api/track", data={
+        "kind": "play", "anime_id": "123", "ep": "2",
+    })
+    assert started.status_code == 200
+    assert api.platform.get_counters()["plays"] == 1
+    assert api._live_activity_summary()["active_streams_60s"] == 1
+
+    class Upstream:
+        status_code = 206
+        headers = {
+            "Content-Type": "video/mp4",
+            "Content-Length": "4",
+            "Content-Range": "bytes 0-3/8",
+            "Accept-Ranges": "bytes",
+        }
+
+        def iter_content(self, chunk_size):
+            yield b"data"
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(api, "_safe_upstream_url", lambda _url: "https://cdn.example/video.mp4")
+    monkeypatch.setattr(api.requests, "get", lambda *_args, **_kwargs: Upstream())
+    for _ in range(3):
+        response = client.get(
+            "/api/proxy/video?url=https%3A%2F%2Fcdn.example%2Fvideo.mp4",
+            headers={"Range": "bytes=0-3"},
+        )
+        assert response.status_code == 206
+        assert response.data == b"data"
+
+    # Range retries do not inflate lifetime plays or the one-minute live starts.
+    assert api.platform.get_counters()["plays"] == 1
+    assert api.platform.get_counters()["streams"] == 0
+    assert api._live_activity_summary()["active_streams_60s"] == 1
+
+    # The native-app tracking API contributes to the same player-start total.
+    native_start = client.post("/api/public/stream/download", json={
+        "kind": "stream", "anime_id": "123", "ep": "2", "title": "Canonical",
+    })
+    assert native_start.status_code == 200
+    assert api.platform.get_counters()["plays"] == 2
+    assert api._live_activity_summary()["active_streams_60s"] == 2
+
+    # SQLite retains the lifetime count across app/module re-initialization.
+    api.platform._init()
+    assert api.platform.get_counters()["plays"] == 2
+    assert client.get("/api/public/counters").json["streams"] == 2
+
+    # The homepage renders the same cumulative player-start value for visitors.
+    payload = {"trending": {"media": []}, "popularSeason": {"media": []},
+               "topRated": {"media": []}, "recentlyAdded": {"media": []},
+               "featuredMovie": {"media": []}, "series": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=payload), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+        home = client.get("/")
+    assert home.status_code == 200
+    assert b'id="statStreams">2</b>' in home.data
+    assert b"Player starts till now" in home.data
+
+    # The in-memory live metric can reset without touching SQLite's lifetime count.
+    api._LIVE_ACTIVITY.clear()
+    assert api._live_activity_summary()["active_streams_60s"] == 0
+    assert client.get("/api/public/counters").json["streams"] == 2
 
 
 def test_single_account_and_counter_reads_avoid_store_snapshot(api, monkeypatch):

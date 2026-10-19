@@ -19,9 +19,11 @@ CamAnime pairs a responsive Flask discovery website with a Flutter Android app a
 - **SEO**: anime-website Cameroon / free-streaming keywords, sitemap, robots, Google Search Console ready
 - **Responsive**: 2-col narrow phones / 3-col wider phones / fluid tablet-desktop, verified 0-overflow across 9 viewports × 9 pages
 
-## App ↔ website link + permanent database
+## App ↔ website link + database persistence
 
-One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and counters — it survives restarts (persist the file/volume on your host). Legacy JSON auto-migrates once.
+One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and cumulative counters. It survives process restarts when the database file remains on disk, but Render's free instance filesystem is ephemeral: redeploys/restarts that replace the instance can reset SQLite data. Use durable storage or a managed database when totals must persist across deployments. The public "Player starts till now" counter counts real player-start events, not proxy chunks/retries; the admin live stream-start count is a separate rolling one-minute, in-memory metric and naturally expires.
+
+Legacy JSON auto-migrates once.
 
 - Website: session login at `/login`
 - Native apps: `POST /api/auth/register|login` → Bearer token (`Authorization: Bearer <token>`)
