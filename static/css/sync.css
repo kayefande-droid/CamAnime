@@ -88,19 +88,45 @@ small, .muted { font-size: .85em; color: var(--text-secondary); }
 .ca-card-actions { display: flex; gap: .7rem; font-size: .8rem; margin-top: .35rem; }
 .ca-card-actions button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: .8rem; }
 .ca-reply { margin: .45rem 0 0 1rem; border-left: 2px solid var(--accent); padding-left: .65rem; }
-/* Breakpoints: 320 / 375 / 414 / 768 */
-.main-wrap, .container, .watch-container { width: 100%; max-width: 1440px; margin-inline: auto; padding-inline: clamp(1rem, 4vw, 2rem); }
-@media (max-width: 768px) {
+/* Canonical responsive canvas shared by the home, details, and player views. */
+body { min-width: 320px; }
+.main-wrap, .container, .watch-container { width: 100%; max-width: 1440px; margin-inline: auto; padding-inline: clamp(1rem, 3vw, 2rem); }
+.anime-grid > *, .catalog-grid > *, .mini-grid > *, .ep-grid > * { min-width: 0; }
+@media (min-width: 1024px) {
+  .header-inner { flex-wrap: nowrap; }
+  .header-nav { flex-wrap: nowrap; }
+  .nav-links { display: flex; }
+  .nav-toggle { display: none; }
+  .header-actions { flex: 1 1 auto; min-width: 0; }
+  .main-wrap, .container, .watch-container { padding-inline: clamp(1.5rem, 3vw, 2.5rem); }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .main-wrap, .container, .watch-container { padding-inline: 1.25rem; }
+  .anime-grid, .heaven-strip-grid, .mini-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  .ep-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cinema-grid { grid-template-columns: minmax(0, 1fr) minmax(230px, .38fr); gap: 1rem; }
+  .two-col-layout { grid-template-columns: minmax(0, 1fr) minmax(250px, .72fr); gap: 1rem; }
+  .header-inner { flex-wrap: wrap; gap: .65rem; }
+  .header-nav { flex-wrap: wrap; }
+  .header-actions { flex: 1 1 100%; min-width: 0; }
+  .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
+}
+@media (max-width: 767px) {
+  .main-wrap, .container, .watch-container { padding-inline: .85rem; }
+  .anime-grid, .heaven-strip-grid, .mini-grid, .catalog-grid, .ep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
   .cinema-grid, .two-col-layout, .lower-panels { grid-template-columns: 1fr; }
   .dossier-card { grid-template-columns: 1fr; }
   .header-inner { flex-wrap: wrap; }
+  .header-nav { flex-wrap: wrap; }
   .nav-links { display: none; }
-  .hero-body { padding: 1.5rem 1.25rem; }
-}
-@media (max-width: 414px) {
-  .anime-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 0.8rem; }
+  .nav-toggle { display: inline-flex; }
+  .hero-body { padding: 1.4rem 1.1rem; }
   .hero-ctas .btn-primary, .hero-ctas .btn-secondary { width: 100%; justify-content: center; }
   .transport-bar { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 374px) {
+  .main-wrap, .container, .watch-container { padding-inline: .7rem; }
+  .anime-grid, .heaven-strip-grid, .mini-grid, .catalog-grid, .ep-grid { gap: .55rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
@@ -129,19 +155,21 @@ body .section-head { flex-wrap: wrap; }
 body .search-form { min-width: 0; }
 body .search-input { flex: 1 1 auto; min-width: 0; }
 body .ep-search-box { max-width: 100%; }
-/* 3. Phone poster grids: 2 cols narrow / 3 cols wider */
-@media (max-width: 419px) {
+/* Phone poster grids use a stable two-column ratio at every mobile width. */
+@media (max-width: 767px) {
   body .anime-grid, body .heaven-strip-grid, body .ep-grid,
   body .mini-grid, body .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (min-width: 420px) and (max-width: 768px) {
-  body .anime-grid, body .heaven-strip-grid, body .ep-grid,
-  body .mini-grid, body .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 /* 4. Banners + detail panels scale proportionally */
 body .banner-wrap { height: clamp(200px, 30vw, 340px); }
 body .container { margin-top: clamp(-140px, -12vw, -60px); }
 body .hero-spotlight, body .hero-slide.active { min-height: clamp(320px, 55vw, 560px); }
+@media (min-width: 768px) and (max-width: 1023px) {
+  body .hero-spotlight, body .hero-slide.active { min-height: clamp(380px, 48vw, 470px); }
+}
+@media (max-width: 767px) {
+  body .hero-spotlight, body .hero-slide.active { min-height: clamp(330px, 82vw, 440px); }
+}
 body .scraper-banner-card { padding: clamp(1rem, 4vw, 1.5rem); }
 /* 5. Players stay inside the viewport */
 body .player-column, body .video-stage, body .inspector-player-box { max-width: 100%; min-width: 0; }
@@ -153,9 +181,8 @@ body .card-title, body .catalog-card-title { min-width: 0; overflow-wrap: anywhe
 body .ep-rail-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 body .breadcrumb-bar { overflow: hidden; }
 
-/* ── Spec round 2: desktop-mid nav, episode-name clamp ── */
-/* Desktop-mid (901-1150px): tighten header so links never crowd */
-@media (min-width: 901px) and (max-width: 1150px) {
+/* Episode-name clamp and compact desktop header spacing. */
+@media (min-width: 1024px) and (max-width: 1150px) {
   body .header-inner { gap: 0.6rem; }
   body .nav-links { gap: 0.15rem; }
   body .nav-links .nav-link { padding: 0.5rem 0.6rem; font-size: 0.85rem; }
@@ -165,6 +192,34 @@ body .breadcrumb-bar { overflow: hidden; }
 /* Episode names: 2-line clamp instead of single-line cut */
 body .ep-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; min-width: 0; }
 body .ep-card, body .ep-card-top { min-width: 0; }
+
+/* ── Canonical viewport classes: desktop/PC >=1024, tablet 768–1023, mobile <768 ── */
+body { min-width: 320px; }
+body .main-wrap, body .container, body .watch-container { width: 100%; max-width: 1440px; margin-inline: auto; }
+body .anime-card, body .panel-card, body .panel-box, body .dossier-card,
+body .release-ticker, body .scraper-banner-card { min-width: 0; }
+@media (min-width: 1024px) {
+  body .main-wrap, body .container, body .watch-container { padding-inline: clamp(1.5rem, 3vw, 2.5rem); }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  body .main-wrap, body .container, body .watch-container { padding-inline: 1.25rem; }
+  body .anime-grid, body .heaven-strip-grid, body .mini-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+  body .ep-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body .live-schedule-tab { gap: .4rem; padding-inline: .55rem; }
+}
+@media (max-width: 767px) {
+  body .main-wrap, body .container, body .watch-container { padding-inline: .85rem; }
+  body .anime-grid, body .heaven-strip-grid, body .mini-grid, body .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  body .ep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body .section-title-wrap { min-width: 0; flex-wrap: wrap; }
+  body .section-head { align-items: flex-start; gap: .65rem; }
+  body .panel-card, body .panel-box { padding: 1rem; }
+}
+@media (max-width: 374px) {
+  body .main-wrap, body .container, body .watch-container { padding-inline: .7rem; }
+  body .anime-grid, body .heaven-strip-grid, body .mini-grid, body .catalog-grid { gap: .55rem; }
+  body .card-body { padding-inline: .65rem; }
+}
 
 /* ── Header: logo never splits, nav never wraps mid-item ── */
 body .site-logo { white-space: nowrap; flex-shrink: 0; font-size: clamp(1.15rem, 1rem + 1vw, 1.55rem); }
@@ -247,21 +302,32 @@ body.schedule-drawer-open{overflow:hidden}
 .stat-strip .st-cell span{font-size:.72rem;color:var(--text-secondary,#a0abc0);text-transform:uppercase;letter-spacing:.06em}
 .stat-strip .st-note{width:100%;text-align:center;color:var(--text-muted,#64708a);font-size:.72rem}
 
-/* ── Header search: guaranteed visible on desktop + not squashed on phones ── */
-@media (min-width:901px){
+/* ── Header search: guaranteed visible on desktop + not squashed on phones ── */@media (min-width: 1024px){
   body .header-inner{flex-wrap:nowrap}
   body .search-form{flex:0 1 320px;min-width:220px}
   body .header-actions{flex-shrink:0}
 }
+@media (min-width: 768px) and (max-width: 1023px){
+  body .header-inner{flex-wrap:wrap;gap:.65rem}
+  body .brand-group{flex:1 1 auto;gap:.75rem}
+  body .nav-links{display:none}
+  body .nav-toggle{display:inline-flex}
+  body .header-actions{flex:1 1 100%;min-width:0}
+  body .search-form{flex:1 1 auto;max-width:none;min-width:0}
+}
 
-/* ── Hero ratio fix for Android / phone aspect screens ── */
-@media (max-width:600px){
-  body .hero-spotlight,body .hero-slide.active{min-height:min(62vh,420px)}
+
+/* ── Hero ratio fix for Android / phone aspect screens ── */@media (max-width: 767px){
+  body .hero-spotlight,body .hero-slide.active{min-height:clamp(330px,82vw,440px)}
   body .hero-body{padding:1.4rem 1.1rem 2.2rem}
   body .hero-title{font-size:clamp(1.6rem,7.4vw,2.2rem)}
   body .hero-ctas .btn-primary,body .hero-ctas .btn-secondary{padding:.75rem 1.1rem;font-size:.85rem}
   body .hero-dots{bottom:.9rem}
 }
+@media (min-width: 768px) and (max-width: 1023px){
+  body .hero-spotlight,body .hero-slide.active{min-height:clamp(380px,48vw,470px)}
+}
+
 
 /* ── Rajk row controls wrapper ── */
 .section-head .head-controls{display:flex;gap:.5rem;align-items:center}

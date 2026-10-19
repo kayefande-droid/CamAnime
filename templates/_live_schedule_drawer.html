@@ -1,11 +1,11 @@
-<button id="liveScheduleToggle" class="live-schedule-tab" type="button" aria-label="Live release schedule" aria-controls="liveScheduleDrawer" aria-expanded="false">
+<button id="liveScheduleToggle" class="live-schedule-tab" type="button" aria-label="Live release schedule" aria-controls="liveScheduleDrawer" aria-expanded="{{ 'true' if open_schedule else 'false' }}">
   <span class="live-schedule-pulse" aria-hidden="true"></span>
   <span class="live-schedule-tab-icon" aria-hidden="true">◷</span>
   <span class="live-schedule-tab-label">LIVE SCHEDULE</span>
   <span id="liveScheduleTabCount" class="live-schedule-tab-count" aria-label="{{ schedule_items|length }} scheduled titles">{{ schedule_items|length }}</span>
 </button>
-<div id="liveScheduleBackdrop" class="live-schedule-backdrop" hidden></div>
-<aside id="liveScheduleDrawer" class="live-schedule-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Live release schedule" data-schedule-needs-initial-load="{{ 'true' if schedule_needs_initial_load else 'false' }}">
+<div id="liveScheduleBackdrop" class="live-schedule-backdrop"{{ '' if open_schedule else ' hidden' }}></div>
+<aside id="liveScheduleDrawer" class="live-schedule-drawer{{ ' is-open' if open_schedule else '' }}" role="dialog" aria-modal="true" aria-hidden="{{ 'false' if open_schedule else 'true' }}" aria-label="Live release schedule" data-schedule-needs-initial-load="{{ 'true' if schedule_needs_initial_load else 'false' }}">
   <header class="live-schedule-header">
     <div>
       <span class="live-schedule-eyebrow"><span class="live-schedule-pulse" aria-hidden="true"></span> LIVE AIRING TRACKER · <span id="liveScheduleCount">{{ schedule_items|length }}</span></span>
@@ -35,6 +35,6 @@
   <div id="liveScheduleAnnouncement" class="live-schedule-sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <footer class="live-schedule-footer">
     <span>AniList metadata · provider links are not playback guarantees</span>
-    <a href="/schedule">Open live release schedule <span aria-hidden="true">→</span></a>
+    <a href="/?schedule=open">Open live release schedule <span aria-hidden="true">→</span></a>
   </footer>
 </aside>

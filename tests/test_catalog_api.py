@@ -125,6 +125,21 @@ def test_episode_metadata_does_not_claim_playback_or_download_rights(api):
     assert "url" not in response.json["episodes"][0]
 
 
+def test_episode_card_uses_fallback_artwork_and_details_without_confirmed_episode(api):
+    upcoming = anime(anime_id=124, title="Upcoming Example")
+    upcoming.update({"status": "NOT_YET_RELEASED", "episodes": 24})
+    payload = {"trending": {"media": [upcoming]}, "popularSeason": {"media": []},
+               "topRated": {"media": []}, "recentlyAdded": {"media": []},
+               "featuredMovie": {"media": []}, "series": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=payload), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+        response = api.app.test_client().get("/")
+    assert response.status_code == 200
+    assert b"/static/brand/camanime-icon.svg" in response.data
+    assert b"/watch/124/1" not in response.data
+    assert b"/anime/124" in response.data
+
+
 def test_anime_detail_uses_canonical_provider_id(api):
     with patch.object(api, "fetch_anilist", return_value={"Media": anime()}):
         response = api.app.test_client().get("/api/v1/anime/123")
@@ -143,7 +158,51 @@ def test_anime_list_rejects_invalid_filters_before_provider_call(api):
     fetch.assert_not_called()
 
 
-def test_homepage_exposes_avatar_seven_havens_officially(api):
+def test_details_and_watch_use_only_exact_provider_episode_numbers(api, monkeypatch):
+    raw = anime()
+    raw.update({"status": "RELEASING", "episodes": 24, "nextAiringEpisode": None})
+    provider_episodes = [{"num": 1, "key": "episode-one"}, {"num": 3, "key": "episode-three"}]
+    with patch.object(api, "fetch_anilist", return_value={"Media": raw}), \
+         patch.object(api.streaming_manager, "resolve_anime_mapping", return_value={"heaven_id": "matched"}), \
+         patch.object(api.streaming_manager.animeheaven, "get_anime_info", return_value={"episodes": provider_episodes}), \
+         patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
+        details = api.app.test_client().get("/anime/123")
+        invalid_episode = api.app.test_client().get("/watch/123/2")
+        valid_episode = api.app.test_client().get("/watch/123/3")
+    assert details.status_code == 200
+    assert b'data-ep="1"' in details.data
+    assert b'data-ep="3"' in details.data
+    assert b'data-ep="2"' not in details.data
+    assert invalid_episode.status_code == 302
+    assert invalid_episode.headers["Location"].endswith("/anime/123")
+    assert valid_episode.status_code == 200
+    assert b"Next Ep" in valid_episode.data
+    assert b"/watch/123/3" not in valid_episode.data.split(b"Next Ep", 1)[1][:100]
+
+
+def test_confirmed_episodes_distinguish_airing_finished_and_unknown(api):
+    airing = anime()
+    airing.update({"status": "RELEASING", "episodes": 24})
+    airing["nextAiringEpisode"] = {"episode": 8, "airingAt": 2000}
+    assert api._confirmed_episode_numbers(airing, now_ts=1000) == list(range(1, 8))
+    assert api._confirmed_episode_numbers(
+        airing, [{"num": 9}, {"num": 12}, {"num": "special"}], now_ts=1000
+    ) == list(range(1, 8)) + [9, 12]
+    assert api._confirmed_episode_numbers(airing, now_ts=2000) == list(range(1, 8))
+
+    completed = anime()
+    completed.update({"status": "FINISHED", "episodes": 3})
+    assert api._confirmed_episode_numbers(completed) == [1, 2, 3]
+
+    unknown = anime()
+    unknown.update({"status": "UNKNOWN", "episodes": None})
+    assert api._confirmed_episode_numbers(unknown) == []
+    assert api._confirmed_episode_numbers(
+        unknown, [{"num": 2}, {"num": 5}]
+    ) == [2, 5]
+
+
+def test_homepage_omits_unverified_series_without_streaming_listing(api):
     payload = {
         "trending": {"media": [anime()]},
         "popularSeason": {"media": []},
@@ -156,11 +215,8 @@ def test_homepage_exposes_avatar_seven_havens_officially(api):
          patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
         response = api.app.test_client().get("/")
     assert response.status_code == 200
-    assert b"Avatar: Seven Havens" in response.data
-    assert b"https://www.paramountplus.com/shows/avatar-seven-havens/" in response.data
-    assert b"New series" in response.data
-    assert b"2026 SERIES" in response.data
-    assert b"/watch/avatar-seven-havens/1" not in response.data
+    assert b"Avatar: Seven Havens" not in response.data
+    assert b"/watch/123/1" in response.data
 
 
 def test_release_schedule_api_includes_all_current_season_airings(api, monkeypatch):
@@ -333,7 +389,7 @@ def test_schedule_links_only_a_matching_already_released_official_episode(api, m
     assert item["download_available"] is False
 
 
-def test_homepage_renders_every_season_countdown_and_live_refresh_hook(api, monkeypatch):
+def test_homepage_renders_schedule_only_in_live_drawer(api, monkeypatch):
     monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
     schedule = []
     for index in range(8):
@@ -345,6 +401,9 @@ def test_homepage_renders_every_season_countdown_and_live_refresh_hook(api, monk
                                       "timeUntilAiring": 30 + index},
             }),
         })
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {
+        ("FALL", 2026): (api.time.monotonic(), api._SEASON_SCHEDULE_CACHE_TTL, schedule)
+    })
     payload = {"trending": {"media": []}, "popularSeason": {"media": []},
                "topRated": {"media": []}, "recentlyAdded": {"media": []},
                "featuredMovie": {"media": []}, "series": {"media": []}}
@@ -353,12 +412,13 @@ def test_homepage_renders_every_season_countdown_and_live_refresh_hook(api, monk
          patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
         response = api.app.test_client().get("/")
     assert response.status_code == 200
-    assert response.data.count(b'class="release-ticker"') == 8
-    assert b"/api/v1/schedule" in response.data
-    assert b"release-schedule.js?v=20261019-drawer" in response.data
+    assert response.data.count(b'class="release-ticker release-ticker-compact"') == 8
+    assert b"id=\"liveScheduleList\"" in response.data
     assert b"Countdown 7" in response.data
     assert b"id=\"liveScheduleDrawer\"" in response.data
+    assert b"id=\"releaseTickerList\"" not in response.data
     assert b"Open live release schedule" in response.data
+    assert b"/watch/800/1" not in response.data
 
 
 def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
@@ -367,47 +427,51 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"id=\"liveScheduleDrawer\"" in response.data
     assert b"aria-label=\"Live release schedule\"" in response.data
     assert b"aria-expanded=\"false\"" in response.data
-    assert b"sync.css?v=20261019-drawer" in response.data
+    assert b"sync.css?v=20261019-responsive" in response.data
     assert b"release-schedule.js?v=20261019-drawer" in response.data
 
 
-def test_schedule_page_renders_dynamic_airing_rows(api, monkeypatch):
+def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
+    client = api.app.test_client()
+    for path in ("/", "/anime/123"):
+        if path == "/":
+            payload = {"trending": {"media": [anime()]}, "popularSeason": {"media": []},
+                       "topRated": {"media": []}, "recentlyAdded": {"media": []},
+                       "featuredMovie": {"media": []}, "series": {"media": []}}
+            with patch.object(api, "fetch_anilist", return_value=payload), \
+                 patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+                response = client.get(path)
+        else:
+            with patch.object(api, "fetch_anilist", return_value={"Media": anime()}), \
+                 patch.object(api.streaming_manager, "resolve_anime_mapping", return_value={}), \
+                 patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
+                response = client.get(path)
+        assert response.status_code == 200
+        assert b"min-width: 768px" in response.data
+        assert b"max-width: 1023px" in response.data
+        assert b"max-width: 767px" in response.data
+        assert b"sync.css?v=20261019-responsive" in response.data
+
+
+def test_legacy_schedule_url_opens_shared_drawer(api, monkeypatch):
     monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
-    card = api.format_anime_card({
-        **anime(anime_id=901, title="Schedule Entry"),
-        "status": "RELEASING", "season": "FALL", "seasonYear": 2026,
-        "nextAiringEpisode": {"episode": 7, "airingAt": 1793000000, "timeUntilAiring": 90},
-    })
-    with patch.object(api, "get_current_season_schedule", return_value=[card]):
-        response = api.app.test_client().get("/schedule")
-    assert response.status_code == 200
-    assert b"Schedule Entry" in response.data
-    assert b"Episode 7" in response.data
-    assert b"data-airing-epoch=\"1793000000\"" in response.data
-    assert b"/api/v1/schedule" in response.data
-    assert b"release-schedule.js?v=20261019-drawer" in response.data
-    assert b"Episode 7" in response.data
-    assert b"data-cd-d" in response.data
-    assert b"id=\"liveScheduleDrawer\"" in response.data
+    response = api.app.test_client().get("/schedule")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/?schedule=open")
+
+    payload = {"trending": {"media": []}, "popularSeason": {"media": []},
+               "topRated": {"media": []}, "recentlyAdded": {"media": []},
+               "featuredMovie": {"media": []}, "series": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=payload), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+        opened = api.app.test_client().get("/?schedule=open")
+    assert opened.status_code == 200
+    assert b"class=\"live-schedule-drawer is-open\"" in opened.data
+    assert b"aria-expanded=\"true\"" in opened.data
+    assert b"id=\"releaseTickerList\"" not in opened.data
 
 
-def test_schedule_page_marks_unknown_airing_time_without_countdown(api, monkeypatch):
-    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
-    card = api.format_anime_card({
-        **anime(anime_id=902, title="No Air Date"),
-        "status": "RELEASING", "season": "FALL", "seasonYear": 2026,
-    })
-    card["next_airing_episode"] = None
-    card["airing_hour"] = ""
-    with patch.object(api, "get_current_season_schedule", return_value=[card]):
-        response = api.app.test_client().get("/schedule")
-    assert response.status_code == 200
-    assert b"No Air Date" in response.data
-    assert b"Next-episode date not listed" in response.data
-    assert b"data-cd-d" not in response.data
-
-
-def test_ongoing_anime_episode_metadata_refreshes_from_provider(api):
+def test_ongoing_anime_episode_metadata_refreshes_from_provider(api, monkeypatch):
     airing = anime(anime_id=456, title="Airing Season")
     airing["status"] = "RELEASING"
     airing["nextAiringEpisode"] = {
@@ -415,6 +479,7 @@ def test_ongoing_anime_episode_metadata_refreshes_from_provider(api):
         "airingAt": 1793000000,
         "timeUntilAiring": 1800,
     }
+    monkeypatch.setattr(api, "_utc_now_timestamp", lambda: 1792000000)
     card = api.format_anime_card(airing)
     assert card["status"] == "Releasing"
     assert card["latest_ep"] == 14

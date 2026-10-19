@@ -1138,9 +1138,6 @@ class StreamingManager:
                     (e for e in eps if int(round(float(e["num"]))) == int(ep_num)),
                     None,
                 )
-                if not target_ep and 1 <= ep_num <= len(eps):
-                    target_ep = eps[ep_num - 1]
-
                 if target_ep:
                     heaven_ep_key = target_ep["key"]
                     st = self.animeheaven.get_streaming_sources(heaven_ep_key, referer_site_id=heaven_id)
@@ -1178,9 +1175,6 @@ class StreamingManager:
                 (e for e in ak_eps if int(round(float(e["num"]))) == int(ep_num)),
                 None,
             )
-            if not ak_ep and 1 <= ep_num <= len(ak_eps):
-                ak_ep = ak_eps[ep_num - 1]
-
             if ak_ep:
                 ak_servers = self.anikoto.get_servers(anikoto_slug, ep_num, ak_ep.get("data_ids", ""))
                 # Resolve top Sub and top Dub server eagerly so playback is instant,

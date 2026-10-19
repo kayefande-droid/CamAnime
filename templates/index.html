@@ -36,7 +36,7 @@
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/sync.css?v=20261019-drawer" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
@@ -839,28 +839,43 @@
         }
         .mobile-nav a:hover, .mobile-nav a.active { background: rgba(255, 179, 71, 0.12); color: var(--accent); }
 
-        @media (max-width: 900px) {
-            header { padding: 0.75rem 1rem; }
+        @media (min-width: 768px) and (max-width: 1023px) {
+            header { padding: 0.75rem 1.25rem; }
             .nav-links { display: none; }
             .nav-toggle { display: inline-flex; }
-            .header-inner { flex-wrap: wrap; gap: 0.75rem; }
-            .brand-group { flex: 1; min-width: 0; gap: 1rem; }
-            .site-logo { min-width: 0; }
-            .site-logo img { width: clamp(158px, 38vw, 218px); max-height: 48px; }
+            .header-inner { flex-wrap: wrap; gap: 0.65rem; }
+            .brand-group { flex: 1 1 auto; min-width: 0; gap: 0.85rem; }
+            .site-logo img { width: clamp(158px, 22vw, 210px); max-height: 48px; }
             .header-actions { flex: 1 1 100%; min-width: 0; }
             .search-form { flex: 1; max-width: none; min-width: 0; }
-            .main-wrap { padding: 1rem 1rem 3rem; }
-            .hero-body { padding: 1.75rem 1.5rem; }
-            .hero-spotlight, .hero-slide.active { min-height: 400px; }
-            .anime-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
-            .modal-backdrop { padding: 1rem; }
-            .modal-dialog { max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto; }
+            .main-wrap { padding: 1.25rem 1.25rem 3rem; }
+            .hero-spotlight, .hero-slide.active { min-height: clamp(380px, 48vw, 470px); }
+            .hero-body { padding: 2rem 2rem; }
+            .anime-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
         }
-        /* Two-column poster grids on phones (explicit, not auto-fill) */
-        @media (max-width: 600px) {
-            .anime-grid, .heaven-strip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+        @media (max-width: 767px) {
+            header { padding: 0.7rem 0.85rem; }
+            .nav-links { display: none; }
+            .nav-toggle { display: inline-flex; }
+            .header-inner { flex-wrap: wrap; gap: 0.65rem; }
+            .brand-group { flex: 1; min-width: 0; gap: 0.65rem; }
+            .site-logo img { width: clamp(145px, 43vw, 195px); max-height: 44px; }
+            .header-actions { flex: 1 1 100%; min-width: 0; }
+            .search-form { flex: 1; max-width: none; min-width: 0; }
+            .main-wrap { padding: 0.9rem 0.85rem 2.5rem; }
+            .hero-body { padding: 1.35rem 1.1rem 2.2rem; }
+            .hero-spotlight, .hero-slide.active { min-height: clamp(330px, 82vw, 440px); }
+            .anime-grid, .heaven-strip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+            .modal-backdrop { padding: 0.65rem; }
+            .modal-dialog { max-height: calc(100dvh - 1.3rem); overflow-y: auto; }
+            .section-head { align-items: flex-start; }
+        }
+        /* Desktop owns primary navigation; tablet and mobile use the menu toggle. */
+        /* Two-column poster grids on phones (explicit, not auto-fill). */
+        @media (max-width: 767px) {
+            .anime-grid, .heaven-strip-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
             .card-body { padding: 0.65rem 0.7rem 0.8rem; }
-            .hero-dots { right: 1.25rem; bottom: 1.25rem; }
+            .hero-dots { right: 1.1rem; bottom: 1rem; }
             .section-head { flex-wrap: wrap; }
             .hero-ctas .btn-primary, .hero-ctas .btn-secondary { min-height: 44px; }
         }
@@ -933,7 +948,7 @@
     <section class="hero-spotlight" id="heroCarousel">
         {% for slide in hero_slides %}
         <div class="hero-slide {{ 'active' if loop.first else '' }}" data-slide-index="{{ loop.index0 }}">
-            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" fetchpriority="{{ 'high' if loop.first else 'auto' }}">
+            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="hero-vignette"></div>
             <div class="hero-body">
                 <div class="hero-kicker">
@@ -951,9 +966,15 @@
                 </div>
                 <p class="hero-desc">{{ slide.description }}</p>
                 <div class="hero-ctas">
+                    {% if slide.latest_ep %}
                     <a href="/watch/{{ slide.id }}/1" class="btn-primary">
                         <i class="fas fa-play"></i> Watch Episode 1
                     </a>
+                    {% else %}
+                    <a href="/anime/{{ slide.id }}" class="btn-primary">
+                        <i class="fas fa-circle-info"></i> View Details
+                    </a>
+                    {% endif %}
                     <button type="button" class="btn-secondary" onclick="openTrailerModal('{{ slide.title | e }}', '{{ slide.trailer_id or '' }}', {{ slide.id }})">
                         <i class="fab fa-youtube" style="color: #ff4e45;"></i> Watch Trailer
                     </button>
@@ -981,39 +1002,7 @@
     </div>
     {% endif %}
 
-    <!-- ─── NEXT EPISODE RELEASE TICKER (all users, live countdown) ─── -->
-    {% if page_type == 'home' and countdown_items is defined %}
-    <section class="section-block" id="releaseTickerSection">
-        <div class="section-head">
-            <div class="section-title-wrap">
-                <span class="live-dot"></span>
-                <h2 class="section-title" style="font-size:1.25rem;">Next Episode Release Schedule</h2>
-            </div>
-            <a href="/schedule" class="section-link" style="color:#34d399;">Open full schedule <i class="fas fa-arrow-right"></i></a>
-        </div>
-        <div id="releaseTickerList" data-schedule-url="/api/v1/schedule" data-season="{{ season_name }} {{ season_year }}">
-            {% for it in countdown_items %}
-            {% set air = it.next_airing_episode %}
-            <div class="release-ticker" data-anime-id="{{ it.id }}" data-airing-epoch="{{ air.airing_at if air else 0 }}" data-airing-episode="{{ air.episode if air else '' }}" data-countdown-state="{{ 'upcoming' if air and air.airing_at > now_ts else ('aired_checking' if air else 'date_unknown') }}">
-                <div>
-                    <div class="rt-title">{{ it.title }}</div>
-                    <div class="rt-sub">Episode {{ air.episode if air else '?' }} · {{ (it.airing_hour | replace(' UTC', '')) if it.airing_hour else 'Air date not listed' }} UTC · {{ season_name }} {{ season_year }}</div>
-                </div>
-                <div class="countdown-chips" data-cd-for="{{ it.id }}">
-                    <span class="cd-chip"><b data-cd-d>-</b><span>d</span></span>
-                    <span class="cd-chip"><b data-cd-h>-</b><span>hrs</span></span>
-                    <span class="cd-chip"><b data-cd-m>-</b><span>min</span></span>
-                    <span class="cd-chip"><b data-cd-s>-</b><span>sec</span></span>
-                    <span class="release-state" data-release-state>{{ 'Countdown' if air and air.airing_at > now_ts else ('Provider listing found · verify release' if it.official_link_available else ('Aired · checking provider' if air else 'Awaiting schedule from AniList')) }}</span>
-                </div>
-            </div>
-            {% else %}
-            <p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>
-            {% endfor %}
-        </div>
-        <script src="/static/js/release-schedule.js?v=20261019-drawer" defer></script>
-    </section>
-    {% endif %}
+
 
     <!-- ─── FACTUAL SITE COUNTER STRIP (real numbers only) ─── -->
     {% if page_type == 'home' and public_counters is defined %}
@@ -1084,12 +1073,18 @@
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                         {% endif %}
                     </div>
-                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
+                            {% if anime.latest_ep %}
                             <a href="/watch/{{ anime.id }}/1" class="card-btn-play">
                                 <i class="fas fa-play"></i> Stream
                             </a>
+                            {% else %}
+                            <a href="/anime/{{ anime.id }}" class="card-btn-play">
+                                <i class="fas fa-circle-info"></i> Details
+                            </a>
+                            {% endif %}
                             <button type="button" class="card-btn-trailer" title="Watch YouTube Trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
@@ -1158,13 +1153,12 @@
                 <span class="section-accent-bar"></span>
                 <h2 class="section-title">Anime Classics</h2>
                 <span class="section-subtitle">timeless must-watch legends</span>
-                <span class="section-subtitle" style="color:#f59e0b">+ Avatar: Seven Havens (2026)</span>
             </div>
             <button type="button" class="shuffle-btn" onclick="shuffleClassics()"><i class="fas fa-random"></i> Shuffle</button>
         </div>
         <div class="anime-grid" id="classicsGrid">
             {% for c in classics %}
-            <a href="{{ c.external_url if c.external_url else '/anime/' ~ c.id }}" class="anime-card classics-card" data-title="{{ c.title }}" {% if c.external_url %}target="_blank" rel="noopener noreferrer"{% endif %}>
+            <article class="anime-card classics-card" data-title="{{ c.title }}">
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
                         <span class="ep-badge">{{ c.episode or 'CLASSIC' }}</span>
@@ -1172,24 +1166,25 @@
                         <span class="score-badge"><i class="fas fa-star"></i> {{ c.rating }}</span>
                         {% endif %}
                     </div>
-                    <img src="{{ c.image }}" loading="lazy" alt="{{ c.title }}" onerror="this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ c.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ c.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             {% if c.external_url %}
-                            <span class="card-btn-play" aria-label="Open official streaming page"><i class="fas fa-arrow-up-right-from-square"></i> Official page</span>
-                            <span class="card-btn-trailer" aria-label="Official episodes depend on licensed providers"><i class="fas fa-circle-info"></i></span>
-                            {% else %}
+                            <a href="{{ c.external_url }}" class="card-btn-play" target="_blank" rel="noopener noreferrer" aria-label="Open official streaming page"><i class="fas fa-arrow-up-right-from-square"></i> Official page</a>
+                            {% elif c.latest_ep %}
                             <a href="/watch/{{ c.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
                             <a href="/anime/{{ c.id }}" class="card-btn-trailer" title="Episodes & Direct Download"><i class="fas fa-download"></i></a>
+                            {% else %}
+                            <a href="/anime/{{ c.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
                             {% endif %}
                         </div>
                     </div>
                 </div>
                 <div style="padding:.7rem .8rem 1rem;flex:1;display:flex;flex-direction:column;gap:.3rem;min-width:0;">
-                    <div class="card-title" style="margin:0;">{{ c.title }}</div>
+                    <a href="/anime/{{ c.id }}" class="card-title" style="margin:0;">{{ c.title }}</a>
                     <div class="card-submeta"><span>{{ c.year or c.season }}</span><span>{{ 'New series' if c.external_url else 'Classic' }}</span></div>
                 </div>
-            </a>
+            </article>
             {% endfor %}
         </div>
 
@@ -1253,10 +1248,10 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
-                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
+                            {% if anime.latest_ep %}<a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>{% else %}<a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>{% endif %}
                             <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
@@ -1295,10 +1290,10 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
-                            <a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>
+                            {% if anime.latest_ep %}<a href="/watch/{{ anime.id }}/1" class="card-btn-play"><i class="fas fa-play"></i> Stream</a>{% else %}<a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>{% endif %}
                             <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
@@ -1333,13 +1328,13 @@
         </div>
         <div class="anime-grid" id="weeklyGrid">
             {% for anime in weekly_row %}
-            <a href="/watch/{{ anime.id }}/1" class="anime-card">
+            <a href="{{ '/watch/' ~ anime.id ~ '/1' if anime.latest_ep else '/anime/' ~ anime.id }}" class="anime-card">
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>
@@ -1365,13 +1360,13 @@
         </div>
         <div class="anime-grid" id="monthlyGrid">
             {% for anime in monthly_row %}
-            <a href="/watch/{{ anime.id }}/1" class="anime-card">
+            <a href="{{ '/watch/' ~ anime.id ~ '/1' if anime.latest_ep else '/anime/' ~ anime.id }}" class="anime-card">
                 <div class="card-poster-wrap">
                     <div class="card-badges-top">
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image }}" loading="lazy" alt="{{ anime.title }}">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>

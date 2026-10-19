@@ -22,7 +22,7 @@
     <link rel="dns-prefetch" href="https://s4.anilist.co">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <link href="/static/css/sync.css" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         :root {
@@ -514,25 +514,39 @@
             padding: 0.2rem 0.7rem;
         }
 
-        /* Responsive: fluid grids, wrapping header, compact banner offset on phones */
+        /* Three standard viewport classes: PC >=1024, tablet 768-1023, mobile <768. */
         .dossier-card > *, .info-col, .two-col-layout > * { min-width: 0; }
-        .header-inner { flex-wrap: wrap; }
-        .header-nav { flex-wrap: wrap; }
+        .header-inner { flex-wrap: nowrap; }
+        .header-nav { flex-wrap: nowrap; }
         .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr)); }
         .mini-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
-        @media (max-width: 980px) {
-            .dossier-card { grid-template-columns: 1fr; }
-            .poster-col { max-width: 240px; margin: 0 auto; width: 100%; }
-            .two-col-layout { grid-template-columns: 1fr; }
-            .container { padding: 0 1rem; }
+        @media (min-width: 768px) and (max-width: 1023px) {
+            header { padding-inline: 1.25rem; }
+            .header-inner { gap: 0.75rem; }
+            .header-nav { justify-content: flex-end; gap: 0.45rem; }
+            .header-nav .nav-pill { padding: 0.45rem 0.7rem; font-size: 0.78rem; }
+            .container { padding-inline: 1.25rem; }
+            .dossier-card { grid-template-columns: minmax(190px, 0.34fr) minmax(0, 1fr); gap: 1.5rem; padding: 1.5rem; }
+            .poster-col { width: 100%; }
+            .two-col-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 0.7fr); gap: 1.1rem; }
+            .panel-card { padding: 1.2rem; }
+            .ep-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
         }
-        @media (max-width: 600px) {
+        @media (max-width: 767px) {
             header { padding: 0.7rem 1rem; }
-            .banner-wrap { height: 220px; }
-            .container { margin-top: -120px; }
-            .dossier-card { padding: 1.25rem; gap: 1.5rem; }
+            .header-inner { flex-wrap: wrap; gap: 0.75rem; }
+            .header-nav { width: 100%; flex-wrap: wrap; gap: 0.45rem; }
+            .header-nav .nav-pill { flex: 1 1 auto; text-align: center; }
+            .banner-wrap { height: clamp(190px, 42vw, 280px); }
+            .container { margin-top: clamp(-125px, -24vw, -78px); padding-inline: 0.85rem; }
+            .dossier-card { grid-template-columns: 1fr; padding: 1.1rem; gap: 1.25rem; }
+            .poster-col { width: min(100%, 210px); margin-inline: auto; }
+            .two-col-layout { grid-template-columns: 1fr; gap: 1rem; }
+            .panel-card { padding: 1rem; }
+            .panel-header { align-items: stretch; }
+            .ep-controls { width: 100%; }
             .ep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
-            .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+            .mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
             .action-bar .btn-watch, .action-bar a, .action-bar button { min-height: 44px; }
             .ep-filter-input { max-width: none; }
         }
@@ -556,20 +570,24 @@
 </header>
 
 <div class="banner-wrap">
-    <img src="{{ anime.banner or anime.image }}" class="banner-img" alt="{{ anime.title }}" fetchpriority="high" decoding="async">
+    <img src="{{ anime.banner or anime.image or '/static/brand/camanime-icon.svg' }}" class="banner-img" alt="{{ anime.title }}" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
     <div class="banner-gradient"></div>
 </div>
 
 <div class="container">
     <div class="dossier-card">
         <div class="poster-col">
-            <img src="{{ anime.image }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async">
+            <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="scraper-status-box">
-                <strong><i class="fas fa-check-circle"></i> Multi-Source Verified</strong>
                 {% if anime.heaven_id %}
-                    AnimeHeaven ID: <code>{{ anime.heaven_id }}</code> (Direct MP4 Ready)
+                    <strong><i class="fas fa-check-circle"></i> Provider catalog matched</strong>
+                    Episodes listed by AnimeHeaven: <code>{{ anime.episodes | selectattr('provider_listed') | list | length }}</code>
+                {% elif anime.episodes %}
+                    <strong><i class="fas fa-circle-check"></i> Episode schedule available</strong>
+                    {{ anime.episodes | length }} episodes confirmed as aired or provider-listed.
                 {% else %}
-                    CamStream 1080p HLS & Embed Mirrors Ready
+                    <strong><i class="fas fa-circle-info"></i> Episodes not confirmed</strong>
+                    No released episode count is currently available.
                 {% endif %}
             </div>
         </div>
@@ -580,8 +598,7 @@
                     <span class="badge gold"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     <span class="badge">{{ anime.format }}</span>
                     <span class="badge">{{ anime.status }}</span>
-                    <span class="badge">{{ anime.episodes | length }} Episodes</span>
-                    <span class="badge emerald">SUB & DUB • 1080p</span>
+                    {% if anime.episodes %}<span class="badge">{{ anime.episodes | length }} Released Episodes</span>{% else %}<span class="badge">Episodes not released</span>{% endif %}
                     {% if anime.season %}
                     <span class="badge">{{ anime.season }}</span>
                     {% endif %}
@@ -602,13 +619,18 @@
             </div>
 
             <div class="action-bar">
-                <a href="/watch/{{ anime.id }}/1?audio=sub" class="btn-watch">
-                    <i class="fas fa-play"></i> Watch Ep 1 (SUB)
+                {% if anime.episodes %}
+                {% set first_episode = anime.episodes | map(attribute='num') | min %}
+                <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=sub" class="btn-watch">
+                    <i class="fas fa-play"></i> Watch Ep {{ first_episode }} (SUB)
                 </a>
-                <a href="/watch/{{ anime.id }}/1?audio=dub" class="btn-outline">
-                    <i class="fas fa-headphones"></i> Watch Ep 1 (DUB)
+                <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=dub" class="btn-outline">
+                    <i class="fas fa-headphones"></i> Watch Ep {{ first_episode }} (DUB)
                 </a>
-                {% if anime.heaven_id %}
+                {% else %}
+                <span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>
+                {% endif %}
+                {% if anime.heaven_id and anime.episodes %}
                 <button type="button" class="btn-outline emerald" onclick="loadSeasonDownloads('{{ anime.heaven_id }}')">
                     <i class="fas fa-cloud-download-alt"></i> Direct Season MP4 Pack
                 </button>
@@ -626,7 +648,7 @@
             <div class="panel-header">
                 <div class="panel-title">
                     <span class="accent-dot"></span>
-                    Episodes ({{ anime.episodes | length }})
+                    Released episodes ({{ anime.episodes | length }})
                 </div>
                 <div class="ep-controls">
                     <input type="text" id="epSearchInput" class="ep-filter-input" placeholder="Jump to episode #..." oninput="filterEpisodes(this.value)">
@@ -637,6 +659,7 @@
             </div>
 
             <div class="ep-grid" id="epGrid">
+                {% if not anime.episodes %}<p class="schedule-empty">No released episodes are confirmed yet. This will update when an episode airs or a provider lists it.</p>{% endif %}
                 {% for ep in anime.episodes %}
                 <a href="/watch/{{ anime.id }}/{{ ep.num }}" class="ep-card" data-ep="{{ ep.num }}">
                     <div class="ep-card-top">
@@ -734,8 +757,8 @@
         </div>
         <div class="mini-grid">
             {% for rec in anime.recommendations %}
-            <a href="/anime/{{ rec.id }}" class="mini-poster-card">
-                <img src="{{ rec.image }}" loading="lazy" alt="{{ rec.title }}">
+            <a href="/anime/{{ rec.id }}" class="mini-poster-card">                    <img src="{{ rec.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ rec.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+
                 <div class="mini-poster-body">
                     <div class="mini-poster-rel">★ {{ rec.rating }}{% if rec.episode %} • {{ rec.episode }}{% endif %}</div>
                     <div class="mini-poster-title">{{ rec.title }}</div>

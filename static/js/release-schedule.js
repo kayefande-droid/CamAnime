@@ -63,6 +63,9 @@
         }
       }
     });
+    if (window.location && new URLSearchParams(window.location.search || '').get('schedule') === 'open') {
+      setDrawerOpen(true);
+    }
   }
 
   function escapeHtml(value) {

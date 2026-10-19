@@ -298,18 +298,23 @@ def _inject_live_schedule_drawer(response):
             season_name=season.title(),
             season_year=year,
             now_ts=_utc_now_timestamp(),
+            open_schedule=request.args.get("schedule") == "open",
         )
         stylesheet_pattern = r'(href=["\'])/static/css/sync\.css(?:\?[^"\']*)?(["\'])'
         body, stylesheet_count = re.subn(
             stylesheet_pattern,
-            r'\1/static/css/sync.css?v=20261019-drawer\2',
+            r'\1/static/css/sync.css?v=20261019-responsive\2',
             body,
             count=1,
+        )
+        body = body.replace(
+            "/static/css/sync.css?v=20261019-drawer",
+            "/static/css/sync.css?v=20261019-responsive",
         )
         if not stylesheet_count and "</head>" in body:
             body = body.replace(
                 "</head>",
-                '<link href="/static/css/sync.css?v=20261019-drawer" rel="stylesheet"></head>',
+                '<link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet"></head>',
                 1,
             )
         script = ''
@@ -340,20 +345,6 @@ ANIME_CLASSICS: List[Dict] = [
     {"id": 5680, "title": "K-On!", "year": 2009, "why": "Beloved slice-of-life band classic"},
     {"id": 11719, "title": "Sword Art Online", "year": 2012, "why": "Isekai VR-era modern classic"},
 ]
-
-# Avatar: Seven Havens premiered in 2026, but is not currently indexed by AniList.
-# Keep it discoverable with an honest metadata-only card; never invent a playable ID.
-AVATAR_SEVEN_HAVENS = {
-    "id": "avatar-seven-havens",
-    "title": "Avatar: Seven Havens",
-    "year": 2026,
-    "why": "New animated Avatar series (2026) — official episodes depend on licensed providers.",
-    "external_url": "https://www.paramountplus.com/shows/avatar-seven-havens/",
-    "image": "",
-    "rating": "",
-    "episode": "2026 SERIES",
-    "format": "TV",
-}
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: OrderedDict[str, tuple] = OrderedDict()
@@ -728,6 +719,54 @@ def clean_html_description(desc: Optional[str]) -> str:
     return text.strip()
 
 
+def _episode_number(value) -> Optional[int]:
+    """Return a positive whole episode number; ignore malformed/special labels."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number < 1 or not number.is_integer():
+        return None
+    return int(number)
+
+
+def _confirmed_episode_numbers(anime: Dict, provider_episodes=None,
+                               now_ts: Optional[int] = None) -> List[int]:
+    """Return episode numbers confirmed aired or explicitly listed by a provider."""
+    anime = anime or {}
+    now_ts = _utc_now_timestamp() if now_ts is None else int(now_ts)
+    provider_numbers = {
+        number for number in (
+            _episode_number((episode or {}).get("num"))
+            for episode in (provider_episodes or [])
+        ) if number is not None
+    }
+    status = (anime.get("status") or "").upper()
+    next_airing = anime.get("nextAiringEpisode") or {}
+    next_number = _episode_number(next_airing.get("episode"))
+    airing_at = next_airing.get("airingAt")
+
+    if status == "RELEASING":
+        # Never count the listed next episode at its scheduled instant; wait
+        # for AniList to advance or an exact episode listing from a provider.
+        aired_count = 0
+        if next_number and isinstance(airing_at, int):
+            aired_count = next_number - 1 if airing_at >= now_ts else next_number
+        provider_numbers.update(range(1, aired_count + 1))
+    elif status == "FINISHED":
+        # A finished series' known AniList total is its completed episode count.
+        total = _episode_number(anime.get("episodes")) or 0
+        provider_numbers.update(range(1, total + 1))
+
+    return sorted(provider_numbers)
+
+
+def _confirmed_episode_count(anime: Dict, provider_episodes=None,
+                             now_ts: Optional[int] = None) -> int:
+    """Return the highest episode number confirmed aired or provider-listed."""
+    return max(_confirmed_episode_numbers(anime, provider_episodes, now_ts), default=0)
+
+
 def format_anime_card(anime: Dict) -> Dict:
     if not anime:
         return {}
@@ -740,16 +779,17 @@ def format_anime_card(anime: Dict) -> Dict:
 
     next_ep = anime.get("nextAiringEpisode")
     total_eps = anime.get("episodes")
-    if next_ep and next_ep.get("episode"):
-        aired_eps = max(1, next_ep["episode"] - 1)
-        ep_badge = f"EP {aired_eps}" + (f" / {total_eps}" if total_eps else "")
-        latest_ep = aired_eps
-    elif total_eps:
-        ep_badge = f"{total_eps} EPS"
-        latest_ep = total_eps
+    status = (anime.get("status") or "").upper()
+    latest_ep = _confirmed_episode_count(anime)
+    if status == "RELEASING":
+        ep_badge = f"EP {latest_ep}" if latest_ep else "AIRING"
+    elif status == "NOT_YET_RELEASED":
+        ep_badge = "UPCOMING"
+    elif latest_ep:
+        ep_badge = f"{latest_ep} EPS"
     else:
-        ep_badge = "AIRING" if anime.get("status") == "RELEASING" else "EPS ?"
-        latest_ep = 12
+        ep_badge = "EPS ?"
+    latest_ep = latest_ep or None
 
     trailer = anime.get("trailer") or {}
     yt_id = (
@@ -771,12 +811,12 @@ def format_anime_card(anime: Dict) -> Dict:
         "title_romaji": title_ro or title,
         "title_native": title_obj.get("native") or "",
         "description": clean_html_description(anime.get("description")),
-        "image": image_url,
-        "banner": anime.get("bannerImage") or image_url,
+        "image": image_url or "/static/brand/camanime-icon.svg",
+        "banner": anime.get("bannerImage") or image_url or "/static/brand/camanime-icon.svg",
         "color": cover.get("color") or "#f59e0b",
         "episode": ep_badge,
         "latest_ep": latest_ep,
-        "total_episodes": total_eps,
+        "total_episodes": _episode_number(total_eps) if status == "FINISHED" else None,
         "format": anime.get("format") or "TV",
         "status": (anime.get("status") or "FINISHED").replace("_", " ").title(),
         "season": f"{(anime.get('season') or '').title()} {anime.get('seasonYear') or ''}".strip(),
@@ -921,9 +961,6 @@ def home():
         classics = [{**c, "image": "", "rating": "", "episode": "CLASSIC", "format": "TV"}
                     for c in ANIME_CLASSICS]
 
-    # Add the 2026 Avatar series explicitly because it is not in AniList yet.
-    classics.append(dict(AVATAR_SEVEN_HAVENS))
-
     # Global most-watched ranking feed for all three tabs (Day/Week/Month)
     try:
         most_viewed_day = platform.most_watched(int(time.time()) - 86400, limit=12)
@@ -980,6 +1017,7 @@ def home():
         heaven_recent=heaven_recent,
         featured=featured,
         hero_slides=hero_slides,
+        open_schedule=request.args.get("schedule") == "open",
         genres=POPULAR_GENRES,
         active_genre="",
         active_format="",
@@ -1049,14 +1087,17 @@ def details(anime_id: int):
         else None
     )
 
-    # Calculate episodes
-    total_episodes = raw_anime.get("episodes") or 0
-    if raw_anime.get("status") == "RELEASING" and raw_anime.get("nextAiringEpisode"):
-        total_episodes = max(total_episodes, raw_anime["nextAiringEpisode"]["episode"] - 1)
-    if heaven_info and heaven_info.get("total_episodes"):
-        total_episodes = max(total_episodes, heaven_info["total_episodes"])
-    if total_episodes <= 0:
-        total_episodes = 12
+    # Only list episodes AniList says have aired or a matched provider lists.
+    provider_episodes = list((heaven_info or {}).get("episodes") or [])
+    if mapping.get("anikoto_slug"):
+        provider_episodes.extend(streaming_manager.anikoto.get_episodes(mapping["anikoto_slug"]))
+    confirmed_numbers = _confirmed_episode_numbers(raw_anime, provider_episodes)
+    total_episodes = len(confirmed_numbers)
+    provider_numbers = {
+        _episode_number((episode or {}).get("num"))
+        for episode in provider_episodes
+    }
+    provider_numbers.discard(None)
 
     # Build rich episode metadata from AniList streamingEpisodes if available
     st_eps = raw_anime.get("streamingEpisodes") or []
@@ -1078,7 +1119,7 @@ def details(anime_id: int):
                 pass
 
     episode_list = []
-    for i in range(1, total_episodes + 1):
+    for i in confirmed_numbers:
         meta = ep_meta_by_num.get(i, {})
         h_ep = heaven_eps_by_num.get(i)
         episode_list.append({
@@ -1087,6 +1128,7 @@ def details(anime_id: int):
             "title": meta.get("title") or f"Episode {i}",
             "thumbnail": meta.get("thumbnail") or card["banner"] or card["image"],
             "heaven_key": h_ep["key"] if h_ep else None,
+            "provider_listed": i in provider_numbers,
             "added": h_ep.get("added", "") if h_ep else "",
         })
 
@@ -1100,12 +1142,8 @@ def details(anime_id: int):
             # Accurate per-season episode count: a null `episodes` is normal for
             # titles still airing, so use the aired count instead of a blank or
             # invented number.
-            _count = node.get("episodes") if isinstance(node.get("episodes"), int) else None
-            _next = node.get("nextAiringEpisode") or {}
-            _next_num = _next.get("episode") if isinstance(_next, dict) else None
-            if isinstance(_next_num, int) and _next_num > 1:
-                _count = max(_count or 0, _next_num - 1)
-            rel_card["episode_count"] = _count
+            _count = _confirmed_episode_count(node)
+            rel_card["episode_count"] = _count or None
             relations.append(rel_card)
 
     # Order seasons chronologically: prequels/parents first, then by year
@@ -1183,27 +1221,35 @@ def watch(anime_id: int, ep_num: int):
     )
     card["trailer_id"] = trailer_id
 
+    # Resolve real provider episode numbers before building the selector. This
+    # also prevents an arbitrary /watch/<id>/<future-episode> URL from inventing
+    # a slot for an unreleased episode.
+    mapping = streaming_manager.resolve_anime_mapping(
+        anime_id, titles, mal_id=raw_anime.get("idMal"), heaven_override=heaven_override
+    )
+    provider_episodes = []
+    if mapping.get("heaven_id"):
+        h_info = streaming_manager.animeheaven.get_anime_info(mapping["heaven_id"])
+        provider_episodes.extend((h_info or {}).get("episodes") or [])
+    if mapping.get("anikoto_slug"):
+        provider_episodes.extend(streaming_manager.anikoto.get_episodes(mapping["anikoto_slug"]))
+    confirmed_numbers = _confirmed_episode_numbers(raw_anime, provider_episodes)
+    total_episodes = len(confirmed_numbers)
+    if ep_num not in confirmed_numbers:
+        return redirect(url_for("details", anime_id=anime_id))
+
     bundle = streaming_manager.get_full_episode_bundle(
         anilist_id=anime_id,
         ep_num=ep_num,
         titles=titles,
         mal_id=raw_anime.get("idMal"),
         preferred_audio=preferred_audio,
-        heaven_override=heaven_override,
+        heaven_override=mapping.get("heaven_id"),
     )
-
-    # Calculate episode list
-    total_episodes = raw_anime.get("episodes") or 0
-    if raw_anime.get("status") == "RELEASING" and raw_anime.get("nextAiringEpisode"):
-        total_episodes = max(total_episodes, raw_anime["nextAiringEpisode"]["episode"] - 1)
-    if bundle.get("heaven_id"):
-        h_info = streaming_manager.animeheaven.get_anime_info(bundle["heaven_id"])
-        if h_info and h_info.get("total_episodes"):
-            total_episodes = max(total_episodes, h_info["total_episodes"])
-    if total_episodes < ep_num:
-        total_episodes = max(ep_num, 12)
-
-    episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in range(1, total_episodes + 1)]
+    episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in confirmed_numbers]
+    episode_position = confirmed_numbers.index(ep_num)
+    previous_number = confirmed_numbers[episode_position - 1] if episode_position > 0 else None
+    next_number = confirmed_numbers[episode_position + 1] if episode_position + 1 < len(confirmed_numbers) else None
 
     active_server = bundle.get("active_server") or {
         "id": "embed-vidsrc-sub",
@@ -1224,12 +1270,8 @@ def watch(anime_id: int, ep_num: int):
             # Accurate per-season episode count: a null `episodes` is normal for
             # titles still airing, so use the aired count instead of a blank or
             # invented number.
-            _count = node.get("episodes") if isinstance(node.get("episodes"), int) else None
-            _next = node.get("nextAiringEpisode") or {}
-            _next_num = _next.get("episode") if isinstance(_next, dict) else None
-            if isinstance(_next_num, int) and _next_num > 1:
-                _count = max(_count or 0, _next_num - 1)
-            rel_card["episode_count"] = _count
+            _count = _confirmed_episode_count(node)
+            rel_card["episode_count"] = _count or None
             relations.append(rel_card)
 
     return render_template(
@@ -1249,8 +1291,8 @@ def watch(anime_id: int, ep_num: int):
         downloads=bundle.get("downloads", []),
         active_server=active_server,
         preferred_audio=preferred_audio,
-        prev_ep={"id": ep_num - 1, "num": ep_num - 1} if ep_num > 1 else None,
-        next_ep={"id": ep_num + 1, "num": ep_num + 1} if ep_num < total_episodes else None,
+        prev_ep={"id": previous_number, "num": previous_number} if previous_number else None,
+        next_ep={"id": next_number, "num": next_number} if next_number else None,
     )
 
 
@@ -1966,10 +2008,8 @@ def admin_page():
 
 @app.route("/schedule")
 def schedule_page():
-    season, year = current_anime_season()
-    return render_template("schedule.html", season_name=season.title(), season_year=year,
-                           now_ts=_utc_now_timestamp(), countdown_items=get_current_season_schedule(),
-                           user=_current_user())
+    """Keep the legacy schedule URL, but show the shared homepage drawer only."""
+    return redirect(url_for("home", schedule="open"))
 
 
 @app.route("/promo")

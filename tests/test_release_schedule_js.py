@@ -43,8 +43,8 @@ const document = {
 };
 const sandbox = {
   document,
-  window: { location: { origin: 'https://camanime.example' } },
-  URL,
+  window: { location: { origin: 'https://camanime.example', search: '' } }, URL,
+  URLSearchParams,
   Date: { now: () => now * 1000 },
   setInterval: (callback, period) => intervals.push({ callback, period }),
   fetch: async () => {
@@ -162,7 +162,9 @@ document.hidden = false;
 document.addEventListener = (name, callback) => { documentEvents[name] = callback; };
 document.querySelectorAll = selector => selector.includes('#liveScheduleList') ? [drawerRow] : [];
 const sandbox = {
-  document, window: { location: { origin: 'https://camanime.example' } }, URL,
+  document,
+  window: { location: { origin: 'https://camanime.example', search: '' } }, URL,
+  URLSearchParams,
   Date: { now: () => now }, setInterval: (callback, period) => intervals.push({ callback, period }),
   fetch: async url => {
     if (url !== '/api/v1/schedule') throw new Error('unexpected schedule URL');

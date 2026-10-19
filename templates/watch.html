@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
-    <link href="/static/css/sync.css" rel="stylesheet">
+    <link href="/static/css/sync.css?v=20261019-responsive" rel="stylesheet">
     <script src="/static/js/site.js" defer></script>
     <style>
         :root {
@@ -421,30 +421,42 @@
             filter: brightness(1.1);
         }
 
-        /* Responsive: collapse cinema rail, wrap header/transport, keep player 16:9 in-container */
+        /* Three standard viewport classes: PC >=1024, tablet 768-1023, mobile <768. */
         .cinema-grid > *, .player-column, .episode-sidebar { min-width: 0; }
-        .header-inner { flex-wrap: wrap; }
+        .header-inner { flex-wrap: nowrap; }
         .header-inner > div { min-width: 0; }
-        .header-inner > div:last-child { display: flex; gap: 0.65rem; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
-        @media (max-width: 600px) {
-            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.7rem; font-size: 0.75rem; }
+        .header-inner > div:first-child { flex: 1 1 auto; }
+        .header-inner > div:last-child { display: flex; gap: 0.65rem; flex-wrap: nowrap; justify-content: flex-end; max-width: 100%; }
+        .breadcrumb-bar { min-width: 0; flex-wrap: nowrap; }
+        .breadcrumb-bar a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28vw; display: inline-block; vertical-align: bottom; }
+        @media (min-width: 768px) and (max-width: 1023px) {
+            header { padding-inline: 1rem; }
+            .header-inner { gap: 0.65rem; }
+            .header-inner > div:first-child { gap: 0.75rem !important; }
+            .header-inner > div:last-child { gap: 0.4rem; }
+            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.65rem; font-size: 0.76rem; }
+            .watch-container { padding-inline: 1.25rem; }
+            .cinema-grid { grid-template-columns: minmax(0, 1fr) minmax(230px, 0.38fr); gap: 1rem; }
+            .episode-sidebar { padding: 0.9rem; }
+            .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); }
+            .lower-panels { gap: 1rem; }
         }
-        .breadcrumb-bar { min-width: 0; flex-wrap: wrap; }
-        .breadcrumb-bar a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52vw; display: inline-block; vertical-align: bottom; }
-        @media (max-width: 1080px) {
-            .cinema-grid { grid-template-columns: 1fr; }
-            .lower-panels { grid-template-columns: 1fr; }
-            .watch-container { padding: 0 1rem; }
-            .header-inner > div:last-child { flex-wrap: wrap; }
-            .episode-sidebar { max-height: none; }
-        }
-        @media (max-width: 600px) {
+        @media (max-width: 767px) {
             header { padding: 0.7rem 1rem; }
-            .watch-container { padding: 0 0.75rem; margin-top: 1rem; }
+            .header-inner { flex-wrap: wrap; gap: 0.7rem; }
+            .header-inner > div:first-child { width: 100%; gap: 0.75rem !important; }
+            .header-inner > div:last-child { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 0.45rem; }
+            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.7rem; font-size: 0.75rem; }
+            .breadcrumb-bar { flex: 1; }
+            .breadcrumb-bar a { max-width: 48vw; }
+            .cinema-grid, .lower-panels { grid-template-columns: 1fr; }
+            .watch-container { padding: 0 0.85rem; margin-top: 1rem; }
             .video-stage { border-radius: 12px; }
+            .episode-sidebar { max-height: 360px; }
             .transport-bar { flex-direction: column; align-items: stretch; }
             .now-playing-info { flex-wrap: wrap; }
-            .transport-actions .ctrl-btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+            .transport-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+            .transport-actions .ctrl-btn { flex: 1 1 145px; justify-content: center; min-height: 44px; }
             .server-row-label { min-width: 0; }
             .skip-intro-btn { right: 12px; bottom: 64px; padding: 0.5rem 0.9rem; }
             .dl-row { flex-wrap: wrap; }
@@ -560,11 +572,12 @@
         <!-- ─── EPISODE SELECTOR SIDEBAR ─── -->
         <aside class="episode-sidebar">
             <div class="sidebar-head">
-                <span class="sidebar-title">Episodes (1–{{ total_episodes }})</span>
+                <span class="sidebar-title">Released episodes ({{ total_episodes }})</span>
                 <span style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">{{ preferred_audio | upper }}</span>
             </div>
             <input type="text" class="ep-search-box" placeholder="Filter episode number..." oninput="filterRailEpisodes(this.value)">
             <div class="ep-rail-list" id="epRailList">
+                {% if not anime.episodes %}<p class="schedule-empty">No released episodes are confirmed.</p>{% endif %}
                 {% for ep in anime.episodes %}
                 <a href="/watch/{{ anime.id }}/{{ ep.num }}?audio={{ preferred_audio }}"
                    class="ep-rail-item {{ 'current' if ep.num == ep_num else '' }}"
