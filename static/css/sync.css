@@ -196,6 +196,40 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 .release-provider{display:inline-flex;align-items:center;color:#FFB347;font-size:.76rem;font-weight:700;text-decoration:underline}
 .schedule-empty{padding:1rem;color:var(--text-secondary,#a0abc0);background:var(--bg-elevated,#0e111a);border-radius:12px}
 
+/* Always-visible slide-in live schedule tab and responsive side drawer. */
+.live-schedule-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.live-schedule-tab{position:fixed;left:0;top:42%;z-index:4200;display:flex;align-items:center;gap:.48rem;min-height:3.1rem;padding:.55rem .6rem .55rem .72rem;color:#07080d;background:linear-gradient(115deg,#ffd27d,#FFB347 72%,#ff985b);border:1px solid rgba(255,255,255,.34);border-left:0;border-radius:0 14px 14px 0;box-shadow:0 8px 28px rgba(0,0,0,.45),0 0 22px rgba(255,179,71,.28);font:800 .72rem/1 var(--ca-font-mono,monospace);letter-spacing:.04em;cursor:pointer;transition:transform .2s ease,box-shadow .2s ease}
+.live-schedule-tab:hover,.live-schedule-tab.is-active{transform:translateX(3px);box-shadow:0 10px 32px rgba(0,0,0,.52),0 0 30px rgba(255,179,71,.44)}
+.live-schedule-tab-icon{font-size:1.18rem;line-height:1}
+.live-schedule-tab-count{display:grid;place-items:center;min-width:1.35rem;height:1.35rem;padding:0 .25rem;color:#fff;background:#151923;border-radius:999px;font-size:.66rem}
+.live-schedule-pulse{width:.5rem;height:.5rem;flex:0 0 auto;background:#12a87d;border-radius:50%;box-shadow:0 0 0 3px rgba(18,168,125,.15);animation:liveSchedulePulse 1.8s ease-in-out infinite}
+@keyframes liveSchedulePulse{50%{box-shadow:0 0 0 6px rgba(18,168,125,0)}}
+.live-schedule-backdrop{position:fixed;inset:0;z-index:4198;background:rgba(1,3,8,.62);opacity:0;transition:opacity .24s ease}
+.live-schedule-backdrop:not([hidden]){display:block;opacity:1}
+.live-schedule-drawer{position:fixed;z-index:4199;inset:0 auto 0 0;display:flex;flex-direction:column;width:min(28rem,calc(100vw - 2.5rem));height:100dvh;padding:1.1rem;background:#090b12;border-right:1px solid rgba(255,179,71,.32);box-shadow:24px 0 70px rgba(0,0,0,.55);transform:translateX(-105%);visibility:hidden;transition:transform .28s cubic-bezier(.2,.75,.25,1),visibility .28s;overscroll-behavior:contain}
+.live-schedule-drawer.is-open{transform:translateX(0);visibility:visible}
+.live-schedule-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.25rem .1rem 1rem;border-bottom:1px solid rgba(255,255,255,.1)}
+.live-schedule-header h2{margin:.4rem 0 .15rem;color:#f3f5fa;font:800 1.35rem/1.2 var(--ca-font-display,'Sora',sans-serif)}
+.live-schedule-header p,.live-schedule-eyebrow{color:#a0abc0;font-size:.76rem}
+.live-schedule-eyebrow{display:flex;align-items:center;gap:.45rem;color:#FFB347;font:700 .67rem/1.2 var(--ca-font-mono,monospace);letter-spacing:.08em}
+.live-schedule-close{width:2.3rem;height:2.3rem;flex:0 0 auto;color:#f3f5fa;background:#151923;border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:1.6rem;line-height:1;cursor:pointer}
+.live-schedule-list{flex:1;min-height:0;overflow-y:auto;padding:.85rem .15rem;overscroll-behavior:contain;scrollbar-color:#3b3540 transparent}
+.live-schedule-list .release-ticker{display:block;margin:0 0 .7rem;padding:.8rem;background:#10131b;border:1px solid rgba(255,255,255,.1);border-radius:13px}
+.live-schedule-list .rt-title{font-size:.88rem}
+.live-schedule-list .live-schedule-title{color:#f3f5fa;text-decoration:none}
+.live-schedule-list .live-schedule-title:hover{color:#FFB347;text-decoration:underline}
+.live-schedule-list .rt-sub{margin-top:.15rem;font-size:.7rem}
+.live-schedule-list .countdown-chips{justify-content:flex-start;margin:.55rem 0 0;gap:.32rem}
+.live-schedule-list .cd-chip{min-width:3.25rem;padding:.35rem .45rem;border-radius:8px}
+.live-schedule-list .cd-chip b{font-size:1rem}
+.live-schedule-list .release-state,.live-schedule-list .release-provider{min-width:0;font-size:.7rem}
+.live-schedule-footer{display:flex;flex-direction:column;gap:.55rem;padding:.85rem .15rem .25rem;border-top:1px solid rgba(255,255,255,.1);color:#7d879a;font-size:.69rem}
+.live-schedule-footer a{color:#FFB347;font-weight:800;text-decoration:none}
+.live-schedule-footer a:hover{text-decoration:underline}
+body.schedule-drawer-open{overflow:hidden}
+@media(max-width:480px){.live-schedule-tab{top:38%;gap:.4rem;min-height:2.9rem;padding:.55rem .48rem}.live-schedule-tab-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:.63rem;letter-spacing:.08em}.live-schedule-tab-icon{font-size:1rem}.live-schedule-tab-count{min-width:1.2rem;height:1.2rem;font-size:.6rem}.live-schedule-drawer{width:min(24rem,calc(100vw - 1.35rem));padding:.9rem}.live-schedule-header h2{font-size:1.2rem}}
+@media(prefers-reduced-motion:reduce){.live-schedule-tab,.live-schedule-backdrop,.live-schedule-drawer{transition:none}.live-schedule-pulse{animation:none}}
+
 /* ── Most-viewed tabs (Day/Week/Month) ── */
 .mv-tabs{display:flex;gap:.4rem;align-items:center}
 .mv-tab{background:var(--bg-input,#141926);color:var(--text-secondary,#a0abc0);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:999px;padding:.35rem .85rem;font-size:.8rem;font-weight:700;cursor:pointer;transition:all .18s}

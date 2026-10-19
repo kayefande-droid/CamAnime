@@ -189,6 +189,22 @@ def test_release_schedule_api_includes_all_current_season_airings(api, monkeypat
     assert response.headers["Cache-Control"].startswith("public, max-age=900")
 
 
+def test_schedule_endpoint_exposes_worker_request_and_refresh_counters(api, monkeypatch):
+    monkeypatch.setattr(api, "_SCHEDULE_API_REQUESTS", 40)
+    monkeypatch.setattr(api, "_SCHEDULE_CACHE_MISSES", 9)
+    monkeypatch.setattr(api, "_SCHEDULE_PROCESS_STARTED_AT", api.time.time() - 60)
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "get_current_season_schedule", lambda: [])
+
+    response = api.app.test_client().get("/api/v1/schedule")
+
+    assert response.status_code == 200
+    assert response.headers["X-Schedule-Api-Requests"] == "41"
+    assert response.headers["X-Schedule-Cache-Misses"] == "9"
+    assert int(response.headers["X-Schedule-Worker-Uptime"]) >= 59
+    assert "X-Schedule-Api-Requests" in response.headers["Access-Control-Expose-Headers"]
+
+
 def test_schedule_page_cache_bounds_repeated_requests_and_isolates_cache(api, monkeypatch):
     monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
     monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
@@ -339,8 +355,20 @@ def test_homepage_renders_every_season_countdown_and_live_refresh_hook(api, monk
     assert response.status_code == 200
     assert response.data.count(b'class="release-ticker"') == 8
     assert b"/api/v1/schedule" in response.data
-    assert b"release-schedule.js?v=20261018-schedule" in response.data
+    assert b"release-schedule.js?v=20261019-drawer" in response.data
     assert b"Countdown 7" in response.data
+    assert b"id=\"liveScheduleDrawer\"" in response.data
+    assert b"Open live release schedule" in response.data
+
+
+def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
+    response = api.app.test_client().get("/login")
+    assert response.status_code == 200
+    assert b"id=\"liveScheduleDrawer\"" in response.data
+    assert b"aria-label=\"Live release schedule\"" in response.data
+    assert b"aria-expanded=\"false\"" in response.data
+    assert b"sync.css?v=20261019-drawer" in response.data
+    assert b"release-schedule.js?v=20261019-drawer" in response.data
 
 
 def test_schedule_page_renders_dynamic_airing_rows(api, monkeypatch):
@@ -357,9 +385,10 @@ def test_schedule_page_renders_dynamic_airing_rows(api, monkeypatch):
     assert b"Episode 7" in response.data
     assert b"data-airing-epoch=\"1793000000\"" in response.data
     assert b"/api/v1/schedule" in response.data
-    assert b"release-schedule.js?v=20261018-schedule" in response.data
+    assert b"release-schedule.js?v=20261019-drawer" in response.data
     assert b"Episode 7" in response.data
     assert b"data-cd-d" in response.data
+    assert b"id=\"liveScheduleDrawer\"" in response.data
 
 
 def test_schedule_page_marks_unknown_airing_time_without_countdown(api, monkeypatch):

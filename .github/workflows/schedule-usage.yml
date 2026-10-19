@@ -1,0 +1,46 @@
+name: Schedule endpoint usage smoke
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  schedule-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out smoke-check script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install request client
+        run: python -m pip install requests==2.31.0
+      - name: Smoke-check live schedule and collect response metrics
+        env:
+          CAMANIME_BASE_URL: https://camanime.onrender.com
+        run: python tools/schedule_smoke.py --timeout 90 --max-age 900
+      - name: Store timestamped response and refresh metrics
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          CAMANIME_BASE_URL: https://camanime.onrender.com
+        run: python tools/schedule_usage_snapshot.py --output schedule-usage.json
+      - name: Retain schedule usage snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schedule-usage-${{ github.run_id }}
+          path: schedule-usage.json
+          retention-days: 90
+          if-no-files-found: error

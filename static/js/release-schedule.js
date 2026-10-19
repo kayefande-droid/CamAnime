@@ -2,13 +2,68 @@
 (function () {
   'use strict';
   var list = document.getElementById('releaseTickerList');
-  if (!list) return;
-
+  var drawer = document.getElementById('liveScheduleDrawer');
+  var drawerList = document.getElementById('liveScheduleList');
+  var drawerToggle = document.getElementById('liveScheduleToggle');
+  var drawerClose = document.getElementById('liveScheduleClose');
+  var drawerBackdrop = document.getElementById('liveScheduleBackdrop');
+  var drawerCount = document.getElementById('liveScheduleCount');
+  var drawerTabCount = document.getElementById('liveScheduleTabCount');
+  var drawerAnnouncement = document.getElementById('liveScheduleAnnouncement');
+  var previousFocus = null;
+  var scheduleUrl = (list && list.dataset.scheduleUrl) ||
+    (drawerList && drawerList.dataset.scheduleUrl) || '/api/v1/schedule';
   var refreshMs = 15 * 60 * 1000;
   var busy = false;
-  // The page already includes server-rendered schedule metadata. Do not issue
-  // an identical request on load; refresh only after the local cache interval.
+  var scheduleLoaded = !!(drawer && drawer.dataset.scheduleNeedsInitialLoad !== 'true');
+  // Server HTML already includes both schedule views. Do not issue an
+  // identical request on load; refresh after the browser cache interval.
   var lastRefresh = Date.now();
+
+  function setDrawerOpen(open, restoreFocus) {
+    if (!drawer || !drawerToggle) return;
+    drawer.classList.toggle('is-open', open);
+    drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
+    drawerToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    drawerToggle.classList.toggle('is-active', open);
+    if (drawerBackdrop) drawerBackdrop.hidden = !open;
+    document.body.classList.toggle('schedule-drawer-open', open);
+    if (open) {
+      previousFocus = document.activeElement;
+      var closeButton = drawer.querySelector('#liveScheduleClose');
+      if (closeButton) closeButton.focus();
+      if (!scheduleLoaded) refresh(true);
+    } else if (restoreFocus) {
+      (previousFocus && previousFocus.focus ? previousFocus : drawerToggle).focus();
+    }
+  }
+
+  if (drawer && drawerToggle) {
+    drawerToggle.addEventListener('click', function () {
+      setDrawerOpen(drawerToggle.getAttribute('aria-expanded') !== 'true');
+    });
+    if (drawerClose) drawerClose.addEventListener('click', function () { setDrawerOpen(false, true); });
+    if (drawerBackdrop) drawerBackdrop.addEventListener('click', function () { setDrawerOpen(false, true); });
+    document.addEventListener('keydown', function (event) {
+      if (!drawer.classList.contains('is-open')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setDrawerOpen(false, true);
+      } else if (event.key === 'Tab') {
+        var focusable = drawer.querySelectorAll('a[href], button:not([disabled])');
+        if (!focusable.length) return;
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    });
+  }
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
@@ -16,13 +71,14 @@
     });
   }
 
-  function render(items, season) {
-    list.dataset.season = (season.name || '') + ' ' + (season.year || '');
+  function renderList(target, items, season, compact) {
+    if (!target) return;
+    target.dataset.season = (season.name || '') + ' ' + (season.year || '');
     if (!Array.isArray(items) || !items.length) {
-      list.innerHTML = '<p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>';
+      target.innerHTML = '<p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>';
       return;
     }
-    list.innerHTML = items.map(function (item) {
+    target.innerHTML = items.map(function (item) {
       var airing = item.next_airing_episode || {};
       var epoch = Number(airing.airing_at) || 0;
       var episode = airing.episode == null ? '' : airing.episode;
@@ -32,10 +88,12 @@
       var providerUrl = providerLink && providerLink.url;
       var safeProviderUrl = '';
       try {
-        var parsedProviderUrl = new URL(providerUrl, window.location.origin);
-        if ((parsedProviderUrl.protocol === 'http:' || parsedProviderUrl.protocol === 'https:') &&
-            !parsedProviderUrl.username && !parsedProviderUrl.password) {
-          safeProviderUrl = parsedProviderUrl.href;
+        if (typeof providerUrl === 'string' && providerUrl.trim()) {
+          var parsedProviderUrl = new URL(providerUrl, window.location.origin);
+          if ((parsedProviderUrl.protocol === 'http:' || parsedProviderUrl.protocol === 'https:') &&
+              !parsedProviderUrl.username && !parsedProviderUrl.password) {
+            safeProviderUrl = parsedProviderUrl.href;
+          }
         }
       } catch (error) {}
       var provider = safeProviderUrl
@@ -50,16 +108,33 @@
           '<span class="cd-chip"><b data-cd-s>00</b><span>sec</span></span>' +
           '<span class="release-state" data-release-state>' + stateText + '</span>' + provider
         : '<span class="release-state">Next-episode date not listed</span>';
-      return '<div class="release-ticker" data-anime-id="' + id + '" data-airing-epoch="' + epoch + '" data-airing-episode="' + escapeHtml(episode) + '" data-countdown-state="' + (epoch ? (isUpcoming ? 'upcoming' : 'aired_checking') : 'date_unknown') + '">' +
-        '<div><div class="rt-title">' + escapeHtml(item.title || 'Untitled anime') + '</div><div class="rt-sub">Episode ' + escapeHtml(episode || '?') + ' · airs ' + when + ' · ' + escapeHtml(season.name || '') + ' ' + escapeHtml(season.year || '') + '</div></div>' +
-        '<div class="countdown-chips" data-cd-for="' + id + '">' + countdown + '</div></div>';
+      var title = escapeHtml(item.title || 'Untitled anime');
+      var metadata = '<div class="rt-sub">Episode ' + escapeHtml(episode || '?') + ' · ' + when + '</div>';
+      var compactTitle = '<a class="live-schedule-title" href="/anime/' + id + '">' + title + '</a>';
+      return '<article class="release-ticker' + (compact ? ' release-ticker-compact' : '') + '" data-anime-id="' + id + '" data-airing-epoch="' + epoch + '" data-airing-episode="' + escapeHtml(episode) + '" data-countdown-state="' + (epoch ? (isUpcoming ? 'upcoming' : 'aired_checking') : 'date_unknown') + '">' +
+        '<div class="release-ticker-copy"><div class="rt-title">' + (compact ? compactTitle : title) + '</div>' + metadata + (!compact ? '<div class="rt-season">' + escapeHtml(season.name || '') + ' ' + escapeHtml(season.year || '') + '</div>' : '') + '</div>' +
+        '<div class="countdown-chips" data-cd-for="' + id + '">' + countdown + '</div></article>';
     }).join('');
+  }
+
+  function render(items, season) {
+    if (list) renderList(list, items, season, false);
+    if (drawerList && drawerList !== list) renderList(drawerList, items, season, true);
+    var itemCount = Array.isArray(items) ? items.length : 0;
+    if (drawerCount) drawerCount.textContent = String(itemCount);
+    if (drawerTabCount) {
+      drawerTabCount.textContent = String(itemCount);
+      drawerTabCount.setAttribute('aria-label', itemCount + ' scheduled titles');
+    }
+    if (drawerAnnouncement) drawerAnnouncement.textContent = 'Schedule updated. ' + (Array.isArray(items) ? items.length : 0) + ' current-season titles.';
+    if (drawer) drawer.dataset.scheduleNeedsInitialLoad = 'false';
+    scheduleLoaded = true;
     tick();
   }
 
   function tick() {
     var now = Math.floor(Date.now() / 1000);
-    list.querySelectorAll('.release-ticker[data-airing-epoch]').forEach(function (row) {
+    document.querySelectorAll('#releaseTickerList .release-ticker[data-airing-epoch], #liveScheduleList .release-ticker[data-airing-epoch]').forEach(function (row) {
       var epoch = Number(row.dataset.airingEpoch) || 0;
       var diff = Math.max(0, epoch - now);
       var d = Math.floor(diff / 86400);
@@ -85,7 +160,7 @@
     busy = true;
     lastRefresh = now;
     try {
-      var response = await fetch(list.dataset.scheduleUrl || '/api/v1/schedule', {
+      var response = await fetch(scheduleUrl, {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
       });
@@ -100,9 +175,11 @@
   }
 
   setInterval(tick, 1000);
-  setInterval(function () { refresh(false); }, refreshMs);
+  setInterval(function () {
+    if ((drawer && drawer.classList.contains('is-open')) || list) refresh(false);
+  }, refreshMs);
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) refresh(false);
+    if (!document.hidden && ((drawer && drawer.classList.contains('is-open')) || list)) refresh(false);
   });
   tick();
 })();

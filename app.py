@@ -274,6 +274,53 @@ def _speed_headers(resp):
     return resp
 
 
+@app.after_request
+def _inject_live_schedule_drawer(response):
+    """Add the lightweight schedule drawer to every rendered HTML page."""
+    if (response.status_code >= 400 or response.direct_passthrough
+            or "text/html" not in response.headers.get("Content-Type", "")):
+        return response
+    try:
+        body = response.get_data(as_text=True)
+        if "</body>" not in body or "liveScheduleDrawer" in body:
+            return response
+        season, year = current_anime_season()
+        with _SEASON_SCHEDULE_LOCK:
+            cached = _SEASON_SCHEDULE_CACHE.get((season, year))
+            schedule_items = (
+                cached[2] if cached and time.monotonic() - cached[0] < cached[1]
+                else None
+            )
+        drawer = render_template(
+            "_live_schedule_drawer.html",
+            schedule_items=schedule_items or [],
+            schedule_needs_initial_load=schedule_items is None,
+            season_name=season.title(),
+            season_year=year,
+            now_ts=_utc_now_timestamp(),
+        )
+        stylesheet_pattern = r'(href=["\'])/static/css/sync\.css(?:\?[^"\']*)?(["\'])'
+        body, stylesheet_count = re.subn(
+            stylesheet_pattern,
+            r'\1/static/css/sync.css?v=20261019-drawer\2',
+            body,
+            count=1,
+        )
+        if not stylesheet_count and "</head>" in body:
+            body = body.replace(
+                "</head>",
+                '<link href="/static/css/sync.css?v=20261019-drawer" rel="stylesheet"></head>',
+                1,
+            )
+        script = ''
+        if "/static/js/release-schedule.js" not in body:
+            script = '<script src="/static/js/release-schedule.js?v=20261019-drawer" defer></script>'
+        response.set_data(body.replace("</body>", drawer + script + "</body>", 1))
+    except Exception:
+        logger.warning("live schedule drawer injection failed", exc_info=True)
+    return response
+
+
 platform.ensure_admin()
 platform.ensure_default_admin()
 
@@ -316,6 +363,10 @@ _SEASON_SCHEDULE_LOCK = Lock()
 _SEASON_SCHEDULE_CACHE = {}
 _SEASON_SCHEDULE_CACHE_TTL = 900
 _SEASON_SCHEDULE_FAILURE_TTL = 300
+_SCHEDULE_METRICS_LOCK = Lock()
+_SCHEDULE_API_REQUESTS = 0
+_SCHEDULE_CACHE_MISSES = 0
+_SCHEDULE_PROCESS_STARTED_AT = time.time()
 
 MEDIA_FRAGMENT = """
   id
@@ -538,12 +589,15 @@ query ($page: Int, $perPage: Int, $season: MediaSeason, $seasonYear: Int) {{
 
 def get_current_season_schedule(now_ts: Optional[int] = None) -> List[Dict]:
     """Serve a per-worker cached schedule and coalesce concurrent upstream fetches."""
+    global _SCHEDULE_CACHE_MISSES
     season, year = current_anime_season()
     cache_key = (season, year)
     with _SEASON_SCHEDULE_LOCK:
         cached = _SEASON_SCHEDULE_CACHE.get(cache_key)
         if cached and time.monotonic() - cached[0] < cached[1]:
             return cached[2]
+        with _SCHEDULE_METRICS_LOCK:
+            _SCHEDULE_CACHE_MISSES += 1
         schedule = _load_current_season_schedule(now_ts, season, year)
         # On provider errors, cool down instead of retrying on every homepage
         # or API request. Successful (including empty) seasons cache for 15m.
@@ -2151,14 +2205,29 @@ def api_v1_health():
 
 @app.route("/api/v1/schedule")
 def api_v1_schedule():
+    global _SCHEDULE_API_REQUESTS
+    with _SCHEDULE_METRICS_LOCK:
+        _SCHEDULE_API_REQUESTS += 1
     season, year = current_anime_season()
+    schedule = get_current_season_schedule()
+    with _SCHEDULE_METRICS_LOCK:
+        api_requests = _SCHEDULE_API_REQUESTS
+        cache_misses = _SCHEDULE_CACHE_MISSES
     response = jsonify({
         "status": "success", "season": {"name": season, "year": year},
-        "items": get_current_season_schedule(),
+        "items": schedule,
         "playback_available": False,
         "availability_note": "Matched outbound official-provider metadata is only a listing, not confirmation the episode is playable; CamAnime does not host or embed these episodes.",
     })
     response.headers["Cache-Control"] = "public, max-age=900, stale-while-revalidate=300"
+    response.headers["Access-Control-Expose-Headers"] = (
+        "X-Schedule-Api-Requests, X-Schedule-Cache-Misses, X-Schedule-Worker-Uptime"
+    )
+    # Per-worker cumulative counters sampled by the scheduled production smoke
+    # workflow. They reset on process restart/deploy; uptime lets that be detected.
+    response.headers["X-Schedule-Api-Requests"] = str(api_requests)
+    response.headers["X-Schedule-Cache-Misses"] = str(cache_misses)
+    response.headers["X-Schedule-Worker-Uptime"] = str(max(0, int(time.time() - _SCHEDULE_PROCESS_STARTED_AT)))
     return response
 
 
