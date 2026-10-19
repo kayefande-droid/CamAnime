@@ -554,6 +554,19 @@
         .anime-card:hover .card-poster-wrap img {
             transform: scale(1.07);
         }
+        .card-poster-wrap.poster-fallback {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1b2030, #0b0e16);
+        }
+        .card-poster-wrap.poster-fallback::after {
+            content: 'CamAnime';
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            color: rgba(255, 179, 71, 0.55);
+            font-size: 0.95rem;
+        }
         .card-badges-top {
             position: absolute;
             top: 10px;
@@ -1539,11 +1552,39 @@
             section.style.display = 'block';
             grid.replaceChildren();
             list.forEach(item => {
+                const animeId = Number(item.id);
                 const card = document.createElement('article');
                 card.className = 'anime-card';
+                const poster = document.createElement('a');
+                poster.className = 'card-poster-wrap';
+                poster.href = '/anime/' + encodeURIComponent(animeId);
+                poster.setAttribute('aria-label', 'Open ' + (item.title || 'saved anime'));
+                const imageUrl = typeof item.image === 'string' ? item.image : '';
+                const safeImage = /^(https?:\/\/|\/)/i.test(imageUrl) && !/^\/\//.test(imageUrl);
+                if (safeImage) {
+                    const img = document.createElement('img');
+                    img.src = imageUrl;
+                    img.alt = '';
+                    img.loading = 'lazy';
+                    img.decoding = 'async';
+                    img.referrerPolicy = 'no-referrer';
+                    img.onerror = () => { img.remove(); poster.classList.add('poster-fallback'); };
+                    poster.appendChild(img);
+                } else {
+                    poster.classList.add('poster-fallback');
+                }
+                if (item.ep) {
+                    const badges = document.createElement('div');
+                    badges.className = 'card-badges-top';
+                    const ep = document.createElement('span');
+                    ep.className = 'ep-badge';
+                    ep.textContent = 'EP ' + (Number(item.ep) || 1);
+                    badges.appendChild(ep);
+                    poster.appendChild(badges);
+                }
                 const link = document.createElement('a');
                 link.className = 'card-body';
-                link.href = '/anime/' + encodeURIComponent(item.id);
+                link.href = '/anime/' + encodeURIComponent(animeId);
                 const title = document.createElement('span');
                 title.className = 'card-title';
                 title.textContent = item.title || 'Saved anime';
@@ -1551,7 +1592,7 @@
                 saved.className = 'card-submeta';
                 saved.textContent = 'Saved to this browser';
                 link.append(title, saved);
-                card.appendChild(link);
+                card.append(poster, link);
                 grid.appendChild(card);
             });
         } catch (e) {}
