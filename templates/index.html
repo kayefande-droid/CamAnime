@@ -1614,23 +1614,30 @@
             section.style.display = 'block';
             if (grid.children.length) return; // local list already drawn
             section.querySelector('.section-title').textContent = 'Continue Watching (synced to your account)';
-            grid.innerHTML = d.history.map(item => `
+            const esc = (value) => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+            const safeUrl = (value) => /^(https?:\/\/|\/(?!\/))/i.test(String(value || '')) ? String(value) : '';
+            grid.innerHTML = d.history.filter(item => Number.isInteger(Number(item.anime_id))).map(item => {
+                const id = Number(item.anime_id);
+                const ep = Number.parseInt(item.ep, 10) || 1;
+                const image = safeUrl(item.image);
+                const title = esc(item.title || 'Saved anime');
+                return `
                 <div class="anime-card">
-                    <div class="card-poster-wrap">
-                        <div class="card-badges-top"><span class="ep-badge">EP ${item.ep || 1}</span></div>
-                        <img src="${item.image}" alt="${item.title}" loading="lazy">
+                    <div class="card-poster-wrap${image ? '' : ' poster-fallback'}">
+                        <div class="card-badges-top"><span class="ep-badge">EP ${ep}</span></div>
+                        ${image ? `<img src="${esc(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
                         <div class="card-hover-actions">
                             <div class="card-action-row">
-                                <a href="/watch/${item.anime_id}/${item.ep || 1}" class="card-btn-play"><i class="fas fa-play"></i> Continue</a>
+                                <a href="/watch/${id}/${ep}" class="card-btn-play"><i class="fas fa-play"></i> Continue</a>
                             </div>
                         </div>
                     </div>
-                    <a href="/anime/${item.anime_id}" class="card-body" style="text-decoration:none;">
-                        <div class="card-title">${item.title}</div>
-                        <div class="card-submeta"><span>Device-synced</span><span>Ep ${item.ep || 1}</span></div>
+                    <a href="/anime/${id}" class="card-body" style="text-decoration:none;">
+                        <div class="card-title">${title}</div>
+                        <div class="card-submeta"><span>Device-synced</span><span>Ep ${ep}</span></div>
                     </a>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         } catch (e) {}
     }
 
