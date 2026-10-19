@@ -431,6 +431,22 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"release-schedule.js?v=20261019-drawer" in response.data
 
 
+def test_mobile_navigation_and_drawer_have_touch_sized_controls(api):
+    client = api.app.test_client()
+    payload = {"trending": {"media": []}, "popularSeason": {"media": []},
+               "topRated": {"media": []}, "recentlyAdded": {"media": []},
+               "featuredMovie": {"media": []}, "series": {"media": []}}
+    with patch.object(api, "fetch_anilist", return_value=payload), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]):
+        response = client.get("/")
+    assert response.status_code == 200
+    assert b"id=\"navToggle\"" in response.data
+    assert b"width: 44px" in response.data
+    assert b"height: 44px" in response.data
+    assert b"min-width:44px;min-height:44px" in Path(api.app.static_folder or "static", "css", "sync.css").read_bytes()
+    assert b"body.schedule-drawer-open .live-schedule-tab{z-index:4197;pointer-events:none}" in Path(api.app.static_folder or "static", "css", "sync.css").read_bytes()
+
+
 def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
     client = api.app.test_client()
     for path in ("/", "/anime/123"):

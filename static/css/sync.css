@@ -267,7 +267,7 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 .live-schedule-header h2{margin:.4rem 0 .15rem;color:#f3f5fa;font:800 1.35rem/1.2 var(--ca-font-display,'Sora',sans-serif)}
 .live-schedule-header p,.live-schedule-eyebrow{color:#a0abc0;font-size:.76rem}
 .live-schedule-eyebrow{display:flex;align-items:center;gap:.45rem;color:#FFB347;font:700 .67rem/1.2 var(--ca-font-mono,monospace);letter-spacing:.08em}
-.live-schedule-close{width:2.3rem;height:2.3rem;flex:0 0 auto;color:#f3f5fa;background:#151923;border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:1.6rem;line-height:1;cursor:pointer}
+.live-schedule-close{width:2.75rem;height:2.75rem;min-width:44px;min-height:44px;flex:0 0 auto;color:#f3f5fa;background:#151923;border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:1.6rem;line-height:1;cursor:pointer}
 .live-schedule-list{flex:1;min-height:0;overflow-y:auto;padding:.85rem .15rem;overscroll-behavior:contain;scrollbar-color:#3b3540 transparent}
 .live-schedule-list .release-ticker{display:block;margin:0 0 .7rem;padding:.8rem;background:#10131b;border:1px solid rgba(255,255,255,.1);border-radius:13px}
 .live-schedule-list .rt-title{font-size:.88rem}
@@ -282,6 +282,7 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 .live-schedule-footer a{color:#FFB347;font-weight:800;text-decoration:none}
 .live-schedule-footer a:hover{text-decoration:underline}
 body.schedule-drawer-open{overflow:hidden}
+body.schedule-drawer-open .live-schedule-tab{z-index:4197;pointer-events:none}
 @media(max-width:480px){.live-schedule-tab{top:38%;gap:.4rem;min-height:2.9rem;padding:.55rem .48rem}.live-schedule-tab-label{writing-mode:vertical-rl;transform:rotate(180deg);font-size:.63rem;letter-spacing:.08em}.live-schedule-tab-icon{font-size:1rem}.live-schedule-tab-count{min-width:1.2rem;height:1.2rem;font-size:.6rem}.live-schedule-drawer{width:min(24rem,calc(100vw - 1.35rem));padding:.9rem}.live-schedule-header h2{font-size:1.2rem}}
 @media(prefers-reduced-motion:reduce){.live-schedule-tab,.live-schedule-backdrop,.live-schedule-drawer{transition:none}.live-schedule-pulse{animation:none}}
 
