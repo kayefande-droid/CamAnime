@@ -1105,8 +1105,38 @@ def search():
 def details(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media")
+    anilist_down = not raw_anime
     if not raw_anime:
-        return render_template("index.html", trending=[], page_type="error", error_msg="Anime not found"), 404
+        # AniList outage fallback: serve the page from server-side cache +
+        # live provider listings instead of a dead 404. Episode updates keep
+        # flowing from AnimeHeaven/Anikoto while metadata is degraded.
+        card = _fallback_card(anime_id)
+        titles = [card["title"]]
+        mapping = streaming_manager.resolve_anime_mapping(anime_id, titles, mal_id=None)
+        heaven_info = (
+            streaming_manager.animeheaven.get_anime_info(mapping["heaven_id"])
+            if mapping.get("heaven_id") else None
+        )
+        provider_episodes = list((heaven_info or {}).get("episodes") or [])
+        if mapping.get("anikoto_slug"):
+            provider_episodes.extend(streaming_manager.anikoto.get_episodes(mapping["anikoto_slug"]))
+        confirmed_numbers = sorted({
+            n for n in (_episode_number((e or {}).get("num")) for e in provider_episodes)
+            if n is not None
+        })
+        episode_list = [{"id": i, "num": i, "title": f"Episode {i}",
+                         "thumbnail": card["banner"] or card["image"],
+                         "heaven_key": None, "provider_listed": True,
+                         "availability_label": "Provider episode listing found · playback not verified",
+                         "added": ""} for i in confirmed_numbers]
+        return render_template("details.html", anime={
+            **card, "tags": [], "episodes": episode_list, "relations": [],
+            "recommendations": [], "characters": [],
+            "heaven_id": mapping.get("heaven_id"),
+            "anikoto_slug": mapping.get("anikoto_slug"),
+            "heaven_info": heaven_info,
+            "anilist_unavailable": True,
+        })
 
     card = format_anime_card(raw_anime)
     titles = [
@@ -1232,24 +1262,12 @@ def watch(anime_id: int, ep_num: int):
     preferred_audio = request.args.get("audio", "sub").lower()
     if preferred_audio not in ("sub", "dub"):
         preferred_audio = "sub"
-    heaven_override = request.args.get("heaven_id")
+    heaven_override = _safe_site_id(request.args.get("heaven_id", ""))
 
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media") or {}
-    card = format_anime_card(raw_anime) if raw_anime else {
-        "id": anime_id,
-        "mal_id": None,
-        "title": f"Anime #{anime_id}",
-        "title_romaji": f"Anime #{anime_id}",
-        "image": "",
-        "banner": "",
-        "description": "",
-        "rating": "N/A",
-        "format": "TV",
-        "status": "Releasing",
-        "genres": [],
-        "trailer_id": None,
-    }
+    anilist_down = not raw_anime
+    card = format_anime_card(raw_anime) if raw_anime else _fallback_card(anime_id)
 
     titles = []
     if raw_anime.get("title"):
@@ -1280,29 +1298,59 @@ def watch(anime_id: int, ep_num: int):
     confirmed_numbers = _confirmed_episode_numbers(raw_anime, provider_episodes)
     total_episodes = len(confirmed_numbers)
     if ep_num not in confirmed_numbers:
-        return redirect(url_for("details", anime_id=anime_id))
+        if anilist_down and ep_num >= 1:
+            # AniList outage: provider lists may also be title-less. Never
+            # bounce the user — render the player with working embeds and an
+            # honest notice instead of a redirect loop to a 404 details page.
+            confirmed_numbers = [ep_num]
+            episodes = [{"id": ep_num, "num": ep_num, "title": f"Episode {ep_num}"}]
+            total_episodes = 1
+            episode_position = 0
+            previous_number = None
+            next_number = None
+        else:
+            return redirect(url_for("details", anime_id=anime_id))
 
     bundle = streaming_manager.get_full_episode_bundle(
         anilist_id=anime_id,
         ep_num=ep_num,
         titles=titles,
-        mal_id=raw_anime.get("idMal"),
+        mal_id=(raw_anime.get("idMal") if raw_anime else None),
         preferred_audio=preferred_audio,
         heaven_override=mapping.get("heaven_id"),
     )
+    if anilist_down:
+        # During an AniList outage the provider mapping may be title-less, so
+        # make sure the working no-title embeds are present as fallbacks.
+        embeds = _working_embed_urls(anime_id, None, ep_num)
+        have = {s.get("stream_url") for s in bundle.get("servers", [])}
+        if embeds["vidlink_sub"] not in have:
+            bundle.setdefault("servers", []).append({
+                "id": "embed-vidlink-sub",
+                "name": "VidLink Ultra (SUB)",
+                "provider": "vidlink",
+                "audio": "sub",
+                "playback_mode": "iframe",
+                "stream_url": embeds["vidlink_sub"],
+                "quality": "1080p Embed",
+                "subtitles": [],
+                "badge": "MIRROR SUB",
+            })
+        bundle["anilist_unavailable"] = True
     episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in confirmed_numbers]
     episode_position = confirmed_numbers.index(ep_num)
     previous_number = confirmed_numbers[episode_position - 1] if episode_position > 0 else None
     next_number = confirmed_numbers[episode_position + 1] if episode_position + 1 < len(confirmed_numbers) else None
 
+    _embeds = _working_embed_urls(anime_id, (raw_anime.get("idMal") if raw_anime else None), ep_num)
     active_server = bundle.get("active_server") or {
-        "id": "embed-vidsrc-sub",
-        "name": "VidSrc Pro (SUB)",
+        "id": "embed-vidlink-sub",
+        "name": "VidLink Ultra (SUB)",
         "playback_mode": "iframe",
-        "stream_url": f"https://vidsrc.cc/v2/embed/anime/ani{anime_id}/{ep_num}/sub",
+        "stream_url": _embeds["vidlink_sub"],
         "subtitles": [],
     }
-    backup_embed = f"https://vidsrc.cc/v2/embed/anime/ani{anime_id}/{ep_num}/sub"
+    backup_embed = _embeds["vidlink_sub"]
 
     # Related seasons for quick switching
     relations = []
@@ -1347,8 +1395,10 @@ def scraper_hub():
     (Upgraded version of the attached AnimeHeaven-Scraper test frontend integrated into CamAnime)
     """
     feed = request.args.get("feed", "new")
-    query = (request.args.get("q") or "").strip()
-    site_id = (request.args.get("id") or "").strip()
+    if feed not in ("new", "popular", "home"):
+        feed = "new"
+    query = (request.args.get("q") or "").strip()[:120]
+    site_id = _safe_site_id(request.args.get("id", "")) or ""
 
     selected_anime = None
     if site_id:
@@ -1371,7 +1421,13 @@ def scraper_hub():
 @app.route("/heaven/<site_id>")
 def heaven_direct_watch(site_id: str):
     """Watch or download any show directly by its AnimeHeaven site_id"""
-    ep_num = int(request.args.get("ep", 1))
+    site_id = _safe_site_id(site_id) or ""
+    if not site_id:
+        return redirect(url_for("scraper_hub"))
+    try:
+        ep_num = max(1, min(int(request.args.get("ep", 1)), 3000))
+    except (TypeError, ValueError):
+        ep_num = 1
     info = streaming_manager.animeheaven.get_anime_info(site_id)
     if not info:
         return redirect(url_for("scraper_hub"))
@@ -1419,12 +1475,22 @@ def api_trailer():
 @app.route("/api/episode-sources/<int:anime_id>/<int:ep_num>")
 def api_episode_sources(anime_id: int, ep_num: int):
     audio = request.args.get("audio", "sub").lower()
-    heaven_id = request.args.get("heaven_id")
+    _hv = _safe_site_id(request.args.get("heaven_id", ""))
+    heaven_id = _hv
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media") or {}
     titles = []
     if raw_anime.get("title"):
         titles = [raw_anime["title"].get("english"), raw_anime["title"].get("romaji")]
+    if not titles or not any(titles):
+        try:
+            _m = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+            if _m.get("title"):
+                titles = [_m["title"]]
+        except Exception:
+            pass
+    if not titles or not any(titles):
+        titles = [f"Anime {anime_id}"]
     bundle = streaming_manager.get_full_episode_bundle(
         anilist_id=anime_id,
         ep_num=ep_num,
@@ -1448,12 +1514,17 @@ def api_heaven_search():
 @app.route("/api/heaven/catalog")
 def api_heaven_catalog():
     feed = request.args.get("feed", "new")
+    if feed not in ("new", "popular", "home"):
+        feed = "new"
     results = streaming_manager.animeheaven.browse_catalog(feed)
     return jsonify({"status": "success", "feed": feed, "count": len(results), "results": results})
 
 
 @app.route("/api/heaven/anime/<site_id>")
 def api_heaven_anime(site_id: str):
+    site_id = _safe_site_id(site_id) or ""
+    if not site_id:
+        return jsonify({"status": "error", "error": "Invalid id."}), 400
     info = streaming_manager.animeheaven.get_anime_info(site_id)
     if not info:
         return jsonify({"status": "error", "error": "Anime not found on AnimeHeaven"}), 404
@@ -1470,7 +1541,10 @@ def api_heaven_random():
 
 @app.route("/api/heaven/resolve/<episode_key>")
 def api_heaven_resolve(episode_key: str):
-    site_id = request.args.get("site_id")
+    episode_key = _safe_site_id(episode_key) or ""
+    if not episode_key:
+        return jsonify({"status": "error", "error": "Invalid episode key."}), 400
+    site_id = _safe_site_id(request.args.get("site_id", ""))
     res = streaming_manager.animeheaven.get_streaming_sources(episode_key, referer_site_id=site_id)
     if not res.get("sources"):
         return jsonify({"status": "error", "error": "Could not resolve MP4 stream"}), 404
@@ -1489,6 +1563,9 @@ def api_heaven_resolve(episode_key: str):
 @app.route("/api/heaven/season-pack/<site_id>")
 def api_heaven_season_pack(site_id: str):
     """Resolves direct MP4 download links for episodes in an AnimeHeaven season/series."""
+    site_id = _safe_site_id(site_id) or ""
+    if not site_id:
+        return jsonify({"status": "error", "error": "Invalid id."}), 400
     info = streaming_manager.animeheaven.get_anime_info(site_id)
     if not info:
         return jsonify({"status": "error", "error": "Show not found"}), 404
@@ -1531,6 +1608,80 @@ def _media_host_allowed(host: str) -> bool:
         return True
     allowed = {h.strip().lower() for h in raw.split(",") if h.strip()}
     return (host or "").lower() in allowed
+
+
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_\-\.]{1,80}$")
+
+
+def _safe_site_id(value) -> Optional[str]:
+    """Allowlist for provider ids/keys used in upstream URLs and DB lookups."""
+    v = (value or "").strip()
+    if not v or len(v) > 80 or not _SAFE_ID_RE.match(v):
+        return None
+    return v
+
+
+def _safe_next_url(value) -> str:
+    """Login `next` must be a same-site path, never an absolute/external URL."""
+    v = (value or "/").strip()
+    if not v.startswith("/") or v.startswith("//") or "\\" in v:
+        return "/"
+    if any(c in v for c in ("\n", "\r", "\x00")):
+        return "/"
+    return v[:512]
+
+
+def _fallback_card(anime_id: int) -> Dict:
+    """Minimal card used when AniList metadata is temporarily unavailable.
+
+    Prefers the server-side anime_cache (real titles from when AniList was
+    reachable) so details/watch pages keep working during an outage."""
+    meta = {}
+    try:
+        meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+    except Exception:
+        meta = {}
+    title = (meta.get("title") or f"Anime #{anime_id}").strip() or f"Anime #{anime_id}"
+    image = meta.get("image") or "/static/brand/camanime-icon.svg"
+    return {
+        "id": anime_id,
+        "mal_id": None,
+        "title": title,
+        "title_romaji": title,
+        "title_native": "",
+        "description": "Metadata is temporarily unavailable (upstream AniList API is down). Episode servers below are still live — try them directly.",
+        "image": image,
+        "banner": meta.get("banner") or image,
+        "color": "#f59e0b",
+        "episode": meta.get("episode_label") or "EPS ?",
+        "latest_ep": None,
+        "total_episodes": None,
+        "format": meta.get("format") or "TV",
+        "status": (meta.get("status") or "Unknown").replace("_", " ").title() if meta.get("status") else "Unknown",
+        "season": "",
+        "year": meta.get("year") or "",
+        "next_airing_episode": None,
+        "airing_hour": "",
+        "duration": "",
+        "rating": "N/A",
+        "score": 0,
+        "genres": [],
+        "studio": "",
+        "trailer_id": None,
+    }
+
+
+def _working_embed_urls(anilist_id: int, mal_id, ep_num: int):
+    """Embed fallbacks that do not depend on AniList or scraper titles.
+
+    vidlink.pro verified reachable (HTTP 200); vidsrc.cc currently times out,
+    so VidLink is primary and VidSrc stays only as a secondary mirror."""
+    mid = mal_id or anilist_id
+    return {
+        "vidlink_sub": f"https://vidlink.pro/anime/{mid}/{ep_num}/sub",
+        "vidlink_dub": f"https://vidlink.pro/anime/{mid}/{ep_num}/dub",
+        "vidsrc_sub": f"https://vidsrc.cc/v2/embed/anime/ani{anilist_id}/{ep_num}/sub",
+    }
 
 
 def _safe_upstream_url(url):
@@ -2019,7 +2170,7 @@ def login_page():
             else:
                 user = platform.verify_user(None, email, password)
             _s["user_email"] = user["email"]
-            nxt = request.args.get("next", "/")
+            nxt = _safe_next_url(request.args.get("next", "/"))
             return redirect(nxt)
         except Exception as e:
             error = str(e)
@@ -2696,4 +2847,4 @@ def healthz():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=3000)
+    app.run(debug=False, host="0.0.0.0", port=3000)

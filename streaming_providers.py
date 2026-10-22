@@ -1269,7 +1269,22 @@ class StreamingManager:
             "dub": any(server.get("audio") == "dub" for server in servers),
         }
 
-        # 3. Keep the legacy subtitled iframe fallback; do not invent a DUB mirror.
+        # 3. No-title iframe fallbacks (verified reachable first). VidLink is
+        # primary (HTTP 200); VidSrc stays only as a secondary mirror since
+        # vidsrc.cc currently times out. Do not invent a DUB mirror.
+        _mid = mal_id or anilist_id
+        servers.append({
+            "id": "embed-vidlink-sub",
+            "name": "VidLink Ultra (SUB)",
+            "provider": "vidlink",
+            "audio": "sub",
+            "playback_mode": "iframe",
+            "stream_url": f"https://vidlink.pro/anime/{_mid}/{ep_num}/sub",
+            "quality": "1080p Embed",
+            "subtitles": [],
+            "badge": "BACKUP SUB",
+            "fallback": True,
+        })
         servers.append({
             "id": "embed-vidsrc-sub",
             "name": "VidSrc Pro (SUB)",
@@ -1279,22 +1294,9 @@ class StreamingManager:
             "stream_url": f"https://vidsrc.cc/v2/embed/anime/ani{anilist_id}/{ep_num}/sub",
             "quality": "1080p Embed",
             "subtitles": [],
-            "badge": "BACKUP SUB",
+            "badge": "MIRROR SUB",
             "fallback": True,
         })
-        if mal_id:
-            servers.append({
-                "id": "embed-vidlink-sub",
-                "name": "VidLink Ultra (SUB)",
-                "provider": "vidlink",
-                "audio": "sub",
-                "playback_mode": "iframe",
-                "stream_url": f"https://vidlink.pro/anime/{mal_id}/{ep_num}/sub",
-                "quality": "1080p Embed",
-                "subtitles": [],
-                "badge": "MIRROR SUB",
-                "fallback": True,
-            })
 
         # Sort servers so preferred_audio comes first, and direct MP4/HLS comes before iframe
         def server_priority(s: Dict) -> Tuple[int, int]:
