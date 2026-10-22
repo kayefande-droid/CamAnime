@@ -121,6 +121,35 @@ def test_fallback_search_uses_jikan_when_kitsu_empty(monkeypatch):
     assert media[0]["idMal"] == 20
 
 
+def test_media_titles_merges_synonyms():
+    media = api._jikan_to_media(JIKAN_ITEM)
+    titles = api._media_titles(media)
+    assert titles[0] == "Naruto"
+    assert "Naruto" in titles
+    assert api._media_titles({}) == []
+    assert api._media_titles(None) == []
+
+
+def test_home_lists_include_ongoing_and_recent(monkeypatch):
+    def _kitsu(path, params=None):
+        params = params or {}
+        if "mappings" in path:
+            return []
+        if params.get("filter[status]") == "current":
+            return [KITSU_ITEM]
+        if "filter[season]" in params:
+            return [KITSU_ITEM]
+        return [KITSU_ITEM]
+
+    monkeypatch.setattr(api, "_kitsu_get", _kitsu)
+    monkeypatch.setattr(api, "_jikan_get", lambda path, params=None: [])
+    lists, source = api._fallback_home_lists()
+    assert source == "kitsu"
+    assert lists["ongoing"][0]["title"]["english"] == "Naruto: Shippuden"
+    assert lists["recent"][0]["title"]["english"] == "Naruto: Shippuden"
+    assert lists["popular"][0]["status"] == "FINISHED"
+
+
 def test_home_uses_fallback_when_anilist_down(monkeypatch):
     monkeypatch.setattr(api, "fetch_anilist", lambda *a, **k: {})
     monkeypatch.setattr(api, "_fallback_home_lists",
@@ -146,6 +175,34 @@ def test_details_uses_fallback_media_for_cached_title(monkeypatch):
     resp = _client().get("/anime/900001")
     assert resp.status_code == 200
     assert b"Naruto" in resp.data
+
+
+def test_watch_uses_fallback_titles_and_mal_for_mapping(monkeypatch):
+    rid = api.JIKAN_ID_OFFSET + 20
+    assert api._is_fallback_id(rid)
+    monkeypatch.setattr(api, "fetch_anilist", lambda *a, **k: {})
+    monkeypatch.setattr(api.platform, "get_anime_meta",
+                        lambda ids: {rid: {"title": "Naruto", "image": "", "banner": "",
+                                          "format": "TV", "status": "Finished", "year": 2002,
+                                          "episode_label": ""}})
+    monkeypatch.setattr(api, "_fallback_media_by_title",
+                        lambda title: (api._jikan_to_media(JIKAN_ITEM), "jikan"))
+    seen = {}
+
+    def _mapping(anime_id, titles, mal_id=None, heaven_override=None):
+        seen.update(titles=titles, mal_id=mal_id)
+        return {"heaven_id": None, "anikoto_slug": None}
+
+    monkeypatch.setattr(api.streaming_manager, "resolve_anime_mapping", _mapping)
+    monkeypatch.setattr(api.streaming_manager.youtube, "get_trailer_id", lambda *a: None)
+    monkeypatch.setattr(api.streaming_manager, "get_full_episode_bundle",
+                        lambda **k: {"servers": [], "downloads": [],
+                                     "audio_availability": {"sub": False, "dub": False}})
+    resp = _client().get(f"/watch/{rid}/1")
+    # No provider servers and reserved id -> honest redirect to details.
+    assert resp.status_code == 302
+    assert "Naruto" in seen["titles"]
+    assert seen["mal_id"] == 20
 
 
 def test_v1_search_falls_back_to_kitsu(monkeypatch):

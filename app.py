@@ -663,6 +663,7 @@ def _kitsu_to_media(item: Dict) -> Dict:
     except (TypeError, ValueError):
         score = 0
     trailer_id = a.get("youtubeVideoId") or None
+    synonyms = [s for s in (a.get("abbreviatedTitles") or []) if s]
     return {
         "id": KITSU_ID_OFFSET + kid,
         "_kitsu_id": kid,
@@ -683,11 +684,11 @@ def _kitsu_to_media(item: Dict) -> Dict:
         "averageScore": score,
         "popularity": a.get("userCount") or 0,
         "genres": [],
-        "studios": {"nodes": []},
-        "trailer": ({"site": "Youtube", "id": trailer_id} if trailer_id else None),
-        "nextAiringEpisode": None,
-        "_source": "kitsu",
-    }
+        "studios": {"nodes": []},            "trailer": ({"site": "Youtube", "id": trailer_id} if trailer_id else None),
+            "nextAiringEpisode": None,
+            "_source": "kitsu",
+            "_synonyms": synonyms,
+        }
 
 
 def _clean_jikan_synopsis(text: str) -> str:
@@ -716,6 +717,7 @@ def _jikan_to_media(item: Dict) -> Dict:
     except (TypeError, ValueError):
         score = 0
     season_raw = (item.get("season") or "").upper()
+    synonyms = [s for s in (item.get("title_synonyms") or []) if s]
     return {
         "id": JIKAN_ID_OFFSET + mal_id,
         "idMal": mal_id or None,
@@ -734,11 +736,29 @@ def _jikan_to_media(item: Dict) -> Dict:
         "averageScore": score,
         "popularity": item.get("members") or 0,
         "genres": [g.get("name") for g in (item.get("genres") or []) if g.get("name")],
-        "studios": {"nodes": [{"name": s.get("name")} for s in (item.get("studios") or []) if s.get("name")]},
-        "trailer": ({"site": "Youtube", "id": yt_id} if yt_id else None),
-        "nextAiringEpisode": None,
-        "_source": "jikan",
-    }
+        "studios": {"nodes": [{"name": s.get("name")} for s in (item.get("studios") or []) if s.get("name")]},            "trailer": ({"site": "Youtube", "id": yt_id} if yt_id else None),
+            "nextAiringEpisode": None,
+            "_source": "jikan",
+            "_synonyms": synonyms,
+        }
+
+
+def _media_titles(media: Dict) -> List[str]:
+    """All searchable titles for provider mapping: english/romaji/native +
+    fallback-provider synonyms. Powers streaming resolution when AniList is
+    down, so every anime keeps its heaven/anikoto servers."""
+    media = media or {}
+    out: List[str] = []
+    title = media.get("title") or {}
+    for key in ("english", "romaji", "native"):
+        value = (title.get(key) or "").strip()
+        if value and value not in out:
+            out.append(value)
+    for syn in (media.get("_synonyms") or []):
+        value = (syn or "").strip()
+        if value and value not in out:
+            out.append(value)
+    return out
 
 
 def _kitsu_mal_id(kitsu_id: int):
@@ -785,24 +805,57 @@ def _fallback_media_by_title(title: str) -> Tuple[Dict, str]:
     return best, source
 
 
+def _fallback_recent_media(prefer_kitsu: bool = True) -> List[Dict]:
+    """Recently-started airing shows. Lazy second-provider lookup: the slow
+    cross-provider hop only happens when the primary returns nothing, so a
+    cold homepage never waits on both APIs."""
+    def _kitsu_season() -> List[Dict]:
+        season, year = current_anime_season()
+        items = _kitsu_get("/anime", {"filter[season]": season.lower(),
+                                       "filter[seasonYear]": year,
+                                       "sort": "-userCount", "page[limit]": 12}) or []
+        return [_kitsu_to_media(i) for i in items]
+
+    def _jikan_recent() -> List[Dict]:
+        recent = _jikan_get("/anime", {"order_by": "start_date", "sort": "desc",
+                                        "status": "airing", "limit": 12, "page": 1,
+                                        "sfw": "true"})
+        items = [i for i in (recent if isinstance(recent, list) else [])]
+        return [_jikan_to_media(i) for i in items]
+
+    if prefer_kitsu:
+        return _kitsu_season() or _jikan_recent()
+    return _jikan_recent() or _kitsu_season()
+
+
 def _fallback_home_lists() -> Tuple[Dict[str, List[Dict]], str]:
-    """Trending / top-rated / movie rows when the AniList dashboard query fails."""
+    """Homepage rows when the AniList dashboard query fails.
+
+    `popular`/`ongoing` carry currently-airing shows (the "Popular This
+    Season" shelf), `recent` carries recently-started airing shows, so the
+    site keeps showing recent and ongoing anime with zero AniList."""
     trending = _kitsu_get("/anime", {"sort": "-userCount", "page[limit]": 12})
     if trending:
         top = _kitsu_get("/anime", {"sort": "-averageRating", "page[limit]": 12}) or []
         movies = _kitsu_get("/anime", {"filter[subtype]": "movie",
                                         "sort": "-userCount", "page[limit]": 8}) or []
+        ongoing = _kitsu_get("/anime", {"filter[status]": "current",
+                                         "sort": "-userCount", "page[limit]": 12}) or []
         return {"trending": [_kitsu_to_media(i) for i in trending],
-                "popular": [_kitsu_to_media(i) for i in trending[:10]],
+                "popular": [_kitsu_to_media(i) for i in (ongoing or trending[:10])],
+                "ongoing": [_kitsu_to_media(i) for i in ongoing],
                 "top_rated": [_kitsu_to_media(i) for i in top],
-                "movies": [_kitsu_to_media(i) for i in movies]}, "kitsu"
+                "movies": [_kitsu_to_media(i) for i in movies],
+                "recent": _fallback_recent_media(prefer_kitsu=True)}, "kitsu"
     airing = _jikan_get("/top/anime", {"filter": "airing", "limit": 12, "page": 1})
     top = _jikan_get("/top/anime", {"limit": 12, "page": 1})
     if isinstance(airing, list) and airing:
         return {"trending": [_jikan_to_media(i) for i in airing],
                 "popular": [_jikan_to_media(i) for i in airing[:10]],
+                "ongoing": [_jikan_to_media(i) for i in airing],
                 "top_rated": [_jikan_to_media(i) for i in (top if isinstance(top, list) else [])],
-                "movies": []}, "jikan"
+                "movies": [],
+                "recent": _fallback_recent_media(prefer_kitsu=False)}, "jikan"
     return {}, ""
 
 
@@ -1488,10 +1541,7 @@ def details(anime_id: int):
         # Fall through to the normal path with fallback-sourced metadata.
 
     card = format_anime_card(raw_anime)
-    titles = [
-        raw_anime["title"].get("english"),
-        raw_anime["title"].get("romaji"),
-    ]
+    titles = _media_titles(raw_anime)
 
     # Resolve YouTube Trailer (AniList trailer or live YouTube search fallback)
     trailer_id = streaming_manager.youtube.get_trailer_id(
@@ -1616,16 +1666,22 @@ def watch(anime_id: int, ep_num: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media") or {}
     anilist_down = not raw_anime
+    if not raw_anime:
+        # AniList down: resolve real fallback metadata (Kitsu -> Jikan) from
+        # the cached title so provider mapping gets true titles + MAL ids
+        # and streaming works exactly like before.
+        try:
+            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+            _cached = (_meta.get("title") or "").strip()
+        except Exception:
+            _cached = ""
+        if _cached and not _cached.startswith("Anime #"):
+            fb_media, _fb_src = _fallback_media_by_title(_cached)
+            if fb_media:
+                raw_anime = fb_media
     card = format_anime_card(raw_anime) if raw_anime else _fallback_card(anime_id)
 
-    titles = []
-    if raw_anime.get("title"):
-        titles = [
-            raw_anime["title"].get("english"),
-            raw_anime["title"].get("romaji"),
-        ]
-    else:
-        titles = [card["title"]]
+    titles = _media_titles(raw_anime) or [card["title"]]
 
     trailer_id = streaming_manager.youtube.get_trailer_id(
         card["title"], raw_anime.get("trailer")
@@ -1832,9 +1888,19 @@ def api_episode_sources(anime_id: int, ep_num: int):
     heaven_id = _hv
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media") or {}
-    titles = []
-    if raw_anime.get("title"):
-        titles = [raw_anime["title"].get("english"), raw_anime["title"].get("romaji")]
+    if not raw_anime:
+        # Same fallback-metadata upgrade as the watch page: real titles +
+        # MAL ids from Kitsu/Jikan so servers resolve like before.
+        try:
+            _m = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+            _cached = (_m.get("title") or "").strip()
+        except Exception:
+            _cached = ""
+        if _cached and not _cached.startswith("Anime #"):
+            fb_media, _fb_src = _fallback_media_by_title(_cached)
+            if fb_media:
+                raw_anime = fb_media
+    titles = _media_titles(raw_anime)
     if not titles or not any(titles):
         try:
             _m = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
@@ -2842,8 +2908,9 @@ def api_v1_catalog_home():
             cards = {
                 "trending": [format_anime_card(a) for a in fb_lists.get("trending", [])],
                 "popular": [format_anime_card(a) for a in fb_lists.get("popular", [])],
+                "ongoing": [format_anime_card(a) for a in fb_lists.get("ongoing", [])],
                 "top_rated": [format_anime_card(a) for a in fb_lists.get("top_rated", [])],
-                "recently_added": [],
+                "recently_added": [format_anime_card(a) for a in fb_lists.get("recent", [])],
                 "movies": [format_anime_card(a) for a in fb_lists.get("movies", [])],
                 "series": [format_anime_card(a) for a in fb_lists.get("trending", [])],
             }
