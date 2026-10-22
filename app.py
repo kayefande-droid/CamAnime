@@ -536,6 +536,329 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
         return {}
 
 
+# ─── Free fallback metadata providers (used only when AniList is down) ──────
+# Chain: AniList (primary) -> Kitsu (no key, JSON:API, verified reachable) ->
+# Jikan v4 / MyAnimeList (no key, 3 req/sec + 60 req/min; may be unreachable
+# from some networks, so it stays second). Both adapters emit AniList-shaped
+# dicts so format_anime_card() and every downstream path work unchanged.
+# Fallback ids are offset into a reserved range (>= 900M) so they can never
+# collide with real AniList ids; embeds needing real MAL ids use `idMal`.
+KITSU_API_URL = "https://kitsu.io/api/edge"
+JIKAN_API_URL = "https://api.jikan.moe/v4"
+KITSU_ID_OFFSET = 900_000_000
+JIKAN_ID_OFFSET = 910_000_000
+_FALLBACK_API_NAMES = {"kitsu": "Kitsu", "jikan": "Jikan (MyAnimeList)"}
+_JIKAN_MIN_INTERVAL = 0.5  # stay under Jikan's 3 req/sec limit
+_jikan_last_call = 0.0
+_jikan_lock = Lock()
+
+KITSU_STATUS_MAP = {"current": "RELEASING", "finished": "FINISHED",
+                    "upcoming": "NOT_YET_RELEASED", "unreleased": "NOT_YET_RELEASED"}
+JIKAN_STATUS_MAP = {"currently airing": "RELEASING", "finished airing": "FINISHED",
+                    "not yet aired": "NOT_YET_RELEASED"}
+KITSU_FORMAT_MAP = {"tv": "TV", "movie": "MOVIE", "special": "SPECIAL",
+                    "ova": "OVA", "ona": "ONA", "music": "MUSIC"}
+JIKAN_FORMAT_MAP = {"tv": "TV", "movie": "MOVIE", "special": "SPECIAL",
+                    "ova": "OVA", "ona": "ONA", "music": "MUSIC",
+                    "tv special": "SPECIAL", "cm": "SPECIAL", "pv": "SPECIAL"}
+KITSU_GENRE_SLUG_MAP = {"action": "action", "adventure": "adventure",
+    "comedy": "comedy", "drama": "drama", "fantasy": "fantasy",
+    "horror": "horror", "mystery": "mystery", "psychological": "psychological",
+    "romance": "romance", "sci-fi": "sci-fi", "slice of life": "slice-of-life",
+    "sports": "sports", "supernatural": "supernatural", "thriller": "thriller"}
+
+
+def _fallback_cache_get(key: str):
+    entry = _anilist_cache.get(key)
+    if not entry:
+        return None
+    data, ts = entry
+    if time.time() - ts > ANILIST_CACHE_TTL:
+        _anilist_cache.pop(key, None)
+        return None
+    _anilist_cache.move_to_end(key)
+    return data
+
+
+def _fallback_cache_set(key: str, data):
+    _anilist_cache[key] = (data, time.time())
+    _anilist_cache.move_to_end(key)
+    while len(_anilist_cache) > ANILIST_CACHE_MAX:
+        _anilist_cache.popitem(last=False)
+
+
+def _kitsu_get(path: str, params: Optional[Dict] = None):
+    """GET a Kitsu JSON:API collection; returns the `data` list (or {} on error)."""
+    key = f"kitsu_{path}_{str(sorted((params or {}).items()))}"
+    cached = _fallback_cache_get(key)
+    if cached is not None:
+        return cached
+    try:
+        resp = requests.get(f"{KITSU_API_URL}{path}", params=params or {},
+                            headers={"User-Agent": DEFAULT_UA, "Accept": "application/vnd.api+json"},
+                            timeout=10)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        _fallback_cache_set(key, data)
+        return data
+    except Exception as e:
+        logger.error(f"Kitsu API Error ({path}): {e}")
+        return {}
+
+
+def _jikan_get(path: str, params: Optional[Dict] = None):
+    """GET a Jikan v4 endpoint honouring its 3 req/sec limit; {} on error."""
+    global _jikan_last_call
+    key = f"jikan_{path}_{str(sorted((params or {}).items()))}"
+    cached = _fallback_cache_get(key)
+    if cached is not None:
+        return cached
+    try:
+        with _jikan_lock:
+            wait = _JIKAN_MIN_INTERVAL - (time.time() - _jikan_last_call)
+            if wait > 0:
+                time.sleep(wait)
+            resp = requests.get(f"{JIKAN_API_URL}{path}", params=params or {},
+                                headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
+                                timeout=12)
+            _jikan_last_call = time.time()
+        resp.raise_for_status()
+        payload = resp.json()
+        data = payload.get("data", payload)
+        _fallback_cache_set(key, data)
+        return data
+    except Exception as e:
+        logger.error(f"Jikan API Error ({path}): {e}")
+        return {}
+
+
+def _season_from_month(month: int) -> str:
+    return ("WINTER" if month in (1, 2, 3) else "SPRING" if month in (4, 5, 6)
+            else "SUMMER" if month in (7, 8, 9) else "FALL")
+
+
+def _kitsu_to_media(item: Dict) -> Dict:
+    """Adapt one Kitsu anime resource to an AniList MEDIA_FRAGMENT-shaped dict."""
+    a = (item or {}).get("attributes", {}) or {}
+    try:
+        kid = int((item or {}).get("id", 0) or 0)
+    except (TypeError, ValueError):
+        kid = 0
+    titles = a.get("titles") or {}
+    title_en = titles.get("en") or a.get("canonicalTitle") or ""
+    title_ro = titles.get("en_jp") or title_en
+    poster = (a.get("posterImage") or {})
+    img = poster.get("large") or poster.get("original") or ""
+    cover = (a.get("coverImage") or {})
+    start = (a.get("startDate") or "")
+    year, season = "", ""
+    try:
+        if len(start) >= 7:
+            year = int(start[:4])
+            season = _season_from_month(int(start[5:7]))
+    except (TypeError, ValueError):
+        year, season = "", ""
+    try:
+        score = int(float(a.get("averageRating") or 0))
+    except (TypeError, ValueError):
+        score = 0
+    trailer_id = a.get("youtubeVideoId") or None
+    return {
+        "id": KITSU_ID_OFFSET + kid,
+        "_kitsu_id": kid,
+        "idMal": None,
+        "title": {"romaji": title_ro or title_en or f"Anime #{kid}",
+                   "english": title_en or None,
+                   "native": titles.get("ja_jp") or ""},
+        "description": (a.get("synopsis") or "").strip(),
+        "coverImage": {"large": img, "extraLarge": img,
+                        "color": None},
+        "bannerImage": cover.get("large") or cover.get("original") or "",
+        "episodes": a.get("episodeCount"),
+        "duration": a.get("episodeLength"),
+        "status": KITSU_STATUS_MAP.get((a.get("status") or "").lower(), "FINISHED"),
+        "format": KITSU_FORMAT_MAP.get((a.get("subtype") or "tv").lower(), "TV"),
+        "season": season,
+        "seasonYear": year,
+        "averageScore": score,
+        "popularity": a.get("userCount") or 0,
+        "genres": [],
+        "studios": {"nodes": []},
+        "trailer": ({"site": "Youtube", "id": trailer_id} if trailer_id else None),
+        "nextAiringEpisode": None,
+        "_source": "kitsu",
+    }
+
+
+def _clean_jikan_synopsis(text: str) -> str:
+    return re.sub(r"\s*\[Written by MAL Rewrite\]\s*", "", text or "").strip()
+
+
+def _jikan_to_media(item: Dict) -> Dict:
+    """Adapt one Jikan anime object to an AniList MEDIA_FRAGMENT-shaped dict."""
+    item = item or {}
+    try:
+        mal_id = int(item.get("mal_id", 0) or 0)
+    except (TypeError, ValueError):
+        mal_id = 0
+    images = ((item.get("images") or {}).get("jpg") or {})
+    img = images.get("large_image_url") or images.get("image_url") or ""
+    trailer = (item.get("trailer") or {})
+    yt_id = trailer.get("youtube_id")
+    minutes = None
+    try:
+        m = re.search(r"(\d+)\s*min", item.get("duration") or "", re.I)
+        minutes = int(m.group(1)) if m else None
+    except (TypeError, ValueError):
+        minutes = None
+    try:
+        score = int(round(float(item.get("score") or 0) * 10))
+    except (TypeError, ValueError):
+        score = 0
+    season_raw = (item.get("season") or "").upper()
+    return {
+        "id": JIKAN_ID_OFFSET + mal_id,
+        "idMal": mal_id or None,
+        "title": {"romaji": item.get("title") or item.get("title_english") or f"Anime #{mal_id}",
+                   "english": item.get("title_english") or None,
+                   "native": item.get("title_japanese") or ""},
+        "description": _clean_jikan_synopsis(item.get("synopsis")),
+        "coverImage": {"large": img, "extraLarge": img, "color": None},
+        "bannerImage": "",
+        "episodes": item.get("episodes"),
+        "duration": minutes,
+        "status": JIKAN_STATUS_MAP.get((item.get("status") or "").lower(), "FINISHED"),
+        "format": JIKAN_FORMAT_MAP.get((item.get("type") or "tv").lower(), "TV"),
+        "season": season_raw if season_raw in ("WINTER", "SPRING", "SUMMER", "FALL") else "",
+        "seasonYear": item.get("year") or "",
+        "averageScore": score,
+        "popularity": item.get("members") or 0,
+        "genres": [g.get("name") for g in (item.get("genres") or []) if g.get("name")],
+        "studios": {"nodes": [{"name": s.get("name")} for s in (item.get("studios") or []) if s.get("name")]},
+        "trailer": ({"site": "Youtube", "id": yt_id} if yt_id else None),
+        "nextAiringEpisode": None,
+        "_source": "jikan",
+    }
+
+
+def _kitsu_mal_id(kitsu_id: int):
+    """Resolve a Kitsu anime id to its MyAnimeList id (enables real MAL embeds)."""
+    if not kitsu_id:
+        return None
+    data = _kitsu_get(f"/anime/{kitsu_id}/mappings",
+                      {"filter[externalSite]": "myAnimeList/anime"})
+    try:
+        for m in (data or []):
+            ext = ((m or {}).get("attributes") or {}).get("externalId")
+            if ext and str(ext).isdigit():
+                return int(ext)
+    except Exception:
+        pass
+    return None
+
+
+def _fallback_search_media(query: str, limit: int = 12) -> Tuple[List[Dict], str]:
+    """Title search across fallback providers; returns (media_list, source)."""
+    query = (query or "").strip()
+    if not query:
+        return [], ""
+    items = _kitsu_get("/anime", {"filter[text]": query, "page[limit]": max(1, min(limit, 20))})
+    if items:
+        return [_kitsu_to_media(i) for i in items], "kitsu"
+    data = _jikan_get("/anime", {"q": query, "limit": max(1, min(limit, 20)),
+                                   "order_by": "members", "sort": "desc", "sfw": "true"})
+    if isinstance(data, list) and data:
+        return [_jikan_to_media(i) for i in data], "jikan"
+    return [], ""
+
+
+def _fallback_media_by_title(title: str) -> Tuple[Dict, str]:
+    """Best single fallback record for a title (details path)."""
+    media, source = _fallback_search_media(title, limit=5)
+    if not media:
+        return {}, ""
+    best = media[0]
+    if source == "kitsu" and best.get("_kitsu_id"):
+        mal = _kitsu_mal_id(best["_kitsu_id"])
+        if mal:
+            best["idMal"] = mal
+    return best, source
+
+
+def _fallback_home_lists() -> Tuple[Dict[str, List[Dict]], str]:
+    """Trending / top-rated / movie rows when the AniList dashboard query fails."""
+    trending = _kitsu_get("/anime", {"sort": "-userCount", "page[limit]": 12})
+    if trending:
+        top = _kitsu_get("/anime", {"sort": "-averageRating", "page[limit]": 12}) or []
+        movies = _kitsu_get("/anime", {"filter[subtype]": "movie",
+                                        "sort": "-userCount", "page[limit]": 8}) or []
+        return {"trending": [_kitsu_to_media(i) for i in trending],
+                "popular": [_kitsu_to_media(i) for i in trending[:10]],
+                "top_rated": [_kitsu_to_media(i) for i in top],
+                "movies": [_kitsu_to_media(i) for i in movies]}, "kitsu"
+    airing = _jikan_get("/top/anime", {"filter": "airing", "limit": 12, "page": 1})
+    top = _jikan_get("/top/anime", {"limit": 12, "page": 1})
+    if isinstance(airing, list) and airing:
+        return {"trending": [_jikan_to_media(i) for i in airing],
+                "popular": [_jikan_to_media(i) for i in airing[:10]],
+                "top_rated": [_jikan_to_media(i) for i in (top if isinstance(top, list) else [])],
+                "movies": []}, "jikan"
+    return {}, ""
+
+
+def _fallback_season_schedule(season: str, year: int) -> Optional[List[Dict]]:
+    """Current-season airing rows via Jikan seasons/now, else Kitsu season filter.
+
+    Neither exposes exact episode air-times, so rows are honest `date_unknown`
+    listings of shows really airing now — never fabricated countdowns."""
+    now_ts = _utc_now_timestamp()
+    sched: List[Dict] = []
+    for page in (1, 2):
+        data = _jikan_get("/seasons/now", {"page": page, "limit": 25, "sfw": "true"})
+        if not isinstance(data, list) or not data:
+            break
+        for item in data:
+            media = _jikan_to_media(item)
+            card = format_anime_card(media)
+            b = (item or {}).get("broadcast") or {}
+            when = " ".join(x for x in (b.get("day"), b.get("time"), b.get("timezone")) if x).strip()
+            card["next_airing_episode"] = None
+            card["airing_hour"] = when
+            card["availability"] = "date_unknown"
+            card["upcoming"] = False
+            card["released_episode"] = None
+            card["official_episode_link"] = None
+            card["official_link_available"] = False
+            card["playback_available"] = False
+            card["download_available"] = False
+            sched.append({"id": card["id"], "title": card["title"],
+                          "next_airing_episode": None, "airing_hour": when,
+                          "availability": "date_unknown", "upcoming": False,
+                          "released_episode": None, "official_episode_link": None,
+                          "official_link_available": False, "playback_available": False,
+                          "download_available": False})
+        if len(data) < 25:
+            break
+    if sched:
+        return sched
+    items = _kitsu_get("/anime", {"filter[season]": (season or "").lower(),
+                                   "filter[seasonYear]": year,
+                                   "sort": "-userCount", "page[limit]": 20})
+    if items:
+        out = []
+        for item in items:
+            media = _kitsu_to_media(item)
+            card = format_anime_card(media)
+            out.append({"id": card["id"], "title": card["title"],
+                        "next_airing_episode": None, "airing_hour": "",
+                        "availability": "date_unknown", "upcoming": False,
+                        "released_episode": None, "official_episode_link": None,
+                        "official_link_available": False, "playback_available": False,
+                        "download_available": False})
+        return out
+    return None
+
+
 def current_anime_season(now: Optional[datetime] = None):
     """Return AniList's initial-release season for the current UTC date."""
     now = now or datetime.now(timezone.utc)
@@ -618,7 +941,8 @@ def _load_current_season_schedule(now_ts: Optional[int] = None,
             "season": season, "seasonYear": year, "page": page, "perPage": per_page,
         }, cache_ttl=_SEASON_SCHEDULE_CACHE_TTL)
         if "Page" not in data:
-            return None
+            # AniList down: fall back to free providers instead of an empty drawer.
+            return _fallback_season_schedule(season, year)
         page_data = data.get("Page") or {}
         media = page_data.get("media") or []
         for anime in media:
@@ -960,6 +1284,12 @@ def home():
     trending = [format_anime_card(a) for a in trending_raw if a]
     popular_season = [format_anime_card(a) for a in season_raw if a]
     top_rated = [format_anime_card(a) for a in top_raw if a]
+    if not trending and not popular_season and not top_rated:
+        # AniList down: free fallback providers keep the homepage real.
+        fb_lists, _fb_source = _fallback_home_lists()
+        trending = [format_anime_card(a) for a in fb_lists.get("trending", [])]
+        popular_season = [format_anime_card(a) for a in fb_lists.get("popular", [])]
+        top_rated = [format_anime_card(a) for a in fb_lists.get("top_rated", [])]
 
     # Seasons / best-of rows: put this WEEK's and this MONTH's standouts in
     # shuffled rows so users always discover something new on every visit.
@@ -1076,6 +1406,10 @@ def search():
     data = fetch_anilist(SEARCH_FILTER_QUERY, filters["variables"])
     raw_results = data.get("Page", {}).get("media", [])
     results = [format_anime_card(a) for a in raw_results if a]
+    if not results:
+        # AniList down: free fallback providers keep search real.
+        fb_media, _fb_source = _fallback_search_media(query, limit=12)
+        results = [format_anime_card(a) for a in fb_media]
 
     # Also search AnimeHeaven directly so niche / scraper-only shows appear
     heaven_matches = streaming_manager.animeheaven.search(query)[:12]
@@ -1101,42 +1435,57 @@ def search():
     )
 
 
+def _details_provider_fallback(anime_id: int):
+    """Last-resort details page: server cache + live provider listings only."""
+    card = _fallback_card(anime_id)
+    titles = [card["title"]]
+    mapping = streaming_manager.resolve_anime_mapping(anime_id, titles, mal_id=None)
+    heaven_info = (
+        streaming_manager.animeheaven.get_anime_info(mapping["heaven_id"])
+        if mapping.get("heaven_id") else None
+    )
+    provider_episodes = list((heaven_info or {}).get("episodes") or [])
+    if mapping.get("anikoto_slug"):
+        provider_episodes.extend(streaming_manager.anikoto.get_episodes(mapping["anikoto_slug"]))
+    confirmed_numbers = sorted({
+        n for n in (_episode_number((e or {}).get("num")) for e in provider_episodes)
+        if n is not None
+    })
+    episode_list = [{"id": i, "num": i, "title": f"Episode {i}",
+                     "thumbnail": card["banner"] or card["image"],
+                     "heaven_key": None, "provider_listed": True,
+                     "availability_label": "Provider episode listing found · playback not verified",
+                     "added": ""} for i in confirmed_numbers]
+    return render_template("details.html", anime={
+        **card, "tags": [], "episodes": episode_list, "relations": [],
+        "recommendations": [], "characters": [],
+        "heaven_id": mapping.get("heaven_id"),
+        "anikoto_slug": mapping.get("anikoto_slug"),
+        "heaven_info": heaven_info,
+        "anilist_unavailable": True,
+    })
+
+
 @app.route("/anime/<int:anime_id>")
 def details(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media")
-    anilist_down = not raw_anime
     if not raw_anime:
-        # AniList outage fallback: serve the page from server-side cache +
-        # live provider listings instead of a dead 404. Episode updates keep
-        # flowing from AnimeHeaven/Anikoto while metadata is degraded.
-        card = _fallback_card(anime_id)
-        titles = [card["title"]]
-        mapping = streaming_manager.resolve_anime_mapping(anime_id, titles, mal_id=None)
-        heaven_info = (
-            streaming_manager.animeheaven.get_anime_info(mapping["heaven_id"])
-            if mapping.get("heaven_id") else None
-        )
-        provider_episodes = list((heaven_info or {}).get("episodes") or [])
-        if mapping.get("anikoto_slug"):
-            provider_episodes.extend(streaming_manager.anikoto.get_episodes(mapping["anikoto_slug"]))
-        confirmed_numbers = sorted({
-            n for n in (_episode_number((e or {}).get("num")) for e in provider_episodes)
-            if n is not None
-        })
-        episode_list = [{"id": i, "num": i, "title": f"Episode {i}",
-                         "thumbnail": card["banner"] or card["image"],
-                         "heaven_key": None, "provider_listed": True,
-                         "availability_label": "Provider episode listing found · playback not verified",
-                         "added": ""} for i in confirmed_numbers]
-        return render_template("details.html", anime={
-            **card, "tags": [], "episodes": episode_list, "relations": [],
-            "recommendations": [], "characters": [],
-            "heaven_id": mapping.get("heaven_id"),
-            "anikoto_slug": mapping.get("anikoto_slug"),
-            "heaven_info": heaven_info,
-            "anilist_unavailable": True,
-        })
+        # AniList outage: try free fallback providers (Kitsu -> Jikan) using
+        # the cached title, so the page keeps real metadata + MAL ids. Only
+        # when both fail do we serve the generic provider-listing fallback.
+        try:
+            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+            _cached_title = (_meta.get("title") or "").strip()
+        except Exception:
+            _cached_title = ""
+        if _cached_title and not _cached_title.startswith("Anime #"):
+            fb_media, _fb_source = _fallback_media_by_title(_cached_title)
+            if fb_media:
+                raw_anime = fb_media
+        if not raw_anime:
+            return _details_provider_fallback(anime_id)
+        # Fall through to the normal path with fallback-sourced metadata.
 
     card = format_anime_card(raw_anime)
     titles = [
@@ -1322,9 +1671,11 @@ def watch(anime_id: int, ep_num: int):
     if anilist_down:
         # During an AniList outage the provider mapping may be title-less, so
         # make sure the working no-title embeds are present as fallbacks.
+        # Fallback-range ids have no valid upstream embed id: those pages
+        # rely on resolved provider servers instead of a bogus iframe URL.
         embeds = _working_embed_urls(anime_id, None, ep_num)
         have = {s.get("stream_url") for s in bundle.get("servers", [])}
-        if embeds["vidlink_sub"] not in have:
+        if embeds["vidlink_sub"] not in have and not _is_fallback_id(anime_id):
             bundle.setdefault("servers", []).append({
                 "id": "embed-vidlink-sub",
                 "name": "VidLink Ultra (SUB)",
@@ -1336,6 +1687,8 @@ def watch(anime_id: int, ep_num: int):
                 "subtitles": [],
                 "badge": "MIRROR SUB",
             })
+        if not bundle.get("servers"):
+            return redirect(url_for("details", anime_id=anime_id))
         bundle["anilist_unavailable"] = True
     episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in confirmed_numbers]
     episode_position = confirmed_numbers.index(ep_num)
@@ -1671,12 +2024,22 @@ def _fallback_card(anime_id: int) -> Dict:
     }
 
 
+def _is_fallback_id(anilist_id) -> bool:
+    """True for reserved-range ids minted by fallback providers (no upstream embed)."""
+    try:
+        return int(anilist_id) >= KITSU_ID_OFFSET
+    except (TypeError, ValueError):
+        return False
+
+
 def _working_embed_urls(anilist_id: int, mal_id, ep_num: int):
     """Embed fallbacks that do not depend on AniList or scraper titles.
 
     vidlink.pro verified reachable (HTTP 200); vidsrc.cc currently times out,
-    so VidLink is primary and VidSrc stays only as a secondary mirror."""
-    mid = mal_id or anilist_id
+    so VidLink is primary and VidSrc stays only as a secondary mirror.
+    Fallback-range ids have no valid upstream embed id; `mid` is None then
+    and callers must not use the VidLink URL."""
+    mid = mal_id or (anilist_id if not _is_fallback_id(anilist_id) else None)
     return {
         "vidlink_sub": f"https://vidlink.pro/anime/{mid}/{ep_num}/sub",
         "vidlink_dub": f"https://vidlink.pro/anime/{mid}/{ep_num}/dub",
@@ -2438,6 +2801,7 @@ def _catalog_media(data: Dict) -> List[Dict]:
 @app.route("/api/v1/health")
 def api_v1_health():
     return jsonify({"status": "ok", "api_version": "v1", "catalog_source": "AniList",
+                    "catalog_fallback": "Kitsu, then Jikan (MyAnimeList) when AniList is unreachable",
                     "persistence": "SQLite for user/community records; catalogue metadata is provider-cached"})
 
 
@@ -2473,6 +2837,22 @@ def api_v1_schedule():
 def api_v1_catalog_home():
     data = fetch_anilist(HOME_DASHBOARD_QUERY)
     if not data:
+        fb_lists, fb_source = _fallback_home_lists()
+        if fb_lists:
+            cards = {
+                "trending": [format_anime_card(a) for a in fb_lists.get("trending", [])],
+                "popular": [format_anime_card(a) for a in fb_lists.get("popular", [])],
+                "top_rated": [format_anime_card(a) for a in fb_lists.get("top_rated", [])],
+                "recently_added": [],
+                "movies": [format_anime_card(a) for a in fb_lists.get("movies", [])],
+                "series": [format_anime_card(a) for a in fb_lists.get("trending", [])],
+            }
+            cards["featured"] = (cards["trending"] or [None])[0]
+            response = jsonify({"status": "success",
+                                "catalog_source": _FALLBACK_API_NAMES.get(fb_source, fb_source),
+                                "catalog": cards})
+            response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+            return response
         return _catalog_error("Catalogue provider is temporarily unavailable.", 503)
     cards = {
         "trending": [format_anime_card(a) for a in (data.get("trending", {}).get("media") or []) if a],
@@ -2521,6 +2901,28 @@ def api_v1_anime_list(genre_override: Optional[str] = None):
         variables["format"] = media_format
     data = fetch_anilist(SEARCH_FILTER_QUERY, variables)
     if not data:
+        # AniList down: free fallback providers (genre via Kitsu categories,
+        # text queries via Kitsu then Jikan). Unfiltered browses stay 503
+        # rather than dumping an unsorted list under a sorted contract.
+        fb_results, fb_source = [], ""
+        if query and not genre and not media_format:
+            fb_media, fb_source = _fallback_search_media(query, limit=limit)
+            fb_results = [format_anime_card(a) for a in fb_media]
+        elif genre and not query and not media_format:
+            slug = KITSU_GENRE_SLUG_MAP.get(genre.lower())
+            # Kitsu caps page[limit] at 20; asking for more is a hard 400.
+            items = _kitsu_get("/anime", {"filter[categories]": slug,
+                                           "sort": "-userCount",
+                                           "page[limit]": min(limit, 20)}) if slug else []
+            if items:
+                fb_results = [format_anime_card(_kitsu_to_media(i)) for i in items]
+                fb_source = "kitsu"
+        if fb_results:
+            result = jsonify({"status": "success",
+                              "catalog_source": _FALLBACK_API_NAMES.get(fb_source, fb_source),
+                              "results": fb_results, "page": page, "limit": limit})
+            result.headers["Cache-Control"] = "public, max-age=120, stale-while-revalidate=300"
+            return result
         return _catalog_error("Catalogue provider is temporarily unavailable.", 503)
     result = jsonify({"status": "success", "catalog_source": "AniList",
                       "results": _catalog_media(data), "page": page, "limit": limit})
@@ -2552,8 +2954,18 @@ def api_v1_genre_anime(slug: str):
 def _anime_metadata(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw = data.get("Media") if data else None
+    source = "AniList"
     if not raw:
-        return None
+        try:
+            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+            _t = (_meta.get("title") or "").strip()
+        except Exception:
+            _t = ""
+        if _t and not _t.startswith("Anime #"):
+            raw, _src = _fallback_media_by_title(_t)
+            source = _FALLBACK_API_NAMES.get(_src, _src) if raw else source
+        if not raw:
+            return None
     card = format_anime_card(raw)
     count = raw.get("episodes") if isinstance(raw.get("episodes"), int) else None
     # Shows still airing report a null `episodes`; derive the real count from
@@ -2587,7 +2999,7 @@ def _anime_metadata(anime_id: int):
                                     "thumbnail": x.get("thumbnail", ""),
                                     "provider": x.get("site", "")}
                                    for x in known_streaming if x],
-            "catalog_source": "AniList"}
+            "catalog_source": source}
 
 
 @app.route("/api/v1/anime/<int:anime_id>")
@@ -2607,6 +3019,15 @@ def api_v1_anime_episodes(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw = (data.get("Media") or {}) if data else {}
     if not raw:
+        # Fallback providers carry no per-episode preview metadata: report an
+        # honest empty manifest instead of a 404 for a show that may exist.
+        anime = _anime_metadata(anime_id)
+        if anime is not None:
+            return jsonify({"status": "success", "anime_id": anime_id, "episodes": [],
+                            "known_count": 0, "page": 1, "limit": 50,
+                            "has_more": False, "playback_available": False,
+                            "download_available": False,
+                            "catalog_source": anime.get("catalog_source", "")})
         return _catalog_error("Anime not found.", 404)
     page = request.args.get("page", default=1, type=int)
     limit = request.args.get("limit", default=50, type=int)

@@ -378,6 +378,8 @@ def test_schedule_failure_cooldown_prevents_upstream_retry_storm(api, monkeypatc
     monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
     monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
     monkeypatch.setattr(api.time, "monotonic", lambda: 1000)
+    # All metadata providers down: short cooldown, no retry storm.
+    monkeypatch.setattr(api, "_fallback_season_schedule", lambda *a: None)
     with patch.object(api, "fetch_anilist", return_value={}) as fetch:
         client = api.app.test_client()
         first = client.get("/api/v1/schedule")
@@ -385,6 +387,23 @@ def test_schedule_failure_cooldown_prevents_upstream_retry_storm(api, monkeypatc
     assert first.status_code == second.status_code == 200
     assert fetch.call_count == 1
     assert api._SEASON_SCHEDULE_CACHE[("FALL", 2026)][1] == api._SEASON_SCHEDULE_FAILURE_TTL
+
+
+def test_schedule_uses_fallback_when_anilist_down(api, monkeypatch):
+    monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
+    monkeypatch.setattr(api, "_SEASON_SCHEDULE_CACHE", {})
+    monkeypatch.setattr(api.time, "monotonic", lambda: 1000)
+    fb_rows = [{"id": 1, "title": "Fallback Show", "next_airing_episode": None,
+                 "airing_hour": "", "availability": "date_unknown", "upcoming": False,
+                 "released_episode": None, "official_episode_link": None,
+                 "official_link_available": False, "playback_available": False,
+                 "download_available": False}]
+    monkeypatch.setattr(api, "_fallback_season_schedule", lambda *a: list(fb_rows))
+    with patch.object(api, "fetch_anilist", return_value={}):
+        resp = api.app.test_client().get("/api/v1/schedule")
+    assert resp.status_code == 200
+    assert resp.get_json()["items"] == fb_rows
+    assert api._SEASON_SCHEDULE_CACHE[("FALL", 2026)][1] == api._SEASON_SCHEDULE_CACHE_TTL
 
 
 def test_schedule_cache_expires_after_fifteen_minutes(api, monkeypatch):
