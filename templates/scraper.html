@@ -393,7 +393,7 @@
     <!-- ─── ACTIVE ANIMEHEAVEN SHOW INSPECTOR & DIRECT MP4 PLAYER/DOWNLOADER ─── -->
     <section class="inspector-panel" id="inspectorPanel">
         <div class="inspector-top">
-            <img src="{{ selected_anime.image }}" class="inspector-poster" alt="{{ selected_anime.title }}" decoding="async">
+            <img src="{{ selected_anime.image or '/static/brand/camanime-icon.svg' }}" class="inspector-poster" alt="{{ selected_anime.title }}" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div>
                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
                     <span class="status-chip">Site ID: {{ selected_anime.site_id }}</span>
@@ -477,7 +477,7 @@
     <div class="catalog-grid">
         {% for item in items %}
         <a href="/scraper?id={{ item.id }}&feed={{ feed }}" class="catalog-card">
-            <img src="{{ item.image }}" loading="lazy" alt="{{ item.title }}">
+            <img src="{{ item.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ item.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="catalog-card-body">
                 <div class="catalog-card-title">{{ item.title }}</div>
                 <div class="catalog-card-meta">

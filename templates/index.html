@@ -32,6 +32,8 @@
     <link rel="prefetch" href="/scraper">
     <link rel="prefetch" href="/download">
     <link rel="preconnect" href="https://s4.anilist.co" crossorigin>
+    <link rel="dns-prefetch" href="https://cdn.myanimelist.net">
+    <link rel="dns-prefetch" href="https://media.kitsu.io">
     <link rel="dns-prefetch" href="https://s4.anilist.co">
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -963,7 +965,7 @@
     <section class="hero-spotlight" id="heroCarousel">
         {% for slide in hero_slides %}
         <div class="hero-slide {{ 'active' if loop.first else '' }}" data-slide-index="{{ loop.index0 }}">
-            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" decoding="async" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+            <img src="{{ slide.banner or slide.image or '/static/brand/camanime-icon.svg' }}" class="hero-backdrop" alt="{{ slide.title }}" decoding="async" referrerpolicy="no-referrer" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="hero-vignette"></div>
             <div class="hero-body">
                 <div class="hero-kicker">
@@ -1126,7 +1128,7 @@
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                         {% endif %}
                     </div>
-                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             <a href="/anime/{{ anime.id }}" class="card-btn-play">
@@ -1180,7 +1182,7 @@
             <a href="/anime/{{ it.anime_id }}" class="anime-card" style="display:flex;flex-direction:column;">
                 <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
                     <span class="mv-rank-num">#{{ loop.index }}</span>
-                    <img src="{{ it.image }}" loading="lazy" alt="{{ it.title }}" style="width:52px;height:72px;object-fit:cover;border-radius:8px;">
+                    <img src="{{ it.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ it.title }}" style="width:52px;height:72px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 </div>
                 <div style="padding:.6rem .8rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
                     <div class="card-title" style="margin:0;">{{ it.title }}</div>
@@ -1261,7 +1263,7 @@
         <div class="heaven-strip-grid">
             {% for item in heaven_recent %}
             <a href="/scraper?id={{ item.id }}" class="heaven-mini-card" aria-label="Open provider listing for {{ item.title }}">
-                <img src="{{ item.image }}" loading="lazy" alt="{{ item.title }}">
+                <img src="{{ item.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ item.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 <div class="heaven-mini-info">
                     <div class="heaven-mini-title">{{ item.title }}</div>
                     <div class="heaven-mini-meta">
@@ -1293,7 +1295,7 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
@@ -1335,7 +1337,7 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
@@ -1379,7 +1381,7 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>
@@ -1411,7 +1413,7 @@
                         <span class="ep-badge">{{ anime.episode }}</span>
                         <span class="score-badge"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     </div>
-                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                    <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ anime.title }}" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>
@@ -1627,7 +1629,7 @@
                 <div class="anime-card">
                     <div class="card-poster-wrap${image ? '' : ' poster-fallback'}">
                         <div class="card-badges-top"><span class="ep-badge">EP ${ep}</span></div>
-                        ${image ? `<img src="${esc(image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ''}
+                        ${image ? `<img src="${esc(image)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
                         <div class="card-hover-actions">
                             <div class="card-action-row">
                                 <a href="/watch/${id}/${ep}" class="card-btn-play"><i class="fas fa-play"></i> Continue</a>
@@ -1679,7 +1681,7 @@
                       <a href="/anime/${it.anime_id}" class="anime-card" style="display:flex;flex-direction:column;">
                           <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
                               <span class="mv-rank-num">#${i + 1}</span>
-                              <img src="${it.image}" loading="lazy" alt="" style="width:52px;height:72px;object-fit:cover;border-radius:8px;">
+                              <img src="${it.image || '/static/brand/camanime-icon.svg'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" style="width:52px;height:72px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                           </div>
                           <div style="padding:.6rem .8rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
                               <div class="card-title" style="margin:0;">${it.title}</div>

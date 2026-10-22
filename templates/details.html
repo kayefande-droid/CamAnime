@@ -576,14 +576,14 @@
 </header>
 
 <div class="banner-wrap">
-    <img src="{{ anime.banner or anime.image or '/static/brand/camanime-icon.svg' }}" class="banner-img" alt="{{ anime.title }}" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+    <img src="{{ anime.banner or anime.image or '/static/brand/camanime-icon.svg' }}" class="banner-img" alt="{{ anime.title }}" fetchpriority="high" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
     <div class="banner-gradient"></div>
 </div>
 
 <div class="container" id="main-content" role="main" tabindex="-1">
     <div class="dossier-card">
         <div class="poster-col">
-            <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+            <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="scraper-status-box">
                 {% if anime.heaven_id %}
                     <strong><i class="fas fa-check-circle"></i> Provider catalog matched</strong>
@@ -742,7 +742,7 @@
             <a href="/anime/{{ rel.id }}" class="mini-poster-card"
                title="{{ rel.title or 'Untitled' }}{% if rel.relation %} — {{ rel.relation }}{% endif %}">
                 {% if rel.image %}
-                <img src="{{ rel.image }}" loading="lazy" alt="{{ rel.title or 'Related anime' }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <img src="{{ rel.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ rel.title or 'Related anime' }}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                 <div class="mini-poster-fallback" style="display:none;"><i class="fas fa-layer-group"></i></div>
                 {% else %}
                 <div class="mini-poster-fallback"><i class="fas fa-layer-group"></i></div>
@@ -768,7 +768,7 @@
         </div>
         <div class="mini-grid">
             {% for rec in anime.recommendations %}
-            <a href="/anime/{{ rec.id }}" class="mini-poster-card">                    <img src="{{ rec.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" alt="{{ rec.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+            <a href="/anime/{{ rec.id }}" class="mini-poster-card">                    <img src="{{ rec.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ rec.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
 
                 <div class="mini-poster-body">
                     <div class="mini-poster-rel">★ {{ rec.rating }}{% if rec.episode %} • {{ rec.episode }}{% endif %}</div>
