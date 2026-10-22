@@ -792,6 +792,36 @@ def _fallback_search_media(query: str, limit: int = 12) -> Tuple[List[Dict], str
     return [], ""
 
 
+def _fallback_media_by_reserved_id(anime_id: int) -> Tuple[Dict, str]:
+    """Direct record lookup for fallback-range ids (no cache or title needed).
+
+    Kitsu ids decode as id - KITSU_ID_OFFSET, Jikan/MAL ids as id -
+    JIKAN_ID_OFFSET, so a watch/details URL built from a fallback card
+    always resolves back to full metadata + MAL ids for streaming."""
+    try:
+        aid = int(anime_id)
+    except (TypeError, ValueError):
+        return {}, ""
+    if KITSU_ID_OFFSET <= aid < JIKAN_ID_OFFSET:
+        kitsu_id = aid - KITSU_ID_OFFSET
+        data = _kitsu_get(f"/anime/{kitsu_id}")
+        item = data if isinstance(data, dict) and data.get("attributes") else {}
+        if item:
+            media = _kitsu_to_media(item)
+            mal = _kitsu_mal_id(kitsu_id)
+            if mal:
+                media["idMal"] = mal
+            return media, "kitsu"
+        return {}, ""
+    if aid >= JIKAN_ID_OFFSET:
+        data = _jikan_get(f"/anime/{aid - JIKAN_ID_OFFSET}/full")
+        item = data if isinstance(data, dict) and data.get("mal_id") else {}
+        if item:
+            return _jikan_to_media(item), "jikan"
+        return {}, ""
+    return {}, ""
+
+
 def _fallback_media_by_title(title: str) -> Tuple[Dict, str]:
     """Best single fallback record for a title (details path)."""
     media, source = _fallback_search_media(title, limit=5)
@@ -1524,18 +1554,22 @@ def details(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw_anime = data.get("Media")
     if not raw_anime:
-        # AniList outage: try free fallback providers (Kitsu -> Jikan) using
-        # the cached title, so the page keeps real metadata + MAL ids. Only
-        # when both fail do we serve the generic provider-listing fallback.
-        try:
-            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
-            _cached_title = (_meta.get("title") or "").strip()
-        except Exception:
-            _cached_title = ""
-        if _cached_title and not _cached_title.startswith("Anime #"):
-            fb_media, _fb_source = _fallback_media_by_title(_cached_title)
-            if fb_media:
-                raw_anime = fb_media
+        # AniList outage: try free fallback providers (Kitsu -> Jikan), so the
+        # page keeps real metadata + MAL ids. Reserved-range ids decode
+        # directly; real ids use the cached title. Only when both fail do we
+        # serve the generic provider-listing fallback.
+        if _is_fallback_id(anime_id):
+            raw_anime, _fb_source = _fallback_media_by_reserved_id(anime_id)
+        if not raw_anime:
+            try:
+                _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+                _cached_title = (_meta.get("title") or "").strip()
+            except Exception:
+                _cached_title = ""
+            if _cached_title and not _cached_title.startswith("Anime #"):
+                fb_media, _fb_source = _fallback_media_by_title(_cached_title)
+                if fb_media:
+                    raw_anime = fb_media
         if not raw_anime:
             return _details_provider_fallback(anime_id)
         # Fall through to the normal path with fallback-sourced metadata.
@@ -1667,18 +1701,22 @@ def watch(anime_id: int, ep_num: int):
     raw_anime = data.get("Media") or {}
     anilist_down = not raw_anime
     if not raw_anime:
-        # AniList down: resolve real fallback metadata (Kitsu -> Jikan) from
-        # the cached title so provider mapping gets true titles + MAL ids
-        # and streaming works exactly like before.
-        try:
-            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
-            _cached = (_meta.get("title") or "").strip()
-        except Exception:
-            _cached = ""
-        if _cached and not _cached.startswith("Anime #"):
-            fb_media, _fb_src = _fallback_media_by_title(_cached)
-            if fb_media:
-                raw_anime = fb_media
+        # AniList down: resolve real fallback metadata (Kitsu -> Jikan) so
+        # provider mapping gets true titles + MAL ids and streaming works
+        # exactly like before. Reserved-range ids decode directly (no cache
+        # needed); real AniList ids fall back to the cached title.
+        if _is_fallback_id(anime_id):
+            raw_anime, _fb_src = _fallback_media_by_reserved_id(anime_id)
+        if not raw_anime:
+            try:
+                _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+                _cached = (_meta.get("title") or "").strip()
+            except Exception:
+                _cached = ""
+            if _cached and not _cached.startswith("Anime #"):
+                fb_media, _fb_src = _fallback_media_by_title(_cached)
+                if fb_media:
+                    raw_anime = fb_media
     card = format_anime_card(raw_anime) if raw_anime else _fallback_card(anime_id)
 
     titles = _media_titles(raw_anime) or [card["title"]]
@@ -1891,15 +1929,18 @@ def api_episode_sources(anime_id: int, ep_num: int):
     if not raw_anime:
         # Same fallback-metadata upgrade as the watch page: real titles +
         # MAL ids from Kitsu/Jikan so servers resolve like before.
-        try:
-            _m = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
-            _cached = (_m.get("title") or "").strip()
-        except Exception:
-            _cached = ""
-        if _cached and not _cached.startswith("Anime #"):
-            fb_media, _fb_src = _fallback_media_by_title(_cached)
-            if fb_media:
-                raw_anime = fb_media
+        if _is_fallback_id(anime_id):
+            raw_anime, _fb_src = _fallback_media_by_reserved_id(anime_id)
+        if not raw_anime:
+            try:
+                _m = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+                _cached = (_m.get("title") or "").strip()
+            except Exception:
+                _cached = ""
+            if _cached and not _cached.startswith("Anime #"):
+                fb_media, _fb_src = _fallback_media_by_title(_cached)
+                if fb_media:
+                    raw_anime = fb_media
     titles = _media_titles(raw_anime)
     if not titles or not any(titles):
         try:
@@ -3023,14 +3064,18 @@ def _anime_metadata(anime_id: int):
     raw = data.get("Media") if data else None
     source = "AniList"
     if not raw:
-        try:
-            _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
-            _t = (_meta.get("title") or "").strip()
-        except Exception:
-            _t = ""
-        if _t and not _t.startswith("Anime #"):
-            raw, _src = _fallback_media_by_title(_t)
+        if _is_fallback_id(anime_id):
+            raw, _src = _fallback_media_by_reserved_id(anime_id)
             source = _FALLBACK_API_NAMES.get(_src, _src) if raw else source
+        if not raw:
+            try:
+                _meta = (platform.get_anime_meta([anime_id]) or {}).get(int(anime_id), {})
+                _t = (_meta.get("title") or "").strip()
+            except Exception:
+                _t = ""
+            if _t and not _t.startswith("Anime #"):
+                raw, _src = _fallback_media_by_title(_t)
+                source = _FALLBACK_API_NAMES.get(_src, _src) if raw else source
         if not raw:
             return None
     card = format_anime_card(raw)

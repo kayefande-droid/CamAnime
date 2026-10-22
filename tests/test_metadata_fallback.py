@@ -177,6 +177,18 @@ def test_details_uses_fallback_media_for_cached_title(monkeypatch):
     assert b"Naruto" in resp.data
 
 
+def test_reserved_id_decodes_directly_without_cache(monkeypatch):
+    single = {"id": "1555", "attributes": KITSU_ITEM["attributes"]}
+    monkeypatch.setattr(api, "_kitsu_get", lambda path, params=None: single)
+    monkeypatch.setattr(api, "_kitsu_mal_id", lambda kid: 269)
+    media, source = api._fallback_media_by_reserved_id(api.KITSU_ID_OFFSET + 1555)
+    assert source == "kitsu"
+    assert media["title"]["english"] == "Naruto: Shippuden"
+    assert media["idMal"] == 269
+    assert media["id"] == api.KITSU_ID_OFFSET + 1555
+    assert api._fallback_media_by_reserved_id(21) == ({}, "")
+
+
 def test_watch_uses_fallback_titles_and_mal_for_mapping(monkeypatch):
     rid = api.JIKAN_ID_OFFSET + 20
     assert api._is_fallback_id(rid)
