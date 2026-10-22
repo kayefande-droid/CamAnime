@@ -50,6 +50,28 @@ def test_oversized_path_is_rejected():
     assert client().get("/" + "a" * 600).status_code in (400, 404)
 
 
+def test_devtools_are_allowed_but_hacking_is_blocked():
+    """DevTools open, hacking shut: site.js must not block F12/right-click,
+    while server-side guards (headers, scanner block, rate limit) stay on."""
+    from pathlib import Path as _P
+    js = (_P(__file__).resolve().parent.parent / "static" / "js" / "site.js").read_text()
+    # No devtools/right-click deterrence allowed back in this file.
+    # Checks are behavioural (blocking constructs), not mere word mentions.
+    assert "ca-shield" not in js
+    assert "outerWidth" not in js and "outerHeight" not in js
+    assert "contextmenu" not in js.lower()
+    assert "keyCode" not in js
+    assert "preventDefault" not in js
+    assert "keydown" not in js.lower()
+    # Core site behaviour must still be present.
+    assert "caSetTheme" in js and "caTrack" in js
+    # And the real server-side hacking protections are still enforced.
+    r = client().get("/")
+    assert r.headers["X-Content-Type-Options"] == "nosniff"
+    assert "default-src 'self'" in r.headers["Content-Security-Policy"]
+    assert client().get("/.env").status_code == 404
+
+
 def test_gzip_middleware_does_not_buffer_video_responses(monkeypatch):
     from flask import Response
 

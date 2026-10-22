@@ -3,8 +3,9 @@ import re
 import time
 import random
 from datetime import datetime, timezone
-from threading import Lock
+from threading import Lock, Thread
 from collections import OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional
 from urllib.parse import quote, urljoin, urlparse
 
@@ -350,6 +351,20 @@ ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: OrderedDict[str, tuple] = OrderedDict()
 ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
 ANILIST_CACHE_MAX = 64  # detail responses include large relations/character lists; cap worker memory
+_ANILIST_STATUS_LOCK = Lock()
+_ANILIST_STATUS = {
+    "available": None,  # None = never probed; True/False = last known AniList state
+    "last_check": 0.0,
+    "last_success": 0.0,
+    "consecutive_failures": 0,
+}
+_ANILIST_PROBE_QUERY = "query { Page(page: 1, perPage: 1) { media(type: ANIME) { id } } }"
+try:
+    _ANILIST_DETECTOR_INTERVAL = max(60, int(os.environ.get("CAMANIME_ANILIST_CHECK_INTERVAL", "3600") or 3600))
+except (TypeError, ValueError):
+    _ANILIST_DETECTOR_INTERVAL = 3600
+_ANILIST_DETECTOR_STARTED = False
+_FALLBACK_CACHE_LOCK = Lock()
 _SEASON_SCHEDULE_LOCK = Lock()
 _SEASON_SCHEDULE_CACHE = {}
 _SEASON_SCHEDULE_CACHE_TTL = 900
@@ -525,6 +540,7 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
         )
         response.raise_for_status()
         data = response.json().get("data", {})
+        _mark_anilist_result(bool(data))
         if data:
             _anilist_cache[cache_key] = (data, now)
             _anilist_cache.move_to_end(cache_key)
@@ -533,7 +549,121 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
         return data
     except Exception as e:
         logger.error(f"AniList API Error: {e}")
+        _mark_anilist_result(False)
         return {}
+
+
+# ─── AniList recovery detector (hourly probe, auto-switch back) ─────────────
+# Normal traffic already tries AniList first on every cache miss, so recovery
+# is automatic. This detector exists to (a) notice recovery within the hour
+# even on quiet workers, (b) evict stale Kitsu/Jikan fallback rows the moment
+# AniList answers again so the primary catalogue resumes immediately, and
+# (c) expose the current upstream state on /api/v1/health for ops.
+# Interval: CAMANIME_ANILIST_CHECK_INTERVAL seconds (default 3600 = 1 hour,
+# minimum 60). One daemon thread per worker; a probe is a single tiny
+# GraphQL page (~1KB) so the hourly cost is negligible.
+
+
+def _mark_anilist_result(ok: bool) -> None:
+    """Fold one live AniList success/failure into the detector state."""
+    try:
+        now = time.time()
+        with _ANILIST_STATUS_LOCK:
+            _ANILIST_STATUS["last_check"] = now
+            if ok:
+                _ANILIST_STATUS["available"] = True
+                _ANILIST_STATUS["last_success"] = now
+                _ANILIST_STATUS["consecutive_failures"] = 0
+            else:
+                _ANILIST_STATUS["consecutive_failures"] += 1
+                # One blip is not an outage: only flip after back-to-back
+                # failures so transient hiccups don't flap health.
+                if _ANILIST_STATUS["consecutive_failures"] >= 2:
+                    _ANILIST_STATUS["available"] = False
+    except Exception:
+        pass
+
+
+def _clear_fallback_cache() -> int:
+    """Drop cached Kitsu/Jikan rows so AniList resumes as the source."""
+    try:
+        with _FALLBACK_CACHE_LOCK:
+            stale = [k for k in _anilist_cache
+                     if k.startswith("kitsu_") or k.startswith("jikan_")]
+            for key in stale:
+                _anilist_cache.pop(key, None)
+        return len(stale)
+    except Exception:
+        return 0
+
+
+def _anilist_detector_snapshot() -> Dict:
+    with _ANILIST_STATUS_LOCK:
+        return dict(_ANILIST_STATUS)
+
+
+def check_anilist_availability(force: bool = False, timeout: int = 8) -> bool:
+    """Probe AniList directly (bypassing caches); at most once per interval.
+
+    Returns True when AniList answers, False otherwise. On a down->up
+    transition the stale fallback cache is cleared so the next catalogue
+    request serves AniList again.
+    """
+    now = time.time()
+    with _ANILIST_STATUS_LOCK:
+        last = _ANILIST_STATUS["last_check"]
+        known = _ANILIST_STATUS["available"]
+    if not force and known is not None and now - last < _ANILIST_DETECTOR_INTERVAL:
+        return known
+    try:
+        resp = requests.post(
+            ANILIST_API_URL,
+            json={"query": _ANILIST_PROBE_QUERY},
+            headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        ok = bool(resp.json().get("data"))
+    except Exception as e:
+        logger.warning(f"AniList detector probe failed: {e}")
+        ok = False
+    with _ANILIST_STATUS_LOCK:
+        prev = _ANILIST_STATUS["available"]
+        _ANILIST_STATUS["last_check"] = time.time()
+        if ok:
+            _ANILIST_STATUS["available"] = True
+            _ANILIST_STATUS["last_success"] = _ANILIST_STATUS["last_check"]
+            _ANILIST_STATUS["consecutive_failures"] = 0
+        else:
+            _ANILIST_STATUS["consecutive_failures"] += 1
+            _ANILIST_STATUS["available"] = False
+    if ok and prev is False:
+        cleared = _clear_fallback_cache()
+        logger.warning(f"AniList is back online; cleared {cleared} stale fallback rows.")
+    elif not ok and prev is True:
+        logger.warning("AniList unreachable; serving Kitsu/Jikan fallback catalogue.")
+    return ok
+
+
+def _anilist_detector_loop() -> None:
+    while True:
+        try:
+            time.sleep(_ANILIST_DETECTOR_INTERVAL)
+            check_anilist_availability()
+        except Exception:
+            logger.debug("AniList detector loop error", exc_info=True)
+
+
+def start_anilist_detector() -> None:
+    """Start the hourly recovery probe thread (idempotent, daemon)."""
+    global _ANILIST_DETECTOR_STARTED
+    if _ANILIST_DETECTOR_STARTED:
+        return
+    _ANILIST_DETECTOR_STARTED = True
+    Thread(target=_anilist_detector_loop, name="anilist-detector", daemon=True).start()
+
+
+start_anilist_detector()
 
 
 # ─── Free fallback metadata providers (used only when AniList is down) ──────
@@ -569,22 +699,24 @@ KITSU_GENRE_SLUG_MAP = {"action": "action", "adventure": "adventure",
 
 
 def _fallback_cache_get(key: str):
-    entry = _anilist_cache.get(key)
-    if not entry:
-        return None
-    data, ts = entry
-    if time.time() - ts > ANILIST_CACHE_TTL:
-        _anilist_cache.pop(key, None)
-        return None
-    _anilist_cache.move_to_end(key)
-    return data
+    with _FALLBACK_CACHE_LOCK:
+        entry = _anilist_cache.get(key)
+        if not entry:
+            return None
+        data, ts = entry
+        if time.time() - ts > ANILIST_CACHE_TTL:
+            _anilist_cache.pop(key, None)
+            return None
+        _anilist_cache.move_to_end(key)
+        return data
 
 
 def _fallback_cache_set(key: str, data):
-    _anilist_cache[key] = (data, time.time())
-    _anilist_cache.move_to_end(key)
-    while len(_anilist_cache) > ANILIST_CACHE_MAX:
-        _anilist_cache.popitem(last=False)
+    with _FALLBACK_CACHE_LOCK:
+        _anilist_cache[key] = (data, time.time())
+        _anilist_cache.move_to_end(key)
+        while len(_anilist_cache) > ANILIST_CACHE_MAX:
+            _anilist_cache.popitem(last=False)
 
 
 def _kitsu_get(path: str, params: Optional[Dict] = None):
@@ -804,11 +936,33 @@ def _fallback_media_by_reserved_id(anime_id: int) -> Tuple[Dict, str]:
         return {}, ""
     if KITSU_ID_OFFSET <= aid < JIKAN_ID_OFFSET:
         kitsu_id = aid - KITSU_ID_OFFSET
-        data = _kitsu_get(f"/anime/{kitsu_id}")
+        # Record + MAL-mapping fetched concurrently (one RTT, not two) so a
+        # cold fallback watch page stays as snappy as the AniList path.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fut_item = pool.submit(_kitsu_get, f"/anime/{kitsu_id}")
+            fut_maps = pool.submit(
+                _kitsu_get, f"/anime/{kitsu_id}/mappings",
+                {"filter[externalSite]": "myAnimeList/anime"})
+            try:
+                data = fut_item.result()
+            except Exception:
+                data = {}
+            try:
+                maps = fut_maps.result()
+            except Exception:
+                maps = []
         item = data if isinstance(data, dict) and data.get("attributes") else {}
         if item:
             media = _kitsu_to_media(item)
-            mal = _kitsu_mal_id(kitsu_id)
+            mal = None
+            try:
+                for m in (maps or []):
+                    ext = ((m or {}).get("attributes") or {}).get("externalId")
+                    if ext and str(ext).isdigit():
+                        mal = int(ext)
+                        break
+            except Exception:
+                mal = None
             if mal:
                 media["idMal"] = mal
             return media, "kitsu"
@@ -864,16 +1018,36 @@ def _fallback_home_lists() -> Tuple[Dict[str, List[Dict]], str]:
     `popular`/`ongoing` carry currently-airing shows (the "Popular This
     Season" shelf), `recent` carries recently-started airing shows, so the
     site keeps showing recent and ongoing anime with zero AniList."""
-    trending = _kitsu_get("/anime", {"sort": "-userCount", "page[limit]": 12})
+    # All row queries fire concurrently (one RTT instead of four) so a cold
+    # fallback homepage stays as snappy as the AniList path.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        _fut = {
+            name: pool.submit(_kitsu_get, path, params)
+            for name, path, params in (
+                ("trending", "/anime", {"sort": "-userCount", "page[limit]": 12}),
+                ("top", "/anime", {"sort": "-averageRating", "page[limit]": 12}),
+                ("movies", "/anime", {"filter[subtype]": "movie",
+                                          "sort": "-userCount", "page[limit]": 8}),
+                ("ongoing", "/anime", {"filter[status]": "current",
+                                           "sort": "-userCount", "page[limit]": 12}),
+            )
+        }
+        _rows = {}
+        for _name, _f in _fut.items():
+            try:
+                _rows[_name] = _f.result() or []
+            except Exception:
+                _rows[_name] = []
+    trending = _rows["trending"]
     if trending:
-        top = _kitsu_get("/anime", {"sort": "-averageRating", "page[limit]": 12}) or []
-        movies = _kitsu_get("/anime", {"filter[subtype]": "movie",
-                                        "sort": "-userCount", "page[limit]": 8}) or []
-        ongoing = _kitsu_get("/anime", {"filter[status]": "current",
-                                         "sort": "-userCount", "page[limit]": 12}) or []
+        top = _rows["top"]
+        movies = _rows["movies"]
+        ongoing = _rows["ongoing"]
+        season_rows = ongoing or trending[:10]
         return {"trending": [_kitsu_to_media(i) for i in trending],
-                "popular": [_kitsu_to_media(i) for i in (ongoing or trending[:10])],
+                "popular": [_kitsu_to_media(i) for i in season_rows],
                 "ongoing": [_kitsu_to_media(i) for i in ongoing],
+                "series": [_kitsu_to_media(i) for i in season_rows],
                 "top_rated": [_kitsu_to_media(i) for i in top],
                 "movies": [_kitsu_to_media(i) for i in movies],
                 "recent": _fallback_recent_media(prefer_kitsu=True)}, "kitsu"
@@ -883,6 +1057,7 @@ def _fallback_home_lists() -> Tuple[Dict[str, List[Dict]], str]:
         return {"trending": [_jikan_to_media(i) for i in airing],
                 "popular": [_jikan_to_media(i) for i in airing[:10]],
                 "ongoing": [_jikan_to_media(i) for i in airing],
+                "series": [_jikan_to_media(i) for i in ([x for x in airing if str((x or {}).get("type") or "TV").lower().startswith("tv")] or airing[:10])],
                 "top_rated": [_jikan_to_media(i) for i in (top if isinstance(top, list) else [])],
                 "movies": [],
                 "recent": _fallback_recent_media(prefer_kitsu=False)}, "jikan"
@@ -1341,6 +1516,23 @@ def home():
         data = fetch_anilist(SEARCH_FILTER_QUERY, filters["variables"])
         raw_list = data.get("Page", {}).get("media", [])
         filtered_cards = [format_anime_card(a) for a in raw_list if a]
+        if not filtered_cards and not data:
+            # AniList down: same fallback catalogue as the API so filtered
+            # shelves (Series/Movies/genres) keep streaming instead of empty.
+            try:
+                _fb, _ = _fallback_home_lists()
+            except Exception:
+                _fb = {}
+            if fmt in ("TV", "TV_SHORT"):
+                filtered_cards = [format_anime_card(a) for a in (_fb.get("series") or _fb.get("trending", []))]
+            elif fmt == "MOVIE":
+                filtered_cards = [format_anime_card(a) for a in _fb.get("movies", [])]
+            elif genre:
+                _slug = KITSU_GENRE_SLUG_MAP.get(genre.lower())
+                _items = _kitsu_get("/anime", {"filter[categories]": _slug,
+                                                "sort": "-userCount",
+                                                "page[limit]": 20}) if _slug else []
+                filtered_cards = [format_anime_card(_kitsu_to_media(i)) for i in _items]
         featured = filtered_cards[0] if filtered_cards else None
         return render_template(
             "index.html",
@@ -2907,8 +3099,15 @@ def _catalog_media(data: Dict) -> List[Dict]:
 
 @app.route("/api/v1/health")
 def api_v1_health():
+    snap = _anilist_detector_snapshot()
+    live = snap.get("available")
     return jsonify({"status": "ok", "api_version": "v1", "catalog_source": "AniList",
                     "catalog_fallback": "Kitsu, then Jikan (MyAnimeList) when AniList is unreachable",
+                    "anilist_available": live,
+                    "anilist_last_check": int(snap.get("last_check") or 0) or None,
+                    "anilist_last_success": int(snap.get("last_success") or 0) or None,
+                    "anilist_detector_interval_seconds": _ANILIST_DETECTOR_INTERVAL,
+                    "fallback_active": live is False,
                     "persistence": "SQLite for user/community records; catalogue metadata is provider-cached"})
 
 
@@ -2953,7 +3152,7 @@ def api_v1_catalog_home():
                 "top_rated": [format_anime_card(a) for a in fb_lists.get("top_rated", [])],
                 "recently_added": [format_anime_card(a) for a in fb_lists.get("recent", [])],
                 "movies": [format_anime_card(a) for a in fb_lists.get("movies", [])],
-                "series": [format_anime_card(a) for a in fb_lists.get("trending", [])],
+                "series": [format_anime_card(a) for a in (fb_lists.get("series") or fb_lists.get("trending", []))],
             }
             cards["featured"] = (cards["trending"] or [None])[0]
             response = jsonify({"status": "success",
@@ -3009,9 +3208,9 @@ def api_v1_anime_list(genre_override: Optional[str] = None):
         variables["format"] = media_format
     data = fetch_anilist(SEARCH_FILTER_QUERY, variables)
     if not data:
-        # AniList down: free fallback providers (genre via Kitsu categories,
-        # text queries via Kitsu then Jikan). Unfiltered browses stay 503
-        # rather than dumping an unsorted list under a sorted contract.
+        # AniList down: free fallback providers keep every catalogue path
+        # streaming (text via Kitsu then Jikan, genre via Kitsu categories,
+        # format via Kitsu subtype, plain browse via fallback trending).
         fb_results, fb_source = [], ""
         if query and not genre and not media_format:
             fb_media, fb_source = _fallback_search_media(query, limit=limit)
@@ -3025,6 +3224,21 @@ def api_v1_anime_list(genre_override: Optional[str] = None):
             if items:
                 fb_results = [format_anime_card(_kitsu_to_media(i)) for i in items]
                 fb_source = "kitsu"
+        elif media_format and not query and not genre:
+            subtype = {"TV": "tv", "TV_SHORT": "tv", "MOVIE": "movie",
+                       "OVA": "ova", "ONA": "ona", "SPECIAL": "special"}.get(media_format, "tv")
+            items = _kitsu_get("/anime", {"filter[subtype]": subtype,
+                                           "sort": "-userCount",
+                                           "page[limit]": min(limit, 20)})
+            if items:
+                fb_results = [format_anime_card(_kitsu_to_media(i)) for i in items]
+                fb_source = "kitsu"
+        elif not query and not genre and not media_format:
+            # Plain browse (all series): page through fallback trending rows.
+            fb_lists, fb_source = _fallback_home_lists()
+            media_rows = fb_lists.get("trending", []) if fb_lists else []
+            start = max(0, (page - 1) * limit)
+            fb_results = [format_anime_card(a) for a in media_rows[start:start + limit]]
         if fb_results:
             result = jsonify({"status": "success",
                               "catalog_source": _FALLBACK_API_NAMES.get(fb_source, fb_source),
@@ -3365,7 +3579,39 @@ def sitemap():
 
 @app.route("/robots.txt")
 def robots():
-    return Response("User-agent: *\nAllow: /\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n", mimetype="text/plain")
+    resp = Response("User-agent: *\nAllow: /\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n", mimetype="text/plain")
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
+
+
+@app.errorhandler(404)
+def _not_found(error):
+    """Branded 404: JSON for API callers, friendly page for browsers.
+
+    Streaming is untouched — this only renders when no route matched."""
+    if (request.path or "").startswith("/api/"):
+        return jsonify({"status": "error", "error": {"message": "Not found."}}), 404
+    try:
+        return render_template("error.html", code=404,
+                               title="Page not found",
+                               message="That URL doesn't match anything on CamAnime. The show may have moved — try search."), 404
+    except Exception:
+        return "Not found.", 404
+
+
+@app.errorhandler(500)
+def _server_error(error):
+    """Branded 500: never leak tracebacks; the cause is logged server-side."""
+    logger.error("Unhandled server error", exc_info=True)
+    if (request.path or "").startswith("/api/"):
+        return jsonify({"status": "error",
+                        "error": {"message": "Something went wrong. Please try again."}}), 500
+    try:
+        return render_template("error.html", code=500,
+                               title="Something went wrong",
+                               message="CamAnime hit an unexpected error. Your watchlist and streaming session are safe — go back and try again."), 500
+    except Exception:
+        return "Internal server error.", 500
 
 
 @app.route("/google78cbf317abe48f6e.html")

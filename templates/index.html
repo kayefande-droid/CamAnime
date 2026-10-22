@@ -902,6 +902,7 @@
     </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to anime catalogue</a>
 
 <header>
     <div class="header-inner">
@@ -955,14 +956,14 @@
     </nav>
 </header>
 
-<main class="main-wrap">
+<main class="main-wrap" id="main-content" tabindex="-1">
 
     {% if page_type == 'home' and hero_slides %}
     <!-- ─── SPOTLIGHT HERO CAROUSEL ─── -->
     <section class="hero-spotlight" id="heroCarousel">
         {% for slide in hero_slides %}
         <div class="hero-slide {{ 'active' if loop.first else '' }}" data-slide-index="{{ loop.index0 }}">
-            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+            <img src="{{ slide.banner or slide.image }}" class="hero-backdrop" alt="{{ slide.title }}" decoding="async" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="hero-vignette"></div>
             <div class="hero-body">
                 <div class="hero-kicker">

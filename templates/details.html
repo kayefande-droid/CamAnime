@@ -558,6 +558,7 @@
     </style>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to episode guide</a>
 
 <header>
     <div class="header-inner">
@@ -579,7 +580,7 @@
     <div class="banner-gradient"></div>
 </div>
 
-<div class="container">
+<div class="container" id="main-content" role="main" tabindex="-1">
     <div class="dossier-card">
         <div class="poster-col">
             <img src="{{ anime.image or '/static/brand/camanime-icon.svg' }}" class="anime-poster" alt="{{ anime.title }}" fetchpriority="high" decoding="async" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">

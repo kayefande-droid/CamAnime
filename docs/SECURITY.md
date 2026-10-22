@@ -15,15 +15,11 @@ request such as `curl`. There is no `view-source`-proof website, and products
 like Crunchyroll, Netflix and Disney+ do not hide their client code either — no
 website on the internet can.
 
-The client-side measures in `static/js/site.js` (context-menu blocking,
-developer-tool shortcut blocking, and a window-size heuristic that shows a shield
-overlay) are **deterrence only**:
-
-- They stop casual copy attempts.
-- They are bypassed in seconds by anyone who knows how (disabling JavaScript,
-  using curl, or a proxy).
-- The shield overlay is desktop-only and includes a "Continue" button so a
-  false positive can never lock a real visitor out.
+CamAnime intentionally does **not** block developer tools, right-click,
+or view-source (`static/js/site.js` contains no context-menu, F12 /
+Ctrl+Shift+I/J/C / Ctrl+U, or devtools-shield code). Those tricks annoy
+legitimate visitors, break accessibility, and are bypassed in seconds
+(disabling JavaScript, curl, proxy) — so they were removed on purpose.
 
 They must never be treated as a security control. Anything genuinely secret —
 credentials, tokens, admin keys, provider URLs — must live on the server and

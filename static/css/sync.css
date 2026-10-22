@@ -400,3 +400,7 @@ html[data-schedule-pos$="-bottom"] body .live-schedule-tab { top: auto; bottom: 
   html[data-schedule-pos$="-top"] body .live-schedule-tab { top: 12%; }
   html[data-schedule-pos$="-bottom"] body .live-schedule-tab { bottom: 12%; }
 }
+
+/* Skip-to-content link: screen-reader/keyboard only until focused. */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:99999;background:#FFB347;color:#07080D;font-weight:700;padding:10px 18px;border-radius:0 0 10px 0;text-decoration:none}
+.skip-link:focus{left:0}
