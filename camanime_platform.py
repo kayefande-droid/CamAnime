@@ -155,9 +155,13 @@ def _init() -> None:
           status TEXT NOT NULL DEFAULT '',
           year INTEGER NOT NULL DEFAULT 0,
           episode_label TEXT NOT NULL DEFAULT '',
-          t INTEGER NOT NULL
+          t INTEGER NOT NULL,
+          catalogue_verified INTEGER NOT NULL DEFAULT 0
         );
         """)
+        anime_cache_columns = {row["name"] for row in conn.execute("PRAGMA table_info(anime_cache)")}
+        if "catalogue_verified" not in anime_cache_columns:
+            conn.execute("ALTER TABLE anime_cache ADD COLUMN catalogue_verified INTEGER NOT NULL DEFAULT 0")
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('site_clicks', 0)")
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('plays', 0)")
         conn.execute("INSERT OR IGNORE INTO counters(key, value) VALUES ('app_downloads', 0)")
@@ -611,23 +615,34 @@ def app_download_count() -> int:
 # ─── anime meta cache (so real plays / history rows can show titles) ────────
 
 def cache_anime_meta(anime_id, title: str = "", image: str = "", banner: str = "",
-                     format: str = "", status: str = "", year=0, episode_label: str = "") -> None:
+                     format: str = "", status: str = "", year=0, episode_label: str = "",
+                     catalogue_verified: bool = False, cache_title: bool = True) -> None:
     try:
         aid = int(anime_id)
     except (TypeError, ValueError):
         return
     now = int(time.time())
     with _db() as conn:
+        if not cache_title:
+            # Preserve the trusted catalogue metadata used by history and the
+            # sitemap; an untrusted analytics title must not overwrite it.
+            conn.execute(
+                "UPDATE anime_cache SET t=?, catalogue_verified=MAX(catalogue_verified, ?) WHERE id=?",
+                (now, int(bool(catalogue_verified)), aid),
+            )
+            return
         conn.execute(
-            "INSERT INTO anime_cache(id,title,image,banner,format,status,year,episode_label,t) "
-            "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "INSERT INTO anime_cache(id,title,image,banner,format,status,year,episode_label,t,catalogue_verified) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
             "title=excluded.title, image=excluded.image, banner=excluded.banner, "
             "format=excluded.format, status=excluded.status, "
             "year=MAX(COALESCE((SELECT year FROM anime_cache WHERE id=excluded.id),0), excluded.year), "
             "episode_label=CASE WHEN excluded.episode_label != '' THEN excluded.episode_label "
-            "ELSE anime_cache.episode_label END, t=excluded.t",
+            "ELSE anime_cache.episode_label END, t=excluded.t, "
+            "catalogue_verified=MAX(anime_cache.catalogue_verified, excluded.catalogue_verified)",
             (aid, (title or "")[:160], image or "", banner or "", format or "",
-             status or "", int(year or 0), (episode_label or "")[:32], now),
+             status or "", int(year or 0), (episode_label or "")[:32], now,
+             int(bool(catalogue_verified))),
         )
 
 

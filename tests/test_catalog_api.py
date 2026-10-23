@@ -147,6 +147,7 @@ def test_web_catalog_filters_are_validated_and_forwarded(api):
             "/?genre=Action&format=TV&status=FINISHED&year_before=2020&sort=rating"
         )
     assert response.status_code == 200
+    assert b'name="robots" content="noindex, follow"' in response.data
     variables = fetch.call_args.args[1]
     assert variables["genre"] == "Action"
     assert variables["format"] == "TV"
@@ -173,6 +174,22 @@ def test_search_preserves_filters_and_ignores_invalid_filter_values(api):
     assert variables["sort"] == ["TRENDING_DESC"]
     assert "startDateBefore" not in variables
     assert b'name="q" value="Canonical"' in response.data
+    assert b'name="robots" content="noindex, follow"' in response.data
+
+
+def test_home_without_filters_remains_indexable(api):
+    with patch.object(api, "fetch_anilist", return_value={"Page": {"media": []}}), \
+         patch.object(api, "_fallback_home_lists", return_value=({"trending": [], "popular": [], "top_rated": []}, "test")), \
+         patch.object(api.streaming_manager.animeheaven, "browse_catalog", return_value=[]), \
+         patch.object(api, "get_current_season_schedule", return_value=[]):
+        response = api.app.test_client().get("/")
+    assert response.status_code == 200
+    assert b'name="robots" content="index, follow, max-image-preview:large"' in response.data
+    assert response.data.count(b'property="og:type"') == 1
+    assert b'property="og:type" content="website"' in response.data
+    assert b'name="twitter:card" content="summary_large_image"' in response.data
+    assert b'property="og:image:alt"' in response.data
+    assert b'name="twitter:image:alt"' in response.data
 
 
 def test_login_page_does_not_advertise_unconfigured_oauth(api):
@@ -204,7 +221,8 @@ def test_anime_list_rejects_invalid_filters_before_provider_call(api):
 
 def test_details_and_watch_use_only_exact_provider_episode_numbers(api, monkeypatch):
     raw = anime()
-    raw.update({"status": "RELEASING", "episodes": 24, "nextAiringEpisode": None})
+    raw.update({"status": "RELEASING", "episodes": 24, "nextAiringEpisode": None,
+                "studios": {"nodes": [{"name": "Verified Studio"}]}})
     provider_episodes = [{"num": 1, "key": "episode-one"}, {"num": 3, "key": "episode-three"}]
     with patch.object(api, "fetch_anilist", return_value={"Media": raw}), \
          patch.object(api.streaming_manager, "resolve_anime_mapping", return_value={"heaven_id": "matched"}), \
@@ -221,11 +239,36 @@ def test_details_and_watch_use_only_exact_provider_episode_numbers(api, monkeypa
     assert 'Provider listing' in details.get_data(as_text=True)
     assert 'Aired' not in details.get_data(as_text=True)
     assert b'aria-pressed="false"' in details.data
+    assert b'"numberOfEpisodes"' not in details.data
+    assert b'"url":"https://camanime.onrender.com/anime/123"' in details.data
+    assert b'"image":"https://img.example/poster-xl.jpg"' in details.data
+    assert b'"productionCompany":{"@type":"Organization","name":"Verified Studio"}' in details.data
+    assert b'property="og:image:alt"' in details.data
+    assert b'name="twitter:image:alt"' in details.data
     assert invalid_episode.status_code == 302
     assert invalid_episode.headers["Location"].endswith("/anime/123")
     assert valid_episode.status_code == 200
     assert b"Next Ep" in valid_episode.data
+    assert b"Canonical Episode 3" in valid_episode.data
     assert b"/watch/123/3" not in valid_episode.data.split(b"Next Ep", 1)[1][:100]
+
+
+def test_watch_uses_real_streaming_episode_title_when_available(api):
+    raw = anime()
+    raw.update({"status": "FINISHED", "episodes": 1,
+                "streamingEpisodes": [{"title": "Episode 1 - The Beginning"}]})
+    with patch.object(api, "fetch_anilist", return_value={"Media": raw}), \
+         patch.object(api.streaming_manager, "resolve_anime_mapping", return_value={"anikoto_slug": "matched"}), \
+         patch.object(api.streaming_manager.animeheaven, "get_anime_info", return_value=None), \
+         patch.object(api.streaming_manager.anikoto, "get_episodes", return_value=[{"num": 1, "data_ids": "episode-data"}]), \
+         patch.object(api.streaming_manager.anikoto, "get_servers", return_value=[{"name": "Sub", "type": "sub", "link_id": "sub-id", "slug": "matched", "ep_num": 1}]), \
+         patch.object(api.streaming_manager.anikoto, "resolve_server_stream", return_value={"m3u8": "https://media.example/sub.m3u8", "subtitles": []}), \
+         patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
+        response = api.app.test_client().get("/watch/123/1")
+    assert response.status_code == 200
+    assert "Canonical — Episode 1 - The Beginning" in response.get_data(as_text=True)
+    assert b'"episodeNumber":1' in response.data
+    assert b'"url":"https://camanime.onrender.com/anime/123"' in response.data
 
 
 def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):

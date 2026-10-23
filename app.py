@@ -1601,7 +1601,7 @@ def home():
                 card.get("id"), title=card.get("title", ""), image=card.get("image", ""),
                 banner=card.get("banner", ""), format=card.get("format", ""),
                 status=card.get("status", ""), year=card.get("year") or 0,
-                episode_label=card.get("episode", ""))
+                episode_label=card.get("episode", ""), catalogue_verified=True)
         except Exception:
             pass
 
@@ -1759,6 +1759,7 @@ def _details_provider_fallback(anime_id: int):
         "anikoto_slug": mapping.get("anikoto_slug"),
         "heaven_info": heaven_info,
         "anilist_unavailable": True,
+        "total_episodes": None,
     })
 
 
@@ -2019,6 +2020,16 @@ def watch(anime_id: int, ep_num: int):
             return redirect(url_for("details", anime_id=anime_id))
         bundle["anilist_unavailable"] = True
     episodes = [{"id": i, "num": i, "title": f"Episode {i}"} for i in confirmed_numbers]
+    current_episode_title = next(
+        (episode.get("title") for episode in episodes if episode["num"] == ep_num),
+        f"Episode {ep_num}",
+    )
+    if raw_anime:
+        for streaming_episode in raw_anime.get("streamingEpisodes") or []:
+            match = re.search(r"Episode\s*(\d+)", streaming_episode.get("title") or "", re.I)
+            if match and int(match.group(1)) == ep_num:
+                current_episode_title = streaming_episode.get("title") or current_episode_title
+                break
     episode_position = confirmed_numbers.index(ep_num)
     previous_number = confirmed_numbers[episode_position - 1] if episode_position > 0 else None
     next_number = confirmed_numbers[episode_position + 1] if episode_position + 1 < len(confirmed_numbers) else None
@@ -2056,6 +2067,7 @@ def watch(anime_id: int, ep_num: int):
             "relations": relations[:6],
         },
         ep_num=ep_num,
+        current_episode_title=current_episode_title,
         total_episodes=total_episodes,
         stream_url=active_server.get("stream_url") or backup_embed,
         backup_embed=backup_embed,
@@ -3452,7 +3464,8 @@ def api_public_stream_or_download():
         _record_activity("stream", anime=detail, ep=meta["ep"], detail=detail)
     if anime_id and title:
         platform.cache_anime_meta(anime_id, title=title, image=image,
-                                  episode_label=f"EP {meta['ep']}" if meta["ep"] else "")
+                                  episode_label=f"EP {meta['ep']}" if meta["ep"] else "",
+                                  cache_title=False)
     return jsonify({"status": "ok"})
 
 
@@ -3585,35 +3598,31 @@ def api_admin_create():
 
 @app.route("/sitemap.xml")
 def sitemap():
-    """SEO sitemap: static pages + every anime page we have metadata for
-    (from the anime_cache table), each with real lastmod timestamps."""
+    """SEO sitemap with indexable static pages and catalogue-confirmed anime.
+
+    Anime metadata may also be supplied by client play events; only rows
+    observed in a server-rendered catalogue are candidates for inclusion.
+    Cache timestamps track requests rather than meaningful content changes,
+    so omit lastmod.
+    """
     base = "https://camanime.onrender.com"
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    entries = [
-        ("/", 1.0, "daily", now),
-        ("/scraper", 0.9, "hourly", now),
-        ("/download", 0.8, "weekly", now),
-        ("/promo", 0.7, "monthly", now),
-    ]
+    entries = ["/", "/scraper", "/download", "/promo"]
     try:
-        import sqlite3 as _sq
         with platform._db() as conn:
             rows = conn.execute(
-                "SELECT id, t FROM anime_cache ORDER BY t DESC LIMIT 2000").fetchall()
-        for r in rows:
-            last = datetime.fromtimestamp(r["t"], timezone.utc).strftime("%Y-%m-%d")
-            entries.append((f"/anime/{r['id']}", 0.7, "weekly", last))
+                "SELECT id FROM anime_cache WHERE catalogue_verified = 1 "
+                "ORDER BY t DESC LIMIT 2000"
+            ).fetchall()
+        entries.extend(f"/anime/{r['id']}" for r in rows)
     except Exception:
         pass
-    xml = ("<?xml version='1.0' encoding='UTF-8'?>"
-           "<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>")
-    for path, prio, freq, lastmod in entries:
-        xml += (f"<url><loc>{base}{path}</loc>"
-                f"<lastmod>{lastmod}</lastmod>"
-                f"<changefreq>{freq}</changefreq>"
-                f"<priority>{prio}</priority></url>")
-    xml += "</urlset>"
-    resp = Response(xml, mimetype="application/xml")
+    entries = list(dict.fromkeys(entries))
+    xml = ["<?xml version='1.0' encoding='UTF-8'?>",
+           "<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>"]
+    for path in entries:
+        xml.append(f"<url><loc>{base}{path}</loc></url>")
+    xml.append("</urlset>")
+    resp = Response("".join(xml), mimetype="application/xml")
     resp.headers["Cache-Control"] = "public, max-age=1800"
     return resp
 

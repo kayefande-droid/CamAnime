@@ -6,7 +6,7 @@
     <title>CamAnime — Anime Discovery & Episode Guide (Cameroon & Worldwide)</title>
     <meta name="description" content="CamAnime — watch anime online, discover anime, browse episode guides, and track the simulcast schedule. Episode playback and audio options depend on available providers.">
     <meta name="keywords" content="CamAnime, watch anime online, watch anime free, watch anime online free, free anime streaming, free anime streaming website, anime streaming website, anime discovery, anime episode guide, simulcast schedule, new anime episodes, ongoing anime countdown, anime Cameroon, animé Cameroun">
-    {% if page_type == 'search' %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
+    {% if page_type == 'search' or page_type == 'filter' or request.args.get('genre') or request.args.get('format') or request.args.get('status') or request.args.get('year_before') or request.args.get('sort') %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
     <meta property="og:site_name" content="CamAnime">
     <meta property="og:url" content="https://camanime.onrender.com/">
     <meta property="og:type" content="website">
@@ -17,6 +17,8 @@
     <meta name="twitter:title" content="CamAnime — Anime Discovery & Episode Guide">
     <meta name="twitter:description" content="Discover anime, browse episode guides, and track live release countdowns. Playback and audio options vary by episode.">
     <meta name="twitter:image" content="https://camanime.onrender.com/static/icon-512.png">
+    <meta property="og:image:alt" content="CamAnime anime discovery and episode guide">
+    <meta name="twitter:image:alt" content="CamAnime anime discovery and episode guide">
     <link rel="canonical" href="https://camanime.onrender.com/">
     <meta name="theme-color" content="#087BFF">
     <meta name="google-site-verification" content="3rRXefg_LYfyIPKcJgeXbLXBLkHx9zKOUlWcX7Fm6Tg" />
@@ -1102,7 +1104,7 @@
         <div class="section-head">
             <div class="section-title-wrap">
                 <span class="section-accent-bar"></span>
-                <h2 class="section-title">
+                {% if page_type == 'home' and hero_slides %}<h2 class="section-title">{% elif page_type != 'home' or not hero_slides %}<h1 class="section-title">{% endif %}
                     {% if page_type == 'search' %}
                         Search Results for "{{ search_query }}"
                     {% elif active_genre %}
@@ -1112,7 +1114,7 @@
                     {% else %}
                         Trending & Top Airing Now
                     {% endif %}
-                </h2>
+                {% if page_type == 'home' and hero_slides %}</h2>{% elif page_type != 'home' or not hero_slides %}</h1>{% endif %}
                 <span class="section-subtitle" role="status" aria-live="polite">{{ search_result_count if page_type == 'search' else (trending | length) }} catalogue results · playback availability shown per episode</span>
             </div>
             <a href="/scraper" class="section-link">Browse provider listings <i class="fas fa-arrow-right"></i></a>
@@ -1682,7 +1684,7 @@
                       <a href="/anime/${it.anime_id}" class="anime-card" style="display:flex;flex-direction:column;">
                           <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
                               <span class="mv-rank-num">#${i + 1}</span>
-                              <img src="${it.image || '/static/brand/camanime-icon.svg'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" style="width:52px;height:72px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+                              <img src="${it.image || '/static/brand/camanime-icon.svg'}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="${esc(it.title || 'Anime') + ' poster'}" style="width:52px;height:72px;object-fit:cover;border-radius:8px;" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                           </div>
                           <div style="padding:.6rem .8rem;flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0;">
                               <div class="card-title" style="margin:0;">${it.title}</div>

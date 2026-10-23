@@ -5,6 +5,7 @@ behaviour so future edits can't silently drop it.
 """
 
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import patch
 
@@ -66,16 +67,21 @@ def test_watch_returns_404_when_anilist_says_not_found():
 
 
 def test_details_keeps_fallback_on_outage_not_404():
-    """SEO safety: a transport error is not proof of nonexistence — keep 200."""
+    """SEO safety: outage fallback remains a 200 page without inventing episode counts."""
     api._anilist_cache.clear()
     api._anilist_missing_keys.clear()
 
     def _down(*args, **kwargs):
         raise ConnectionError("anilist down")
 
-    with patch.object(api.requests, "post", side_effect=_down):
+    with patch.object(api.requests, "post", side_effect=_down), \
+         patch.object(api.platform, "get_anime_meta", return_value={}), \
+         patch.object(api.streaming_manager, "resolve_anime_mapping", return_value={}), \
+         patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
         resp = _client().get("/anime/999999")
     assert resp.status_code == 200
+    assert b'"numberOfEpisodes"' not in resp.data
+    assert b"Released episodes (0)" in resp.data
 
 
 def test_500_handler_is_registered():
@@ -87,6 +93,51 @@ def test_robots_is_cached():
     resp = _client().get("/robots.txt")
     assert resp.status_code == 200
     assert "max-age" in resp.headers.get("Cache-Control", "")
+
+
+def test_sitemap_uses_canonical_indexable_routes_without_unreliable_lastmod(monkeypatch, tmp_path):
+    monkeypatch.setattr(api.platform, "DB_PATH", str(tmp_path / "seo-sitemap.db"))
+    api.platform._init()
+    client = _client()
+    api.platform.cache_anime_meta(123, title="Unverified client title")
+    api.platform.cache_anime_meta(124, title="Verified catalogue title", catalogue_verified=True)
+    response = client.get("/sitemap.xml")
+    assert response.status_code == 200
+    assert response.mimetype == "application/xml"
+    root = ET.fromstring(response.data)
+    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    locations = [node.text for node in root.findall("sm:url/sm:loc", ns)]
+    assert "https://camanime.onrender.com/" in locations
+    assert "https://camanime.onrender.com/scraper" in locations
+    assert "https://camanime.onrender.com/download" in locations
+    assert "https://camanime.onrender.com/promo" in locations
+    assert "https://camanime.onrender.com/anime/124" in locations
+    assert "https://camanime.onrender.com/anime/123" not in locations
+    assert all(loc.startswith("https://camanime.onrender.com/") for loc in locations)
+    assert len(locations) == len(set(locations))
+    assert not any("?" in loc or any(path in loc for path in ("/api/", "/login", "/admin", "/settings", "/get/")) for loc in locations)
+    assert not response.data.count(b"<lastmod>")
+
+
+def test_catalogue_verified_flag_survives_unverified_metadata_refresh(monkeypatch, tmp_path):
+    monkeypatch.setattr(api.platform, "DB_PATH", str(tmp_path / "seo-cache.db"))
+    api.platform._init()
+    api.platform.cache_anime_meta(125, title="Verified", catalogue_verified=True)
+    api.platform.cache_anime_meta(125, title="Updated by a client event", cache_title=False)
+    response = _client().get("/sitemap.xml")
+    root = ET.fromstring(response.data)
+    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    locations = [node.text for node in root.findall("sm:url/sm:loc", ns)]
+    assert "https://camanime.onrender.com/anime/125" in locations
+    metadata = api.platform.get_anime_meta([125])[125]
+    assert metadata["title"] == "Verified"
+
+
+def test_schedule_redirect_target_is_the_indexed_home_route():
+    response = _client().get("/schedule", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/?schedule=open")
+    assert _client().get(response.headers["Location"]).status_code == 200
 
 
 def test_home_has_skip_link_and_main_landmark(monkeypatch):

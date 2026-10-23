@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime</title>
+    {% set social_image = anime.image if anime.image and anime.image.startswith('http') else 'https://camanime.onrender.com' ~ (anime.image or '/static/icon-512.png') %}
     <meta name="description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — free anime streaming with episode guides. Playback and audio options depend on available providers.">
     <meta name="keywords" content="CamAnime, watch anime online, watch {{ anime.title }} Episode {{ ep_num }}, free anime streaming, anime streaming website, {{ anime.title }} episode guide">
     <meta name="robots" content="index, follow, max-image-preview:large">
@@ -12,14 +13,16 @@
     <meta property="og:title" content="Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime">
     <meta property="og:description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — episode guide with playback and audio options when available from configured providers.">
     <meta property="og:type" content="video.episode">
-    <meta property="og:image" content="{{ anime.image or 'https://camanime.onrender.com/static/icon-512.png' }}">
+    <meta property="og:image" content="{{ social_image }}">
+    <meta property="og:image:alt" content="{{ anime.title }} anime poster">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime">
     <meta name="twitter:description" content="Watch {{ anime.title }} Episode {{ ep_num }} — episode guide on CamAnime.">
-    <meta name="twitter:image" content="{{ anime.image or 'https://camanime.onrender.com/static/icon-512.png' }}">
+    <meta name="twitter:image" content="{{ social_image }}">
+    <meta name="twitter:image:alt" content="{{ anime.title }} anime poster">
     <link rel="canonical" href="https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}">
     <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"TVEpisode","name":{{ (anime.title ~ " Episode " ~ ep_num) | tojson }},"partOfSeries":{"@type":"TVSeries","name":{{ anime.title | tojson }}},"image":{{ anime.image | tojson }},"url":"https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}"}
+    {"@context":"https://schema.org","@type":"TVEpisode","name":{{ current_episode_title | tojson }},"episodeNumber":{{ ep_num }},"partOfSeries":{"@type":"TVSeries","name":{{ anime.title | tojson }},"url":"https://camanime.onrender.com/anime/{{ anime.id }}"},"image":{{ social_image | tojson }},"url":"https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}"}
     </script>
     <meta name="theme-color" content="#087BFF">
     <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
@@ -529,7 +532,7 @@
                 <div class="now-playing-info">
                     <span class="ep-pill">EPISODE {{ ep_num }}</span>
                     <div>
-                        <h1 style="font-weight: 700; font-size: 0.98rem; margin: 0;">{{ anime.title }} — Episode {{ ep_num }}</h1>
+                        <h1 style="font-weight: 700; font-size: 0.98rem; margin: 0;">{{ anime.title }} — {{ current_episode_title }}</h1>
                         <div style="font-size: 0.78rem; color: var(--text-muted);" id="activeServerStatus">
                             Active Server: {{ active_server.name }}
                         </div>
