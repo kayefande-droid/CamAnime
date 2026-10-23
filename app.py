@@ -3550,7 +3550,6 @@ def sitemap():
     entries = [
         ("/", 1.0, "daily", now),
         ("/scraper", 0.9, "hourly", now),
-        ("/schedule", 0.8, "weekly", now),
         ("/download", 0.8, "weekly", now),
         ("/promo", 0.7, "monthly", now),
     ]
