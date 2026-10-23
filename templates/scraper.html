@@ -6,7 +6,7 @@
     <title>Anime Episode Sources & Downloader | CamAnime</title>
     <meta name="description" content="Check CamAnime episode sources and download options. Availability varies by episode and configured providers.">
     <meta name="keywords" content="CamAnime, anime downloader, anime episode sources, watch anime online, free anime streaming website">
-    <meta name="robots" content="index, follow, max-image-preview:large">
+    {% if query or selected_anime %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
     <meta property="og:site_name" content="CamAnime">
     <meta property="og:url" content="https://camanime.onrender.com/scraper">
     <meta property="og:title" content="Anime Episode Sources & Downloader | CamAnime">

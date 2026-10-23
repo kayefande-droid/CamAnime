@@ -6,7 +6,7 @@
     <title>CamAnime — Anime Discovery & Episode Guide (Cameroon & Worldwide)</title>
     <meta name="description" content="CamAnime — watch anime online, discover anime, browse episode guides, and track the simulcast schedule. Episode playback and audio options depend on available providers.">
     <meta name="keywords" content="CamAnime, watch anime online, watch anime free, watch anime online free, free anime streaming, free anime streaming website, anime streaming website, anime discovery, anime episode guide, simulcast schedule, new anime episodes, ongoing anime countdown, anime Cameroon, animé Cameroun">
-    <meta name="robots" content="index, follow, max-image-preview:large">
+    {% if page_type == 'search' %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
     <meta property="og:site_name" content="CamAnime">
     <meta property="og:url" content="https://camanime.onrender.com/">
     <meta property="og:type" content="website">
