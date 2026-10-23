@@ -13,6 +13,7 @@ import requests
 from flask import (
     Flask,
     Response,
+    abort,
     jsonify,
     redirect,
     render_template,
@@ -349,6 +350,9 @@ ANIME_CLASSICS: List[Dict] = [
 
 ANILIST_API_URL = "https://graphql.anilist.co"
 _anilist_cache: OrderedDict[str, tuple] = OrderedDict()
+# Cache keys for Media-by-id queries AniList explicitly answered "Not Found".
+# Only set on an explicit GraphQL not-found signal — never on transport errors.
+_anilist_missing_keys: set = set()
 ANILIST_CACHE_TTL = 3600  # 1 hour: catalog metadata changes slowly; repeat loads skip AniList
 ANILIST_CACHE_MAX = 64  # detail responses include large relations/character lists; cap worker memory
 _ANILIST_STATUS_LOCK = Lock()
@@ -539,7 +543,24 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
             timeout=10,
         )
         response.raise_for_status()
-        data = response.json().get("data", {})
+        payload = response.json()
+        data = (payload or {}).get("data", {})
+        # AniList answers Media-by-id misses with HTTP 200 + null Media and a
+        # "Not Found" GraphQL error. Record that explicit signal so details /
+        # watch pages can return a real 404 instead of a soft-404 200 page.
+        # Network errors below deliberately leave no record: an outage must
+        # never 404 a page that may exist.
+        try:
+            errors = (payload or {}).get("errors") or []
+            if (isinstance(data, dict) and data.get("Media") is None
+                    and "Media" in data
+                    and any("not found" in str(e.get("message", "")).lower()
+                            for e in errors if isinstance(e, dict))):
+                _anilist_missing_keys.add(cache_key)
+            else:
+                _anilist_missing_keys.discard(cache_key)
+        except Exception:
+            pass
         _mark_anilist_result(bool(data))
         if data:
             _anilist_cache[cache_key] = (data, now)
@@ -1741,6 +1762,15 @@ def _details_provider_fallback(anime_id: int):
     })
 
 
+def _anilist_said_missing(query: str, variables: Optional[Dict] = None) -> bool:
+    """True only when AniList explicitly answered Not Found (never on outages)."""
+    try:
+        key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
+        return key in _anilist_missing_keys
+    except Exception:
+        return False
+
+
 @app.route("/anime/<int:anime_id>")
 def details(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
@@ -1763,6 +1793,12 @@ def details(anime_id: int):
                 if fb_media:
                     raw_anime = fb_media
         if not raw_anime:
+            # AniList explicitly has no such id (not an outage), this id is in
+            # AniList id space, and no fallback provider knows it either:
+            # return a real 404 so search engines don't index a thin page.
+            if (_anilist_said_missing(DETAILS_QUERY, {"id": anime_id})
+                    and not _is_fallback_id(anime_id)):
+                abort(404)
             return _details_provider_fallback(anime_id)
         # Fall through to the normal path with fallback-sourced metadata.
 
@@ -1909,6 +1945,12 @@ def watch(anime_id: int, ep_num: int):
                 fb_media, _fb_src = _fallback_media_by_title(_cached)
                 if fb_media:
                     raw_anime = fb_media
+    if not raw_anime:
+        # Same 404 rule as details(): explicit AniList Not Found + AniList id
+        # space + nothing from fallbacks. Never during outages (no signal).
+        if (_anilist_said_missing(DETAILS_QUERY, {"id": anime_id})
+                and not _is_fallback_id(anime_id)):
+            abort(404)
     card = format_anime_card(raw_anime) if raw_anime else _fallback_card(anime_id)
 
     titles = _media_titles(raw_anime) or [card["title"]]

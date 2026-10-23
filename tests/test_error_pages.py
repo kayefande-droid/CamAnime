@@ -37,6 +37,47 @@ def test_scanner_paths_still_404():
     assert _client().get("/.env").status_code == 404
 
 
+class _NotFoundUpstream:
+    """AniList GraphQL explicit Not Found: HTTP 200 + null Media + error."""
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return {"data": {"Media": None},
+                "errors": [{"message": "Not Found.", "status": 404}]}
+
+
+def test_details_returns_404_when_anilist_says_not_found():
+    """SEO: nonexistent anime must 404, not serve a thin soft-404 200 page."""
+    api._anilist_cache.clear()
+    api._anilist_missing_keys.clear()
+    with patch.object(api.requests, "post", return_value=_NotFoundUpstream()):
+        resp = _client().get("/anime/999999")
+    assert resp.status_code == 404
+    assert b"noindex" in resp.data
+
+
+def test_watch_returns_404_when_anilist_says_not_found():
+    api._anilist_cache.clear()
+    api._anilist_missing_keys.clear()
+    with patch.object(api.requests, "post", return_value=_NotFoundUpstream()):
+        resp = _client().get("/watch/999999/1")
+    assert resp.status_code == 404
+
+
+def test_details_keeps_fallback_on_outage_not_404():
+    """SEO safety: a transport error is not proof of nonexistence — keep 200."""
+    api._anilist_cache.clear()
+    api._anilist_missing_keys.clear()
+
+    def _down(*args, **kwargs):
+        raise ConnectionError("anilist down")
+
+    with patch.object(api.requests, "post", side_effect=_down):
+        resp = _client().get("/anime/999999")
+    assert resp.status_code == 200
+
+
 def test_500_handler_is_registered():
     assert 500 in api.app.error_handler_spec[None]
     assert 404 in api.app.error_handler_spec[None]
