@@ -95,6 +95,23 @@ def test_robots_is_cached():
     assert "max-age" in resp.headers.get("Cache-Control", "")
 
 
+def test_robots_allows_googlebot_on_public_pages_and_static():
+    body = _client().get("/robots.txt").data.decode()
+    assert "User-agent: Googlebot" in body
+    assert "Allow: /static/" in body
+    assert "Sitemap: https://camanime.onrender.com/sitemap.xml" in body
+    for private in ("/admin", "/login", "/settings", "/api/", "/get/", "/heaven/"):
+        assert f"Disallow: {private}" in body
+
+
+def test_guard_never_blocks_crawler_reachability_urls():
+    client = _client()
+    assert client.get("/robots.txt").status_code == 200
+    assert client.get("/sitemap.xml").status_code == 200
+    assert client.get("/healthz").status_code == 200
+    assert client.get("/google78cbf317abe48f6e.html").status_code == 200
+
+
 def test_sitemap_uses_canonical_indexable_routes_without_unreliable_lastmod(monkeypatch, tmp_path):
     monkeypatch.setattr(api.platform, "DB_PATH", str(tmp_path / "seo-sitemap.db"))
     api.platform._init()

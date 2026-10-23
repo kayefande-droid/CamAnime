@@ -237,6 +237,11 @@ def _live_activity_summary():
 def _guard_request():
     """Reject scanner traffic, oversized bodies and abusive request rates."""
     path = request.path or "/"
+    # Crawler reachability: Search Console verification, robots, sitemap and
+    # the Render health check must never be blocked or throttled.
+    if path in ("/robots.txt", "/sitemap.xml", "/healthz") or (
+            path.startswith("/google") and path.endswith(".html")):
+        return None
     if _BLOCKED_PATTERNS.search(path):
         return jsonify({"status": "error", "error": "Not found."}), 404
     if len(path) > 512:
@@ -3629,7 +3634,16 @@ def sitemap():
 
 @app.route("/robots.txt")
 def robots():
-    body = "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\nDisallow: /api/\nDisallow: /get/\nDisallow: /heaven/\nSitemap: https://camanime.onrender.com/sitemap.xml\n"
+    # Googlebot (and Search Console) must be able to crawl every public page
+    # plus static assets and the HTML verification file. Private and API
+    # routes stay disallowed for all crawlers.
+    body = ("User-agent: Googlebot\nAllow: /\nAllow: /static/\n"
+            "Disallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\n"
+            "Disallow: /api/\nDisallow: /get/\nDisallow: /heaven/\n"
+            "User-agent: *\nAllow: /\nAllow: /static/\n"
+            "Disallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\n"
+            "Disallow: /api/\nDisallow: /get/\nDisallow: /heaven/\n"
+            "Sitemap: https://camanime.onrender.com/sitemap.xml\n")
     resp = Response(body, mimetype="text/plain")
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
