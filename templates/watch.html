@@ -6,11 +6,21 @@
     <title>Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime</title>
     <meta name="description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — free anime streaming with episode guides. Playback and audio options depend on available providers.">
     <meta name="keywords" content="CamAnime, watch anime online, watch {{ anime.title }} Episode {{ ep_num }}, free anime streaming, anime streaming website, {{ anime.title }} episode guide">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <meta property="og:site_name" content="CamAnime">
+    <meta property="og:url" content="https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}">
     <meta property="og:title" content="Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime">
+    <meta property="og:description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — episode guide with playback and audio options when available from configured providers.">
     <meta property="og:type" content="video.episode">
     <meta property="og:image" content="{{ anime.image }}">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime">
+    <meta name="twitter:description" content="Watch {{ anime.title }} Episode {{ ep_num }} — episode guide on CamAnime.">
+    <meta name="twitter:image" content="{{ anime.image }}">
     <link rel="canonical" href="https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}">
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"TVEpisode","name":{{ (anime.title ~ " Episode " ~ ep_num) | tojson }},"partOfSeries":{"@type":"TVSeries","name":{{ anime.title | tojson }}},"image":{{ anime.image | tojson }},"url":"https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}"}
+    </script>
     <meta name="theme-color" content="#087BFF">
     <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">

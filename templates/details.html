@@ -4,12 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ anime.title }} — Episode Guide | CamAnime</title>
+    <meta name="description" content="{{ anime.title }} episode guide on CamAnime — browse episode information, cast, relations and recommendations. Playback and audio options are shown when available from configured providers.">
     <meta name="theme-color" content="#087BFF">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="keywords" content="{{ anime.title }} anime, {{ anime.title }} episodes, {{ anime.title }} episode guide, CamAnime {{ anime.title }}{% for t in (anime.tags or [])[:3] %}, {{ t }} anime{% endfor %}">
+    <meta property="og:site_name" content="CamAnime">
+    <meta property="og:url" content="https://camanime.onrender.com/anime/{{ anime.id }}">
     <meta property="og:title" content="{{ anime.title }} — Episode Guide | CamAnime">
     <meta property="og:description" content="Browse {{ anime.title }} episode information. Playback and audio options are shown when available from configured providers.">
-    <meta property="og:type" content="video.episode">
+    <meta property="og:type" content="video.tv_show">
     <meta property="og:image" content="{{ anime.image }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ anime.title }} — Episode Guide | CamAnime">
+    <meta name="twitter:description" content="Browse {{ anime.title }} episode information on CamAnime.">
+    <meta name="twitter:image" content="{{ anime.image }}">
     <link rel="canonical" href="https://camanime.onrender.com/anime/{{ anime.id }}">
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"TVSeries","name":{{ anime.title | tojson }},"image":"{{ anime.image }}","description":{{ anime.description | tojson }},"numberOfEpisodes":{{ anime.episodes | length }},"genre":{{ (anime.tags or []) | tojson }}}

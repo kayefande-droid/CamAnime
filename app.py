@@ -3579,7 +3579,8 @@ def sitemap():
 
 @app.route("/robots.txt")
 def robots():
-    resp = Response("User-agent: *\nAllow: /\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n", mimetype="text/plain")
+    body = ("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\nDisallow: /api/\nDisallow: /get/\nDisallow: /heaven/\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n")
+    resp = Response(body, mimetype="text/plain")
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
 
