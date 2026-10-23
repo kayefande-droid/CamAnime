@@ -13,11 +13,11 @@
     <meta property="og:title" content="{{ anime.title }} — Episode Guide | CamAnime">
     <meta property="og:description" content="Browse {{ anime.title }} episode information. Playback and audio options are shown when available from configured providers.">
     <meta property="og:type" content="video.tv_show">
-    <meta property="og:image" content="{{ anime.image }}">
+    <meta property="og:image" content="{{ anime.image or 'https://camanime.onrender.com/static/icon-512.png' }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ anime.title }} — Episode Guide | CamAnime">
     <meta name="twitter:description" content="Browse {{ anime.title }} episode information on CamAnime.">
-    <meta name="twitter:image" content="{{ anime.image }}">
+    <meta name="twitter:image" content="{{ anime.image or 'https://camanime.onrender.com/static/icon-512.png' }}">
     <link rel="canonical" href="https://camanime.onrender.com/anime/{{ anime.id }}">
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"TVSeries","name":{{ anime.title | tojson }},"image":"{{ anime.image }}","description":{{ anime.description | tojson }},"numberOfEpisodes":{{ anime.episodes | length }},"genre":{{ (anime.tags or []) | tojson }}}
