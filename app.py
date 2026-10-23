@@ -3545,7 +3545,7 @@ def api_admin_create():
 def sitemap():
     """SEO sitemap: static pages + every anime page we have metadata for
     (from the anime_cache table), each with real lastmod timestamps."""
-    base = request.host_url.rstrip("/")
+    base = "https://camanime.onrender.com"
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     entries = [
         ("/", 1.0, "daily", now),
@@ -3578,7 +3578,7 @@ def sitemap():
 
 @app.route("/robots.txt")
 def robots():
-    body = ("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\nDisallow: /api/\nDisallow: /get/\nDisallow: /heaven/\nSitemap: " + request.host_url.rstrip("/") + "/sitemap.xml\n")
+    body = "User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\nDisallow: /api/\nDisallow: /get/\nDisallow: /heaven/\nSitemap: https://camanime.onrender.com/sitemap.xml\n"
     resp = Response(body, mimetype="text/plain")
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp
