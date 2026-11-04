@@ -3444,8 +3444,22 @@ def api_public_anime(anime_id: int):
     data = fetch_anilist(DETAILS_QUERY, {"id": anime_id})
     raw = data.get("Media") or {}
     titles = [raw.get("title", {}).get("english"), raw.get("title", {}).get("romaji")] if raw.get("title") else []
-    bundle = streaming_manager.get_full_episode_bundle(anime_id, int(request.args.get("ep", 1)), [t for t in titles if t], mal_id=raw.get("idMal"))
-    return jsonify({"status": "success", "anime_id": anime_id, "title": (titles[0] if titles else ""), "servers": bundle.get("servers", []), "downloads_require_login": True, "rating": platform.anime_rating(None, anime_id)})
+    # audio=dub puts provider-listed dub servers first and labels the fallback
+    # resolver DUB, so app users can stream AND download the dubbed episode.
+    audio = (request.args.get("audio", "sub") or "sub").strip().lower()
+    if audio not in ("sub", "dub"):
+        audio = "sub"
+    bundle = streaming_manager.get_full_episode_bundle(
+        anime_id, int(request.args.get("ep", 1)), [t for t in titles if t],
+        mal_id=raw.get("idMal"), preferred_audio=audio)
+    return jsonify({"status": "success", "anime_id": anime_id,
+                    "title": (titles[0] if titles else ""),
+                    "servers": bundle.get("servers", []),
+                    "downloads": bundle.get("downloads", []),
+                    "downloads_require_login": True,
+                    "audio": audio,
+                    "audio_availability": bundle.get("audio_availability", {}),
+                    "rating": platform.anime_rating(None, anime_id)})
 
 
 @app.route("/api/public/stream/download", methods=["POST"])

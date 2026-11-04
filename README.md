@@ -78,13 +78,18 @@ All catalogue endpoints use AniList IDs as canonical IDs and normalize fields th
 
 The legacy endpoints below remain separate and are not mapped from AniList IDs unless a valid provider mapping exists. The homepage and `/schedule` countdowns refresh locally every second, without a request, and fetch new schedule metadata at most once every 15 minutes. Server-side, each worker caches its own compact schedule snapshot for 15 minutes and fetches at most two AniList pages (50 entries each) on a cache miss; concurrent misses are coalesced, provider failures cool down for five minutes, and HTTP responses are cacheable for 15 minutes. Timer rollover shows an aired/checking-provider state without claiming or creating playback access. A GitHub Actions workflow samples compressed schedule-endpoint response sizes and worker request/cache-miss counters every six hours, retaining 90 days of JSON artifacts. Its estimated monthly bytes cover only `/api/v1/schedule` response bodies; use the Render dashboard for authoritative whole-service monthly bandwidth.
 
-- `GET /api/public/anime/<id>?ep=<n>` — legacy provider bundle (must be audited for authorization before use)
+- `GET /api/public/anime/<id>?ep=<n>&audio=<sub|dub>` — provider bundle for the native apps; `audio=dub` puts provider-listed dub servers first and lists dub downloads (factual bundle only, no playback guarantee)
 - `POST /api/auth/register|login|logout`, `GET /api/auth/me` — token auth
 - `GET/POST /api/community/*` — comments, likes, ratings, notifications
 - `GET /api/heaven/*` — AnimeHeaven search/catalog/resolve/season-pack
 - `GET /api/download/video` — forced MP4 episode download (login required)
 
 ## Provider / deployment status
+
+### Deploying on both Render and Cloudflare
+
+- **Render (origin, unchanged):** Flask backend, SQLite, accounts, streaming proxies and downloads. Blueprint `render.yaml` + `Procfile`; auto-deploy from `main` stays enabled. Render must remain online — the Cloudflare worker is a proxy, not a copy of the backend.
+- **Cloudflare (front door):** `cloudflare-worker/` contains `index.js` (edge proxy that streams every response to/from the Render origin and keeps redirects on the Cloudflare hostname), `wrangler.jsonc` and `package.json`. Workers Builds settings: root directory `/cloudflare-worker`, build `npm install`, deploy `npm run deploy`, output directory blank, production branch `main`. Manual deploys: `cd cloudflare-worker && npx wrangler deploy`.
 
 The existing source includes legacy AnimeHeaven and Anikoto scrapers plus generated VidSrc/VidLink embed URLs. Their presence in source is **not proof of permission, reliability, or a licensed integration**; do not enable them for publication until rights and provider terms are verified. AniList is currently a metadata provider only. No approved playback or offline-download provider is configured in this release.
 
