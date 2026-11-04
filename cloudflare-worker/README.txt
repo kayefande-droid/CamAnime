@@ -1,31 +1,15 @@
-CAMANIME CLOUDFLARE WORKER (RENDER ORIGIN PROXY)
+CAMANIME CLOUDFLARE — RETIRED RENDER PROXY (folder kept only until dashboard config moves)
 
-Worker name on Cloudflare: camanjme
-(next serves https://camanjme.<your-subdomain>.workers.dev — Cloudflare only;
-Render keeps camanime/camanime.onrender.com untouched for the origin and search.)
+This folder's old job — proxying https://camanime.onrender.com through a Worker —
+was removed on purpose. The independent Cloudflare CamAnime application now lives in:
 
-What this does:
-- Creates a Cloudflare Worker endpoint for CamAnime.
-- Forwards requests to https://camanime.onrender.com.
-- Streams the upstream response body instead of buffering it.
-- Attempts to keep redirects on the Cloudflare hostname.
+    cloudflare/          ← Workers + D1 + R2 + repo static assets
+    cloudflare/README.md ← full architecture + setup + residual limits
 
-Important:
-- This is a Cloudflare front door/proxy, NOT an independent copy of the Flask backend.
-- Render must remain online. Flask, SQLite, scraping, accounts, and streaming still run on Render.
-- Test login, search, episode playback, downloads, and redirects before sharing the Cloudflare URL.
-- Do not remove or change the existing Render service.
+Actions for the Cloudflare dashboard (one-time):
+  1. Workers Builds: change the root directory from /cloudflare-worker to /cloudflare
+     (build `npm install`, deploy `npm run deploy`, production branch main).
+  2. Delete this Workers Builds connection afterwards, or keep it — the deploy
+     script below forwards to cloudflare/ so both roots keep deploying the same app.
 
-Cloudflare Workers Builds settings:
-1. Root directory: /cloudflare-worker
-2. Build command: npm install
-3. Deploy command: npm run deploy
-4. Build output directory: leave blank
-5. Production branch: main
-
-If you uploaded these files into the repository, the paths must be:
-cloudflare-worker/index.js
-cloudflare-worker/wrangler.jsonc
-cloudflare-worker/package.json
-
-The GitHub repository must contain the cloudflare-worker folder at its root.
+The worker name stays `camanjme` everywhere (https://camanjme.camanime.workers.dev).

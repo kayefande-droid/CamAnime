@@ -1,0 +1,16 @@
+{
+  "name": "camanime-cloudflare",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "db:init": "wrangler d1 execute camanime --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute camanime --local --file=./schema.sql",
+    "test": "node --test test/smoke.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,93 @@
+-- CamAnime (Cloudflare independent deployment) initial schema for Cloudflare D1.
+-- Mirrors the Render deployment's SQLite tables (users, tokens, comments, ratings,
+-- notifications, events, counters, announcements, anime_cache, user_history).
+-- Apply with:
+--   wrangler d1 execute camanime --remote --file=./cloudflare/migrations/0001_init.sql
+CREATE TABLE IF NOT EXISTS users (
+  email TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  pw TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'user',
+  avatar TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tokens (
+  token TEXT PRIMARY KEY,
+  email TEXT NOT NULL REFERENCES users(email) ON DELETE CASCADE,
+  created INTEGER NOT NULL,
+  expires INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS comments (
+  id TEXT PRIMARY KEY,
+  anime_id TEXT NOT NULL,
+  ep TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL,
+  username TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  parent TEXT NOT NULL DEFAULT '',
+  sticker TEXT NOT NULL DEFAULT '',
+  likes INTEGER NOT NULL DEFAULT 0,
+  liked_by TEXT NOT NULL DEFAULT '[]',
+  t INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_comments_anime ON comments(anime_id, ep, t);
+CREATE TABLE IF NOT EXISTS ratings (
+  anime_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  t INTEGER NOT NULL,
+  PRIMARY KEY (anime_id, email)
+);
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  text TEXT NOT NULL,
+  read INTEGER NOT NULL DEFAULT 0,
+  t INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notif_email ON notifications(email, t);
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  t INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  anime_id TEXT NOT NULL DEFAULT '',
+  ep TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_events_kind ON events(kind, t);
+CREATE TABLE IF NOT EXISTS counters (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS announcements (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  author TEXT NOT NULL DEFAULT '',
+  t INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ann_t ON announcements(t);
+CREATE TABLE IF NOT EXISTS anime_cache (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  image TEXT NOT NULL DEFAULT '',
+  banner TEXT NOT NULL DEFAULT '',
+  format TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT '',
+  year INTEGER NOT NULL DEFAULT 0,
+  episode_label TEXT NOT NULL DEFAULT '',
+  t INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_history (
+  email TEXT NOT NULL,
+  anime_id INTEGER NOT NULL,
+  ep INTEGER NOT NULL DEFAULT 1,
+  position REAL NOT NULL DEFAULT 0,
+  duration REAL NOT NULL DEFAULT 0,
+  title TEXT NOT NULL DEFAULT '',
+  image TEXT NOT NULL DEFAULT '',
+  t INTEGER NOT NULL,
+  PRIMARY KEY (email, anime_id)
+);
+CREATE INDEX IF NOT EXISTS idx_history_email ON user_history(email, t);
+INSERT OR IGNORE INTO counters (key, value) VALUES ('player_starts', 0);
+INSERT OR IGNORE INTO counters (key, value) VALUES ('visits', 0);

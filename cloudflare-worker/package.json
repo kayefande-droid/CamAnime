@@ -1,10 +1,11 @@
 {
-  "name": "camanjme",
+  "name": "camanjme-proxy-root",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
+  "description": "Retired Render-proxy root. Kept deployable during dashboard transition; real app now lives in /cloudflare.",
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "deploy": "cd ../cloudflare && npx wrangler deploy",
+    "dev": "cd ../cloudflare && npx wrangler dev"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

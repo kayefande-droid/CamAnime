@@ -533,6 +533,14 @@
                     <a id="nextEpBtn" href="{{ '/watch/' ~ anime.id ~ '/' ~ next_ep.id if next_ep else '#' }}" class="ctrl-btn {{ 'disabled' if not next_ep else '' }}">
                         Next Ep <i class="fas fa-step-forward"></i>
                     </a>
+                    <span class="ctrl-btn" style="cursor:default;gap:.35rem" title="Lower quality automatically on weak network, or force it here">
+                        <i class="fas fa-sliders-h"></i>
+                        <select id="qualitySel" aria-label="Playback quality" style="background:transparent;border:0;color:inherit;font:inherit;font-weight:700;cursor:pointer">
+                            <option value="auto">Quality: Auto</option>
+                            <option value="max">Quality: Max</option>
+                            <option value="low">Quality: Saver</option>
+                        </select>
+                    </span>
                     <button type="button" class="ctrl-btn" onclick="toggleLights()">
                         <i class="fas fa-lightbulb"></i> Focus Mode
                     </button>
@@ -823,7 +831,30 @@
                 });
                 hlsInstance.loadSource(srv.stream_url);
                 hlsInstance.attachMedia(video);
+                // Quality control: manual pick (per episode page/series via localStorage key)
+                // or automatic caps for weak links. Fires on page load and network changes.
+                function caApplyQuality() {
+                    try {
+                        var ls = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+                        var pref = ls('camanime-quality:{{ anime.id }}') || ls('camanime-quality') || 'auto';
+                        var n = (hlsInstance.levels || []).length;
+                        if (!n) return;
+                        if (pref === 'max') { hlsInstance.autoLevelCapping = -1; hlsInstance.currentLevel = n - 1; }
+                        else if (pref === 'low') { hlsInstance.autoLevelCapping = -1; hlsInstance.currentLevel = 0; }
+                        else {
+                            var tier = document.documentElement.getAttribute('data-data') || 'normal';
+                            if (tier === 'low') hlsInstance.autoLevelCapping = Math.min(1, n - 1);
+                            else if (tier === 'medium') hlsInstance.autoLevelCapping = Math.max(1, Math.floor(n / 2) - 1);
+                            else hlsInstance.autoLevelCapping = -1;
+                            hlsInstance.nextLevel = -1;
+                        }
+                    } catch (e) {}
+                }
+                window.__caApplyQuality = caApplyQuality;
+                document.addEventListener('camanime:quality', caApplyQuality);
+                document.addEventListener('camanime:data', caApplyQuality);
                 hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    caApplyQuality();
                     markServerHealthy(srv);
                     try { window.caTrack('play', '{{ anime.id }}', '{{ ep_num }}'); } catch (e) {}
                     video.play().catch(() => {});
@@ -1142,6 +1173,24 @@
 
 {% include '_community.html' %}
 
+<script data-anime-id="{{ anime.id }}">
+/* Quality picker: remembers the choice for this series (all its episodes share
+   the AniList id), falls back to the site-wide 'camanime-quality' default. */
+(function () {
+    var sel = document.getElementById('qualitySel');
+    if (!sel) return;
+    var animeId = (document.currentScript && document.currentScript.getAttribute('data-anime-id')) || '';
+    var kSeries = 'camanime-quality:' + animeId, kGlobal = 'camanime-quality';
+    function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+    var pref = ls(kSeries) || ls(kGlobal) || 'auto';
+    if (['auto','max','low'].indexOf(pref) === -1) pref = 'auto';
+    sel.value = pref;
+    sel.onchange = function () {
+        ls(kSeries, sel.value); // per-series (also covers TV shows: one id = one show)
+        try { document.dispatchEvent(new CustomEvent('camanime:quality')); } catch (e) {}
+    };
+})();
+</script>
 <script>
 /* Idle warm-up for the next episode: hover/focus preload keeps mid-binge taps
    instant. Skipped for low/medium tiers so metered data is never burned

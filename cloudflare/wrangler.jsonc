@@ -1,0 +1,34 @@
+// CamAnime-independent Cloudflare Worker configuration (worker name: camanjme).
+// Deployed from this folder via `npx wrangler deploy` (or Workers Builds, root /cloudflare, main).
+// Bindings: DB = Cloudflare D1 (own database), FILES = R2 bucket (own storage),
+// ASSETS = the repository's real static assets (same CSS/JS/icons as Render).
+// Secrets/vars are documented in README.md.
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "camanjme",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-04",
+  "workers_dev": true,
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "camanime",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "camanime-files"
+    }
+  ],
+
+  "assets": {
+    "directory": "../static",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  }
+}
