@@ -21,31 +21,31 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.08),transparent 45%)}
+body{background:var(--bg-canvas, #07080d);color:var(--text-primary, #f3f5fa);font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto;background-image:radial-gradient(circle at 20% 0%,rgba(var(--accent-rgb,255,179,71),.08),transparent 45%)}
 h1{font-family:'Syne';font-size:clamp(1.6rem,1.3rem + 2vw,2.4rem);margin:.5rem 0}
-p.sub{color:#a0abc0;margin-bottom:1.5rem}
+p.sub{color:var(--text-secondary, #a0abc0);margin-bottom:1.5rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1.1rem}
-.card{background:#0e111a;border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:1.6rem;display:flex;flex-direction:column;gap:.7rem}
+.card{background:var(--bg-elevated, #0e111a);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:1.6rem;display:flex;flex-direction:column;gap:.7rem}
 .card h2{font-family:'Syne';font-size:1.25rem;display:flex;align-items:center;gap:.6rem}
 .badge{font-size:.72rem;font-family:monospace;background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.4);color:#34d399;border-radius:6px;padding:.15rem .5rem}
-.meta{font-size:.8rem;color:#64708a;font-family:monospace}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;background:linear-gradient(135deg,#FFB347,#FF5E62);color:#07080d;font-weight:800;text-decoration:none;border-radius:999px;padding:.85rem 1.4rem;margin-top:.4rem}
-.btn.ghost{background:#141926;color:#fff;border:1px solid rgba(255,255,255,.15)}.direct{display:block;text-align:center;font-size:.82rem;color:#FFB347;margin-top:.25rem;text-decoration:none}.direct:hover{text-decoration:underline}
+.meta{font-size:.8rem;color:var(--text-muted, #64708a);font-family:monospace}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;background:linear-gradient(135deg,var(--accent, #FFB347),var(--accent-crimson, #FF5E62));color:var(--bg-canvas, #07080d);font-weight:800;text-decoration:none;border-radius:999px;padding:.85rem 1.4rem;margin-top:.4rem}
+.btn.ghost{background:var(--bg-surface, #141926);color:#fff;border:1px solid rgba(255,255,255,.15)}.direct{display:block;text-align:center;font-size:.82rem;color:var(--accent, #FFB347);margin-top:.25rem;text-decoration:none}.direct:hover{text-decoration:underline}
 .copy-row{display:flex;gap:.45rem;align-items:stretch;margin-top:.35rem;min-width:0}
 .copy-row input{flex:1;min-width:0;background:#080b13;color:#dbe5ff;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:.65rem .7rem;font:500 .76rem/1.3 ui-monospace,SFMono-Regular,Consolas,monospace}
 .copy-row button{border:1px solid rgba(8,123,255,.45);border-radius:9px;background:#10213b;color:#dbeafe;padding:.55rem .8rem;font-weight:700;cursor:pointer}
 .copy-row button:hover{background:#15335d}.copy-status{min-height:1.1em;color:#95a7c8;font-size:.75rem}
-ol{margin:1rem 0 0 1.2rem;color:#a0abc0;line-height:1.9;font-size:.9rem}
-a{color:#FFB347}
+ol{margin:1rem 0 0 1.2rem;color:var(--text-secondary, #a0abc0);line-height:1.9;font-size:.9rem}
+a{color:var(--accent, #FFB347)}
 @media(max-width:414px){body{padding:1rem}}
 </style>
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 </head>
 <body>
 <p style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" style="display:block;width:min(230px,70vw);height:auto"></a><a href="/promo">Promo kit</a></p>
-<h1><i class="fas fa-download" style="color:#FFB347"></i> Download the free CamAnime app</h1>
+<h1><i class="fas fa-download" style="color:var(--accent, #FFB347)"></i> Download the free CamAnime app</h1>
 <p class="sub">Same account as the website. Hidden in-app library — files only leave the app when you tap <strong>Save to device</strong>. Made by kayefande-droid &amp; co.</p>
 <div class="cards">
   <div class="card">
@@ -80,7 +80,7 @@ a{color:#FFB347}
   <li><strong>Windows:</strong> install .NET 8 SDK → <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code> → <code>CamAnime.exe</code>.</li>
   <li>Point the app at your site URL, sign in with your website account — one shared user database.</li>
 </ol>
-<p style="margin-top:1.5rem;color:#64708a;font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
+<p style="margin-top:1.5rem;color:var(--text-muted, #64708a);font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
 <script>
 (() => {
   const field = document.getElementById('android-download-url');

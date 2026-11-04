@@ -10,48 +10,48 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Outfit','Inter',sans-serif;min-height:100vh}
+body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Outfit','Inter',sans-serif;min-height:100vh}
 .set-wrap{max-width:760px;margin:0 auto;padding:clamp(1rem,4vw,2rem)}
 .set-head{display:flex;align-items:center;gap:1rem;margin:1rem 0 1.5rem;flex-wrap:wrap}
 .set-head img{width:min(220px,60vw);height:auto}
 .set-head h1{font-family:'Sora',sans-serif;font-size:clamp(1.5rem,1.3rem + 1.5vw,2rem)}
-.set-card{background:var(--bg-elevated,#0e111a);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:18px;padding:clamp(1rem,3vw,1.5rem);margin-bottom:1.1rem}
+.set-card{background:var(--bg-elevated,var(--bg-elevated, #0e111a));border:1px solid var(--line,rgba(255,255,255,.1));border-radius:18px;padding:clamp(1rem,3vw,1.5rem);margin-bottom:1.1rem}
 .set-card h2{font-family:'Sora',sans-serif;font-size:clamp(1.05rem,1rem + .4vw,1.25rem);margin-bottom:.35rem}
-.set-card p{color:var(--text-secondary,#a0abc0);font-size:.9rem;margin-bottom:.9rem}
+.set-card p{color:var(--text-secondary,var(--text-secondary, #a0abc0));font-size:.9rem;margin-bottom:.9rem}
 .theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:.6rem}
-.theme-pick{display:flex;align-items:center;gap:.55rem;background:var(--bg-input,#141926);border:2px solid var(--line,rgba(255,255,255,.12));border-radius:12px;padding:.7rem .8rem;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--text,#f3f5fa)}
-.theme-pick.active{border-color:#FFB347}
+.theme-pick{display:flex;align-items:center;gap:.55rem;background:var(--bg-input,var(--bg-surface, #141926));border:2px solid var(--line,rgba(255,255,255,.12));border-radius:12px;padding:.7rem .8rem;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--text,var(--text-primary, #f3f5fa))}
+.theme-pick.active{border-color:var(--accent, #FFB347)}
 .theme-dot{width:26px;height:26px;border-radius:50%;flex:0 0 auto;border:2px solid rgba(255,255,255,.25)}
-.row-toggle{display:flex;align-items:center;justify-content:space-between;gap:1rem;background:var(--bg-input,#141926);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:12px;padding:.8rem 1rem;margin-bottom:.6rem;flex-wrap:wrap}
+.row-toggle{display:flex;align-items:center;justify-content:space-between;gap:1rem;background:var(--bg-input,var(--bg-surface, #141926));border:1px solid var(--line,rgba(255,255,255,.1));border-radius:12px;padding:.8rem 1rem;margin-bottom:.6rem;flex-wrap:wrap}
 .row-toggle .lab{font-weight:700;font-size:.95rem}
-.row-toggle .hint{font-size:.82rem;color:var(--text-secondary,#a0abc0);width:100%}
+.row-toggle .hint{font-size:.82rem;color:var(--text-secondary,var(--text-secondary, #a0abc0));width:100%}
 .switch{position:relative;width:56px;height:32px;flex:0 0 auto;cursor:pointer}
 .switch input{position:absolute;opacity:0;inset:0;cursor:pointer;z-index:2;margin:0}
 .switch .track{position:absolute;inset:0;background:#2a3350;border-radius:999px;transition:background .2s}
 .switch .thumb{position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .2s}
 .switch input:checked ~ .track{background:#10B981}
 .switch input:checked ~ .thumb{left:28px}
-.switch input:focus-visible ~ .track{outline:2px solid #FFB347;outline-offset:2px}
+.switch input:focus-visible ~ .track{outline:2px solid var(--accent, #FFB347);outline-offset:2px}
 .seg{display:flex;gap:.6rem;flex-wrap:wrap}
-.seg button{flex:1 1 120px;background:var(--bg-input,#141926);border:2px solid var(--line,rgba(255,255,255,.12));border-radius:12px;padding:.7rem;font-weight:800;font-size:.9rem;color:var(--text-secondary,#a0abc0);cursor:pointer}
-.seg button.active{border-color:#FFB347;color:#FFB347}
+.seg button{flex:1 1 120px;background:var(--bg-input,var(--bg-surface, #141926));border:2px solid var(--line,rgba(255,255,255,.12));border-radius:12px;padding:.7rem;font-weight:800;font-size:.9rem;color:var(--text-secondary,var(--text-secondary, #a0abc0));cursor:pointer}
+.seg button.active{border-color:var(--accent, #FFB347);color:var(--accent, #FFB347)}
 .name-row{display:flex;gap:.6rem;flex-wrap:wrap}
-.name-row input{flex:1 1 220px;min-width:0;background:var(--bg-input,#141926);border:1px solid var(--line,rgba(255,255,255,.14));color:var(--text,#fff);border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
+.name-row input{flex:1 1 220px;min-width:0;background:var(--bg-input,var(--bg-surface, #141926));border:1px solid var(--line,rgba(255,255,255,.14));color:var(--text,#fff);border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
 .login-fields{display:flex;gap:.6rem;flex-wrap:wrap;margin:.4rem 0 .2rem}
-.login-fields input{flex:1 1 200px;min-width:0;background:var(--bg-input,#141926);border:1px solid var(--line,rgba(255,255,255,.14));color:var(--text,#fff);border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
+.login-fields input{flex:1 1 200px;min-width:0;background:var(--bg-input,var(--bg-surface, #141926));border:1px solid var(--line,rgba(255,255,255,.14));color:var(--text,#fff);border-radius:12px;padding:.75rem .9rem;font-size:.95rem}
 .btn{border:none;border-radius:999px;padding:.75rem 1.4rem;font-weight:800;font-size:.9rem;cursor:pointer;display:inline-flex;align-items:center;gap:.5rem;text-decoration:none}
-.btn-save{background:linear-gradient(135deg,#FFB347,#FF5E62);color:#07080d}
-.btn-danger{background:rgba(255,94,98,.14);border:1px solid rgba(255,94,98,.5);color:#fda4af}
-.btn-ghost{background:var(--bg-input,#141926);color:var(--text,#fff);border:1px solid var(--line,rgba(255,255,255,.15))}
+.btn-save{background:linear-gradient(135deg,var(--accent, #FFB347),var(--accent-crimson, #FF5E62));color:var(--bg-canvas, #07080d)}
+.btn-danger{background:rgba(var(--accent-crimson-rgb,255,94,98),.14);border:1px solid rgba(var(--accent-crimson-rgb,255,94,98),.5);color:#fda4af}
+.btn-ghost{background:var(--bg-input,var(--bg-surface, #141926));color:var(--text,#fff);border:1px solid var(--line,rgba(255,255,255,.15))}
 .btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem}
 #saveMsg{min-height:1.4em;font-size:.88rem;color:#34d399;margin-top:.7rem}
-.back-link{color:#FFB347;text-decoration:none;font-weight:700;font-size:.92rem}
-.storage-line{font-size:.85rem;color:var(--text-secondary,#a0abc0);margin-top:.6rem;font-family:ui-monospace,monospace}
+.back-link{color:var(--accent, #FFB347);text-decoration:none;font-weight:700;font-size:.92rem}
+.storage-line{font-size:.85rem;color:var(--text-secondary,var(--text-secondary, #a0abc0));margin-top:.6rem;font-family:ui-monospace,monospace}
 </style>
 </head>
 <body>
@@ -71,10 +71,13 @@ body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Outfit'
     </div>
     <div class="theme-grid" id="themeGrid">
       <button type="button" class="theme-pick" data-theme-name="light"><span class="theme-dot" style="background:linear-gradient(135deg,#ffffff,#e8e2d2)"></span>Light</button>
-      <button type="button" class="theme-pick" data-theme-name="midnight"><span class="theme-dot" style="background:#07080d"></span>Midnight</button>
+      <button type="button" class="theme-pick" data-theme-name="midnight"><span class="theme-dot" style="background:var(--bg-canvas, #07080d)"></span>Midnight</button>
       <button type="button" class="theme-pick" data-theme-name="vibrant"><span class="theme-dot" style="background:linear-gradient(135deg,#7C61D4,#14101f)"></span>Vibrant</button>
       <button type="button" class="theme-pick" data-theme-name="sakura"><span class="theme-dot" style="background:linear-gradient(135deg,#ff7aa8,#3a1530)"></span>Sakura</button>
       <button type="button" class="theme-pick" data-theme-name="forest"><span class="theme-dot" style="background:linear-gradient(135deg,#34d399,#07120e)"></span>Forest</button>
+      <button type="button" class="theme-pick" data-theme-name="obsidian"><span class="theme-dot" style="background:linear-gradient(135deg,#FFB347,#0e1118)"></span>Obsidian</button>
+      <button type="button" class="theme-pick" data-theme-name="neo"><span class="theme-dot" style="background:linear-gradient(135deg,#4EA8FF,#070d1c)"></span>Neo Streaming</button>
+      <button type="button" class="theme-pick" data-theme-name="tokyo"><span class="theme-dot" style="background:linear-gradient(135deg,#35F1E4,#FF3DDB)"></span>Neon Tokyo</button>
     </div>
   </div>
 
@@ -150,6 +153,17 @@ body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Outfit'
   </div>
 
   <div class="set-card">
+    <h2><i class="fas fa-wifi"></i> Network &amp; data</h2>
+    <p id="dataTierNote">Detecting your connection…</p>
+    <div class="seg" id="dataSeg" role="group" aria-label="Data saver mode">
+      <button type="button" data-data="auto"><i class="fas fa-magic"></i> Auto</button>
+      <button type="button" data-data="low"><i class="fas fa-feather"></i> Data saver on</button>
+      <button type="button" data-data="normal"><i class="fas fa-gauge-high"></i> Max quality</button>
+    </div>
+    <p style="font-size:.82rem;color:var(--text-muted)">Auto follows the Network Information API (save-data, 2G/3G, hotspot). Data saver trims blur, swaps to smaller posters and enlarges the playback buffer so episodes keep playing on bad links.</p>
+  </div>
+
+  <div class="set-card">
     <h2><i class="fas fa-user"></i> Forum identity</h2>
     <p>The display name shown on your ratings and comments. No account needed.</p>
     <div class="name-row">
@@ -199,6 +213,26 @@ body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Outfit'
   document.querySelectorAll('#modeSeg button').forEach(function (b) {
     b.onclick = function () { pickTheme(b.dataset.mode === 'light' ? 'light' : 'midnight'); };
   });
+
+  // Network & data saver
+  function paintData() {
+    var pref = (window.caDataSaver && window.caDataSaver.pref) ? window.caDataSaver.pref() : 'auto';
+    document.querySelectorAll('#dataSeg button').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.data === pref);
+    });
+    var note = $('dataTierNote');
+    if (note && window.caDataSaver && window.caDataSaver.label) note.textContent = window.caDataSaver.label();
+  }
+  document.querySelectorAll('#dataSeg button').forEach(function (b) {
+    b.onclick = function () {
+      if (window.caDataSaver) window.caDataSaver.set(b.dataset.data);
+      else try { set('camanime-data-saver', b.dataset.data); } catch (e) {}
+      paintData();
+      say(b.dataset.data === 'auto' ? 'Data saver follows your connection.' : (b.dataset.data === 'low' ? 'Data saver on.' : 'Max quality – no lower quality.'));
+    };
+  });
+  document.addEventListener('camanime:data', paintData);
+  paintData();
 
   // Toggles
   $('setAutoplay').checked = cur('camanime-autoplay', '0') === '1';

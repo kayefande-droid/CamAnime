@@ -40,25 +40,11 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
-    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261019-themes" rel="stylesheet">
-    <script src="/static/js/site.js?v=20261022" defer></script>
+    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+    <script src="/static/js/site.js?v=20261104" defer></script>
     <style>
-        :root {
-            --bg-canvas: #06070c;
-            --bg-elevated: #0d1018;
-            --bg-surface: #141926;
-            --text-primary: #f3f5fa;
-            --text-secondary: #a0abc0;
-            --text-muted: #64708a;
-            --accent: #FFB347;
-            --accent-crimson: #FF5E62;
-            --emerald: #10B981;
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --border-accent: rgba(255, 179, 71, 0.38);
-            --radius-lg: 18px;
-            --radius-md: 12px;
-        }
+        /* Theme tokens are owned centrally by /static/css/sync.css so the Settings theme picker works on this page too. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background-color: var(--bg-canvas);
@@ -87,7 +73,7 @@
             position: sticky;
             top: 0;
             z-index: 1000;
-            background: rgba(6, 7, 12, 0.9);
+            background: var(--header-glass, rgba(6, 7, 12, 0.9));
             backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border-subtle);
             padding: 0.8rem 2rem;
@@ -145,7 +131,7 @@
             background: #000;
             border-radius: 16px;
             overflow: hidden;
-            border: 1px solid rgba(255, 179, 71, 0.22);
+            border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.22);
             box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85);
         }
         .video-stage video,
@@ -177,7 +163,7 @@
         }
         .skip-intro-btn:hover {
             background: var(--accent);
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
         }
 
         /* ─── PLAYER TRANSPORT & CONTROLS BAR ─── */
@@ -199,7 +185,7 @@
         }
         .ep-pill {
             background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             font-family: 'JetBrains Mono', monospace;
             font-weight: 800;
             font-size: 0.82rem;
@@ -299,10 +285,10 @@
         }
         .server-btn.active {
             background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             border-color: transparent;
             font-weight: 700;
-            box-shadow: 0 6px 18px rgba(255, 179, 71, 0.3);
+            box-shadow: 0 6px 18px rgba(var(--accent-rgb, 255, 179, 71), 0.3);
         }
         .server-tag {
             font-family: 'JetBrains Mono', monospace;
@@ -370,7 +356,7 @@
         }
         .ep-rail-item.current {
             background: var(--accent);
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             border-color: var(--accent);
             font-weight: 800;
         }
@@ -820,12 +806,15 @@
             });
 
             if (window.Hls && Hls.isSupported()) {
+                // Buffer sizing by network tier: data-data=low/medium means a bad
+                // link, so prebuffer more of the episode ahead to ride out stalls.
+                var _dsTier = document.documentElement.getAttribute('data-data') || 'normal';
                 hlsInstance = new Hls({
                     enableWorker: true,
                     lowLatencyMode: false,
                     backBufferLength: 30,
-                    maxBufferLength: 30,
-                    maxMaxBufferLength: 120,
+                    maxBufferLength: _dsTier === 'low' ? 120 : (_dsTier === 'medium' ? 60 : 30),
+                    maxMaxBufferLength: _dsTier === 'low' ? 300 : 120,
                     maxBufferSize: 60 * 1000 * 1000,
                     startLevel: -1,
                     capLevelToPlayerSize: true,
@@ -1153,5 +1142,20 @@
 
 {% include '_community.html' %}
 
+<script>
+/* Idle warm-up for the next episode: hover/focus preload keeps mid-binge taps
+   instant. Skipped for low/medium tiers so metered data is never burned
+   just for speed. */
+(function () {
+    var next = document.getElementById('nextEpBtn');
+    if (!next || !next.getAttribute('href') || next.getAttribute('href') === '#') return;
+    var tier = document.documentElement.getAttribute('data-data') || 'normal';
+    if (tier !== 'normal') return; // low/medium links skip prefetch entirely
+    var done = false;
+    function warm() { if (done) return; done = true; try { fetch(next.getAttribute('href'), { credentials: 'same-origin', priority: 'low' }).catch(function () {}); } catch (e) {} }
+    next.addEventListener('pointerenter', warm, { once: true });
+    next.addEventListener('focus', warm, { once: true });
+})();
+</script>
 </body>
 </html>

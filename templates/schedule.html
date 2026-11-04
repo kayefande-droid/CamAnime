@@ -18,18 +18,18 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:#07080d;color:#f3f5fa;font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto}
-h1{font-family:'Syne';font-size:clamp(1.5rem,1.25rem + 2vw,2rem)}a{color:#FFB347}
+body{background:var(--bg-canvas, #07080d);color:var(--text-primary, #f3f5fa);font-family:'Inter',sans-serif;padding:2rem;max-width:1000px;margin:0 auto}
+h1{font-family:'Syne';font-size:clamp(1.5rem,1.25rem + 2vw,2rem)}a{color:var(--accent, #FFB347)}
 @media(max-width:414px){body{padding:1rem}}
 </style>
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261019-themes" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 </head>
 <body>
 <p><a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" style="display:block;width:min(230px,70vw);height:auto"></a></p>
 <h1>{{ season_name }} {{ season_year }} anime release schedule</h1>
-<p style="color:#a0abc0">Current-season TV and short-series next-episode times from AniList. Countdown metadata refreshes every 15 minutes. Air times do not guarantee a playable CamAnime episode; only a matched official outbound provider listing is shown.</p>
+<p style="color:var(--text-secondary, #a0abc0)">Current-season TV and short-series next-episode times from AniList. Countdown metadata refreshes every 15 minutes. Air times do not guarantee a playable CamAnime episode; only a matched official outbound provider listing is shown.</p>
 <div id="releaseTickerList" data-schedule-url="/api/v1/schedule" data-season="{{ season_name }} {{ season_year }}">
 {% for it in countdown_items %}
 {% set air = it.next_airing_episode %}
@@ -44,6 +44,6 @@ h1{font-family:'Syne';font-size:clamp(1.5rem,1.25rem + 2vw,2rem)}a{color:#FFB347
 {% else %}<p class="schedule-empty">No current-season air dates are listed by AniList right now. Refresh later for updates.</p>{% endfor %}
 </div>
 <script src="/static/js/release-schedule.js?v=20261019-tabprefs" defer></script>
-<p style="color:#64708a;margin-top:2rem">Made by kayefande-droid &amp; co. · Free anime release metadata is supplied by AniList.</p>
+<p style="color:var(--text-muted, #64708a);margin-top:2rem">Made by kayefande-droid &amp; co. · Free anime release metadata is supplied by AniList.</p>
 </body>
 </html>

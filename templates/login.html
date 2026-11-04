@@ -10,29 +10,29 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:var(--bg,#07080d);color:var(--text,#f3f5fa);font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;background-image:radial-gradient(circle at 20% 0%,rgba(255,179,71,.1),transparent 45%),radial-gradient(circle at 80% 20%,rgba(16,185,129,.08),transparent 40%)}
-.card{background:var(--bg-elevated,#0e111a);border:1px solid var(--line,rgba(255,255,255,.1));border-radius:22px;max-width:460px;width:100%;padding:2.25rem;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:rise .5s ease}
+body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Inter',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem;background-image:radial-gradient(circle at 20% 0%,rgba(var(--accent-rgb,255,179,71),.1),transparent 45%),radial-gradient(circle at 80% 20%,rgba(16,185,129,.08),transparent 40%)}
+.card{background:var(--bg-elevated,var(--bg-elevated, #0e111a));border:1px solid var(--line,rgba(255,255,255,.1));border-radius:22px;max-width:460px;width:100%;padding:2.25rem;box-shadow:0 24px 60px rgba(0,0,0,.6);animation:rise .5s ease}
 @keyframes rise{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
 h1{font-family:'Syne',sans-serif;font-size:1.7rem;margin:.5rem 0 .25rem}
-p.sub{color:#a0abc0;font-size:.92rem;margin-bottom:1.25rem}
-label{display:block;font-size:.8rem;color:#a0abc0;margin:.7rem 0 .3rem}
-input{width:100%;background:var(--bg-input,#141926);border:1px solid var(--line,rgba(255,255,255,.12));color:var(--text,#fff);border-radius:10px;padding:.7rem .9rem;font-size:.95rem;outline:none}
-input:focus{border-color:#FFB347;box-shadow:0 0 0 3px rgba(255,179,71,.15)}
-button.primary{width:100%;margin-top:1.1rem;background:linear-gradient(135deg,#FFB347,#FF5E62);border:none;color:#07080d;font-weight:800;padding:.85rem;border-radius:999px;cursor:pointer;font-size:.95rem}
-.err{background:rgba(255,94,98,.12);border:1px solid rgba(255,94,98,.4);color:#fda4af;border-radius:10px;padding:.6rem .8rem;font-size:.85rem;margin-bottom:.8rem}
-a{color:#FFB347}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs a:focus-visible, input:focus-visible, button:focus-visible{outline:3px solid #FFB347;outline-offset:3px}
-.tabs a{flex:1;text-align:center;padding:.55rem;border-radius:999px;text-decoration:none;font-weight:700;font-size:.85rem;background:var(--bg-input,#141926);color:var(--text-secondary,#a0abc0);border:1px solid var(--line,rgba(255,255,255,.1))}
-.tabs a.active{background:rgba(255,179,71,.16);color:#FFB347;border-color:#FFB347}
-.credit{margin-top:1.25rem;text-align:center;color:#64708a;font-size:.78rem}
+p.sub{color:var(--text-secondary, #a0abc0);font-size:.92rem;margin-bottom:1.25rem}
+label{display:block;font-size:.8rem;color:var(--text-secondary, #a0abc0);margin:.7rem 0 .3rem}
+input{width:100%;background:var(--bg-input,var(--bg-surface, #141926));border:1px solid var(--line,rgba(255,255,255,.12));color:var(--text,#fff);border-radius:10px;padding:.7rem .9rem;font-size:.95rem;outline:none}
+input:focus{border-color:var(--accent, #FFB347);box-shadow:0 0 0 3px rgba(var(--accent-rgb,255,179,71),.15)}
+button.primary{width:100%;margin-top:1.1rem;background:linear-gradient(135deg,var(--accent, #FFB347),var(--accent-crimson, #FF5E62));border:none;color:var(--bg-canvas, #07080d);font-weight:800;padding:.85rem;border-radius:999px;cursor:pointer;font-size:.95rem}
+.err{background:rgba(var(--accent-crimson-rgb,255,94,98),.12);border:1px solid rgba(var(--accent-crimson-rgb,255,94,98),.4);color:#fda4af;border-radius:10px;padding:.6rem .8rem;font-size:.85rem;margin-bottom:.8rem}
+a{color:var(--accent, #FFB347)}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs a:focus-visible, input:focus-visible, button:focus-visible{outline:3px solid var(--accent, #FFB347);outline-offset:3px}
+.tabs a{flex:1;text-align:center;padding:.55rem;border-radius:999px;text-decoration:none;font-weight:700;font-size:.85rem;background:var(--bg-input,var(--bg-surface, #141926));color:var(--text-secondary,var(--text-secondary, #a0abc0));border:1px solid var(--line,rgba(255,255,255,.1))}
+.tabs a.active{background:rgba(var(--accent-rgb,255,179,71),.16);color:var(--accent, #FFB347);border-color:var(--accent, #FFB347)}
+.credit{margin-top:1.25rem;text-align:center;color:var(--text-muted, #64708a);font-size:.78rem}
 @media(max-width:414px){.card{padding:1.5rem}}
 </style>
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 </head>
 <body>
 <div class="card">
-<div style="font-family:'Syne';font-weight:800;font-size:1.3rem">Cam<span style="color:#FFB347">Anime</span></div>
+<div style="font-family:'Syne';font-weight:800;font-size:1.3rem">Cam<span style="color:var(--accent, #FFB347)">Anime</span></div>
 <h1>{{ 'Admin sign in' if mode=='admin' else ('Create account' if mode=='signup' else 'Welcome back') }}</h1>
 <p class="sub">Sign in with your CamAnime email and password. Browser watchlists stay on this device; account data may reset when the free Render instance is replaced.</p>
 <div class="tabs">

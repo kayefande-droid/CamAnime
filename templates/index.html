@@ -41,31 +41,14 @@
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261019-themes" rel="stylesheet">
-    <script src="/static/js/site.js?v=20261022" defer></script>
+    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+    <script src="/static/js/site.js?v=20261104" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
-         * theme: Studio Obsidian · accent: warm-amber #FFB347 ~5% · studied: yes · DNA-source: user reference
+         * theme: Studio Obsidian · accent: warm-amber var(--accent, #FFB347) ~5% · studied: yes · DNA-source: user reference
          */
-        :root {
-            --bg-canvas: #07080d;
-            --bg-elevated: #0e111a;
-            --bg-surface: #141926;
-            --bg-glass: rgba(14, 17, 26, 0.82);
-            --text-primary: #f3f5fa;
-            --text-secondary: #a0abc0;
-            --text-muted: #64708a;
-            --accent: #FFB347;
-            --accent-hover: #ffc266;
-            --accent-crimson: #FF5E62;
-            --emerald: #10B981;
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --border-accent: rgba(255, 179, 71, 0.35);
-            --radius-lg: 18px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
-        }
+        /* Theme tokens are owned centrally by /static/css/sync.css so the Settings theme picker works on this page too. */
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -74,8 +57,8 @@
         body {
             background-color: var(--bg-canvas);
             background-image:
-                radial-gradient(circle at 15% 0%, rgba(255, 179, 71, 0.07) 0%, transparent 45%),
-                radial-gradient(circle at 85% 15%, rgba(255, 94, 98, 0.05) 0%, transparent 40%);
+                radial-gradient(circle at 15% 0%, rgba(var(--accent-rgb, 255, 179, 71), 0.07) 0%, transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(var(--accent-crimson-rgb, 255, 94, 98), 0.05) 0%, transparent 40%);
             color: var(--text-primary);
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.5;
@@ -88,7 +71,7 @@
             position: sticky;
             top: 0;
             z-index: 1000;
-            background: rgba(7, 8, 13, 0.86);
+            background: var(--header-glass, rgba(7, 8, 13, 0.86));
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border-subtle);
@@ -184,8 +167,8 @@
         }
         .search-form:focus-within {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(255, 179, 71, 0.15);
-            background: #181e2e;
+            box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 255, 179, 71), 0.15);
+            background: var(--bg-input, #181e2e);
         }
         .search-input {
             background: transparent;
@@ -199,7 +182,7 @@
         .search-input::placeholder { color: var(--text-muted); }
         .search-btn {
             background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             border: none;
             width: 34px;
             height: 34px;
@@ -234,7 +217,7 @@
             color: var(--accent);
         }
         .watchlist-count {
-            background: rgba(255, 179, 71, 0.2);
+            background: rgba(var(--accent-rgb, 255, 179, 71), 0.2);
             color: var(--accent);
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.75rem;
@@ -312,8 +295,8 @@
             gap: 0.6rem;
             padding: 0.35rem 0.85rem;
             border-radius: 999px;
-            background: rgba(255, 179, 71, 0.14);
-            border: 1px solid rgba(255, 179, 71, 0.35);
+            background: rgba(var(--accent-rgb, 255, 179, 71), 0.14);
+            border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.35);
             color: var(--accent);
             font-size: 0.76rem;
             font-weight: 700;
@@ -351,8 +334,8 @@
             color: var(--text-primary);
         }
         .meta-pill.gold {
-            background: rgba(255, 179, 71, 0.18);
-            border-color: rgba(255, 179, 71, 0.4);
+            background: rgba(var(--accent-rgb, 255, 179, 71), 0.18);
+            border-color: rgba(var(--accent-rgb, 255, 179, 71), 0.4);
             color: var(--accent);
         }
         .meta-pill.subdub {
@@ -379,7 +362,7 @@
         }
         .btn-primary {
             background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             font-weight: 700;
             font-size: 0.95rem;
             padding: 0.85rem 1.75rem;
@@ -390,12 +373,12 @@
             gap: 0.6rem;
             border: none;
             cursor: pointer;
-            box-shadow: 0 10px 25px rgba(255, 179, 71, 0.3);
+            box-shadow: 0 10px 25px rgba(var(--accent-rgb, 255, 179, 71), 0.3);
             transition: all 0.22s ease;
         }
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 14px 32px rgba(255, 179, 71, 0.45);
+            box-shadow: 0 14px 32px rgba(var(--accent-rgb, 255, 179, 71), 0.45);
         }
         .btn-secondary {
             background: rgba(255, 255, 255, 0.09);
@@ -472,7 +455,7 @@
             transition: all 0.18s ease;
         }
         .genre-pill:hover, .genre-pill.active {
-            background: rgba(255, 179, 71, 0.16);
+            background: rgba(var(--accent-rgb, 255, 179, 71), 0.16);
             border-color: var(--accent);
             color: var(--accent);
         }
@@ -541,7 +524,7 @@
         }
         .anime-card:hover {
             transform: translateY(-6px);
-            border-color: rgba(255, 179, 71, 0.45);
+            border-color: rgba(var(--accent-rgb, 255, 179, 71), 0.45);
             box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
         }
         .card-poster-wrap {
@@ -570,7 +553,7 @@
             content: 'CamAnime';
             font-family: 'Syne', sans-serif;
             font-weight: 800;
-            color: rgba(255, 179, 71, 0.55);
+            color: rgba(var(--accent-rgb, 255, 179, 71), 0.55);
             font-size: 0.95rem;
         }
         .card-badges-top {
@@ -588,7 +571,7 @@
             background: rgba(7, 8, 13, 0.85);
             backdrop-filter: blur(6px);
             color: var(--accent);
-            border: 1px solid rgba(255, 179, 71, 0.35);
+            border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.35);
             padding: 0.22rem 0.55rem;
             border-radius: 6px;
             font-family: 'JetBrains Mono', monospace;
@@ -631,7 +614,7 @@
         .card-btn-play {
             flex: 1;
             background: var(--accent);
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
             border: none;
             border-radius: 8px;
             padding: 0.5rem 0.65rem;
@@ -690,7 +673,7 @@
 
         /* ─── ANIMEHEAVEN LIVE SCRAPER STRIP ─── */
         .scraper-banner-card {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(14, 17, 26, 0.95) 55%, rgba(255, 179, 71, 0.08) 100%);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(14, 17, 26, 0.95) 55%, rgba(var(--accent-rgb, 255, 179, 71), 0.08) 100%);
             border: 1px solid rgba(16, 185, 129, 0.3);
             border-radius: var(--radius-lg);
             padding: 1.5rem;
@@ -781,7 +764,7 @@
             gap: 0.6rem;
         }
         .modal-close {
-            background: rgba(255, 255, 255, 0.08);
+            background: var(--border-subtle, rgba(255, 255, 255, 0.08));
             border: none;
             color: var(--text-primary);
             width: 34px;
@@ -856,7 +839,7 @@
             align-items: center;
             gap: 0.6rem;
         }
-        .mobile-nav a:hover, .mobile-nav a.active { background: rgba(255, 179, 71, 0.12); color: var(--accent); }
+        .mobile-nav a:hover, .mobile-nav a.active { background: rgba(var(--accent-rgb, 255, 179, 71), 0.12); color: var(--accent); }
 
         @media (min-width: 768px) and (max-width: 1023px) {
             header { padding: 0.75rem 1.25rem; }
@@ -1017,8 +1000,8 @@
     <!-- ─── GENRE FILTER BAR ─── -->
     {% if announcement %}
     <div class="ca-announce" role="status">
-        <i class="fas fa-bullhorn" style="color:#FFB347"></i>
-        <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:#64708a">· {{ announcement.author }}</em></span></div>
+        <i class="fas fa-bullhorn" style="color:var(--accent, #FFB347)"></i>
+        <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:var(--text-muted, #64708a)">· {{ announcement.author }}</em></span></div>
     </div>
     {% endif %}
 

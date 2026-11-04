@@ -8,13 +8,13 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-:root{--bg:#07080d;--panel:#0e111a;--panel2:#141926;--line:rgba(255,255,255,.1);--accent:#FFB347;--crimson:#FF5E62;--emerald:#10B981;--blue:#087BFF;--text:#f3f5fa;--text2:#a0abc0;--muted:#64708a}
+:root{--bg:var(--bg-canvas, #07080d);--panel:var(--bg-elevated, #0e111a);--panel2:var(--bg-surface, #141926);--line:rgba(255,255,255,.1);--accent:var(--accent, #FFB347);--crimson:var(--accent-crimson, #FF5E62);--emerald:#10B981;--blue:#087BFF;--text:var(--text-primary, #f3f5fa);--text2:var(--text-secondary, #a0abc0);--muted:var(--text-muted, #64708a)}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;min-height:100vh;
-  background-image:radial-gradient(circle at 12% 0%,rgba(255,179,71,.09),transparent 42%),radial-gradient(circle at 88% 8%,rgba(8,123,255,.07),transparent 40%)}
+  background-image:radial-gradient(circle at 12% 0%,rgba(var(--accent-rgb,255,179,71),.09),transparent 42%),radial-gradient(circle at 88% 8%,rgba(8,123,255,.07),transparent 40%)}
 a{color:var(--accent)}
 .shell{max-width:1180px;margin:0 auto;padding:1.4rem 1.4rem 3.5rem}
 /* ── command header ── */
-.deck-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(255,179,71,.13),rgba(14,17,26,.94) 55%,rgba(8,123,255,.09));border:1px solid rgba(255,179,71,.3);border-radius:20px;padding:1.3rem 1.6rem;margin-bottom:1.6rem}
+.deck-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(var(--accent-rgb,255,179,71),.13),rgba(14,17,26,.94) 55%,rgba(8,123,255,.09));border:1px solid rgba(var(--accent-rgb,255,179,71),.3);border-radius:20px;padding:1.3rem 1.6rem;margin-bottom:1.6rem}
 .deck-head h1{font-family:'Syne';font-size:clamp(1.3rem,1rem + 1.6vw,1.9rem);display:flex;gap:.7rem;align-items:center}
 .deck-head .sub{color:var(--text2);font-size:.85rem;margin-top:.25rem}
 .backup-link{background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--text);text-decoration:none;border-radius:999px;padding:.55rem 1.1rem;font-weight:700;font-size:.85rem;display:inline-flex;gap:.5rem;align-items:center}
@@ -32,7 +32,7 @@ a{color:var(--accent)}
 table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:14px;overflow:hidden;font-size:.85rem}
 .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px}
 td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);text-align:left;white-space:nowrap}
-tbody tr:hover{background:rgba(255,179,71,.05)}
+tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
 /* ── tool cards (recommended admin tools) ── */
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:.9rem}
 .tool-card{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.45rem;text-decoration:none;color:var(--text);transition:all .18s}
@@ -46,7 +46,7 @@ tbody tr:hover{background:rgba(255,179,71,.05)}
 .form input,.form textarea{padding:.68rem .85rem;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:var(--panel2);color:var(--text);font-family:inherit;font-size:.9rem}
 .form input:focus,.form textarea:focus{border-color:var(--accent);outline:none}
 .btn{border:none;border-radius:999px;padding:.72rem 1.5rem;font-weight:800;cursor:pointer;font-size:.88rem;display:inline-flex;gap:.5rem;align-items:center;justify-content:center}
-.btn.gold{background:linear-gradient(135deg,var(--accent),var(--crimson));color:#07080d}
+.btn.gold{background:linear-gradient(135deg,var(--accent),var(--crimson));color:var(--bg-canvas, #07080d)}
 .btn.green{background:var(--emerald);color:#04120c}
 .btn.blue{background:var(--blue);color:#fff}
 .btn.ghost{background:var(--panel2);border:1px solid rgba(255,255,255,.2);color:var(--text)}
@@ -58,9 +58,9 @@ tbody tr:hover{background:rgba(255,179,71,.05)}
 .muted{color:var(--muted)}
 @media(max-width:414px){.shell{padding:1rem}}
 </style>
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 </head>
 <body>
 <div class="shell">

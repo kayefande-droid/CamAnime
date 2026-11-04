@@ -26,30 +26,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-    <script src="/static/js/site.js?v=20261022" defer></script>
+    <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+    <script src="/static/js/site.js?v=20261104" defer></script>
     <style>
-        :root {
-            --bg-canvas: #06070c;
-            --bg-elevated: #0e111a;
-            --bg-surface: #141926;
-            --text-primary: #f3f5fa;
-            --text-secondary: #a0abc0;
-            --text-muted: #64708a;
-            --accent: #FFB347;
-            --accent-crimson: #FF5E62;
-            --emerald: #10B981;
-            --border-subtle: rgba(255, 255, 255, 0.08);
-            --radius-lg: 18px;
-            --radius-md: 12px;
-        }
+        /* Theme tokens are owned centrally by /static/css/sync.css so the Settings theme picker works on this page too. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background-color: var(--bg-canvas);
             background-image:
                 radial-gradient(circle at 20% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 45%),
-                radial-gradient(circle at 80% 10%, rgba(255, 179, 71, 0.06) 0%, transparent 40%);
+                radial-gradient(circle at 80% 10%, rgba(var(--accent-rgb, 255, 179, 71), 0.06) 0%, transparent 40%);
             color: var(--text-primary);
             font-family: 'Inter', sans-serif;
             line-height: 1.5;
@@ -60,7 +47,7 @@
             position: sticky;
             top: 0;
             z-index: 1000;
-            background: rgba(6, 7, 12, 0.9);
+            background: var(--header-glass, rgba(6, 7, 12, 0.9));
             backdrop-filter: blur(16px);
             border-bottom: 1px solid var(--border-subtle);
             padding: 0.85rem 2rem;
@@ -86,7 +73,7 @@
 
         /* ─── SCRAPER COMMAND HEADER ─── */
         .scraper-hero {
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(14, 17, 26, 0.96) 60%, rgba(255, 179, 71, 0.08) 100%);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(14, 17, 26, 0.96) 60%, rgba(var(--accent-rgb, 255, 179, 71), 0.08) 100%);
             border: 1px solid rgba(16, 185, 129, 0.35);
             border-radius: 22px;
             padding: 2rem 2.25rem;
@@ -191,7 +178,7 @@
         /* ─── SELECTED ANIME INSPECTOR & LIVE MP4 PLAYER / DOWNLOADER ─── */
         .inspector-panel {
             background: var(--bg-elevated);
-            border: 1px solid rgba(255, 179, 71, 0.4);
+            border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.4);
             border-radius: 20px;
             padding: 1.75rem;
             margin-bottom: 2.5rem;
@@ -273,7 +260,7 @@
         }
         .btn-mini.stream {
             background: var(--accent);
-            color: #07080d;
+            color: var(--bg-canvas, #07080d);
         }
         .btn-mini.download {
             background: var(--emerald);
@@ -410,7 +397,7 @@
             <div>
                 <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
                     <span class="status-chip">Site ID: {{ selected_anime.site_id }}</span>
-                    <span class="status-chip" style="color:var(--accent);border-color:rgba(255,179,71,0.4);background:rgba(255,179,71,0.14);">
+                    <span class="status-chip" style="color:var(--accent);border-color:rgba(var(--accent-rgb,255,179,71),0.4);background:rgba(var(--accent-rgb,255,179,71),0.14);">
                         {{ selected_anime.total_episodes }} Episodes Extracted
                     </span>
                 </div>

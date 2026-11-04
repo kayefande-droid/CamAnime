@@ -4,7 +4,7 @@
 
 CamAnime pairs a responsive Flask discovery website with a Flutter Android app and a shared, AniList-backed catalogue. Streaming and downloads are exposed only when configured providers are authorized to distribute the media. Made by **kayefande-droid & co.**
 
-- Website: `https://camanime.onrender.com` (auto-deploys from `main` via Render + `render.yaml`)
+- Website: `https://camanime.onrender.com` (auto-deploys from `main` via Render + `render.yaml`); Cloudflare front door: `https://camanjme.camanime.workers.dev` (worker built directly from this repository)
 - Apps: download from the site's **/download** page or **GitHub Releases** (`v1.0.0+`)
 
 ## Features
@@ -89,7 +89,7 @@ The legacy endpoints below remain separate and are not mapped from AniList IDs u
 ### Deploying on both Render and Cloudflare
 
 - **Render (origin, unchanged):** Flask backend, SQLite, accounts, streaming proxies and downloads. Blueprint `render.yaml` + `Procfile`; auto-deploy from `main` stays enabled. Render must remain online — the Cloudflare worker is a proxy, not a copy of the backend.
-- **Cloudflare (front door):** `cloudflare-worker/` contains `index.js` (edge proxy that streams every response to/from the Render origin and keeps redirects on the Cloudflare hostname), `wrangler.jsonc` and `package.json`. The worker is named **camanjme** — a Cloudflare-only label that produces `https://camanjme.<your-subdomain>.workers.dev`; it must not be confused with the Render origin or affect search, which still references `camanime.onrender.com`. Workers Builds settings: root directory `/cloudflare-worker`, build `npm install`, deploy `npm run deploy`, output directory blank, production branch `main`. Manual deploys: `cd cloudflare-worker && npx wrangler deploy`.
+- **Cloudflare (front door):** `cloudflare-worker/` contains `index.js` (edge proxy that streams every response to/from the Render origin, keeps redirects on the Cloudflare hostname, retries while the free-tier origin wakes up and serves a branded "waking up" page instead of challenge/downtime screens, and edge-caches `/static` for 24h), `wrangler.jsonc` and `package.json`. The worker is named **camanjme** — a Cloudflare-only label that produces `https://camanjme.camanime.workers.dev`; it must not be confused with the Render origin or affect search, which still references `camanime.onrender.com`. Workers Builds deploys this folder straight from the GitHub repository (root directory `/cloudflare-worker`, build `npm install`, deploy `npm run deploy`, output directory blank, production branch `main`) — no manual `wrangler publish` is needed and no build input comes from Render. Manual deploys: `cd cloudflare-worker && npx wrangler deploy`.
 
 The existing source includes legacy AnimeHeaven and Anikoto scrapers plus generated VidSrc/VidLink embed URLs. Their presence in source is **not proof of permission, reliability, or a licensed integration**; do not enable them for publication until rights and provider terms are verified. AniList is currently a metadata provider only. No approved playback or offline-download provider is configured in this release.
 

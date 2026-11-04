@@ -19,18 +19,18 @@
 <link rel="canonical" href="https://camanime.onrender.com/promo">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css" rel="stylesheet">
-<script src="/static/js/site.js?v=20261022" defer></script>
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 body{background:#05060a;color:#fff;font-family:'Inter',system-ui,sans-serif;padding:2rem;max-width:1100px;margin:0 auto}
 .slides{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem;margin:1.5rem 0}
-.slide{border-radius:20px;padding:1.75rem;min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(160deg,#141926,#07080d);border:1px solid rgba(255,179,71,.35);position:relative;overflow:hidden}
+.slide{border-radius:20px;padding:1.75rem;min-height:340px;display:flex;flex-direction:column;justify-content:flex-end;background:linear-gradient(160deg,var(--bg-surface, #141926),var(--bg-canvas, #07080d));border:1px solid rgba(var(--accent-rgb,255,179,71),.35);position:relative;overflow:hidden}
 .slide.alt{border-color:rgba(16,185,129,.4)}
 .slide h2{font-size:clamp(1.25rem,1.1rem + 1.2vw,1.6rem);line-height:1.1;margin-bottom:.5rem}
-.slide p{color:#cbd5e1}.tag{display:inline-block;background:rgba(255,179,71,.16);border:1px solid #FFB347;color:#FFB347;border-radius:999px;padding:.2rem .7rem;font-size:.75rem;font-weight:700;margin-bottom:.7rem}
-a{color:#FFB347}.tags{background:#0e111a;border-radius:14px;padding:1.25rem;margin-top:1rem;line-height:2}
+.slide p{color:#cbd5e1}.tag{display:inline-block;background:rgba(var(--accent-rgb,255,179,71),.16);border:1px solid var(--accent, #FFB347);color:var(--accent, #FFB347);border-radius:999px;padding:.2rem .7rem;font-size:.75rem;font-weight:700;margin-bottom:.7rem}
+a{color:var(--accent, #FFB347)}.tags{background:var(--bg-elevated, #0e111a);border-radius:14px;padding:1.25rem;margin-top:1rem;line-height:2}
 @media(max-width:414px){body{padding:1rem}}
 </style>
 </head>
@@ -55,6 +55,6 @@ a{color:#FFB347}.tags{background:#0e111a;border-radius:14px;padding:1.25rem;marg
 <li>8–12s: show an episode page and its available provider-listed playback options.</li>
 <li>12–15s: “Link in bio” end card with QR to /promo.</li>
 </ol>
-<p style="margin-top:1rem;color:#64708a">Remotion project scaffold: <code>promo/remotion-kit/</code> (see repo). Render 1080×1920, 30fps, 15s.</p>
+<p style="margin-top:1rem;color:var(--text-muted, #64708a)">Remotion project scaffold: <code>promo/remotion-kit/</code> (see repo). Render 1080×1920, 30fps, 15s.</p>
 </body>
 </html>
