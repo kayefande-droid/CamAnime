@@ -1,5 +1,9 @@
 CAMANIME CLOUDFLARE WORKER (RENDER ORIGIN PROXY)
 
+Worker name on Cloudflare: camanjme
+(next serves https://camanjme.<your-subdomain>.workers.dev — Cloudflare only;
+Render keeps camanime/camanime.onrender.com untouched for the origin and search.)
+
 What this does:
 - Creates a Cloudflare Worker endpoint for CamAnime.
 - Forwards requests to https://camanime.onrender.com.

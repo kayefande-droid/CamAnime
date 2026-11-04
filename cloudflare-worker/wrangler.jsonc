@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "camanime-cloudflare",
+  "name": "camanjme",
   "main": "index.js",
   "compatibility_date": "2026-11-04",
   "workers_dev": true
