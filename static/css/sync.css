@@ -462,3 +462,142 @@ html[data-data="low"] body .anime-card:hover { transform: none; box-shadow: none
 html[data-data="low"] body .release-ticker { animation-duration: 60s; }
 html[data-data="low"] body .card-poster-wrap img { filter: none; }
 html[data-data="medium"] body * { backdrop-filter: none !important; }
+
+/* ════════════════════════════════════════════════════════════════════
+   LAYOUT TEMPLATES — complete switchable layout recipes, independent of theme.
+   html[data-layout] set by site.js from localStorage (camanime-layout).
+   classic = the existing layout, untouched. The other three reflow the whole
+   site: grid geometry, card shape, hero scale, spacing, corners and controls.
+   Attribute-scoped (html[data-layout=x] body …) so they out-rank per-template
+   <style> blocks regardless of load order. Themes and layouts combine freely.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── CINEMA: big-screen theatre feel — wider stage, larger posters, softer corners ── */
+html[data-layout="cinema"] body {
+  font-size: clamp(1rem, .95rem + .3vw, 1.1rem);
+  line-height: 1.7;
+}
+html[data-layout="cinema"] body .main-wrap,
+html[data-layout="cinema"] body .container,
+html[data-layout="cinema"] body .watch-container { max-width: 1680px; padding-inline: clamp(1.2rem, 4vw, 3.5rem); }
+html[data-layout="cinema"] body .anime-grid,
+html[data-layout="cinema"] body .mini-grid,
+html[data-layout="cinema"] body .heaven-strip-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 1.6rem 1.3rem; }
+html[data-layout="cinema"] body .cinema-grid,
+html[data-layout="cinema"] body .two-col-layout { gap: 1.6rem; }
+html[data-layout="cinema"] body .anime-card,
+html[data-layout="cinema"] body .panel-card,
+html[data-layout="cinema"] body .panel-box,
+html[data-layout="cinema"] body .dossier-card { border-radius: 22px; overflow: hidden; }
+html[data-layout="cinema"] body .card-poster-wrap { aspect-ratio: 2 / 3; }
+html[data-layout="cinema"] body .card-title { font-size: clamp(1rem, .9rem + .4vw, 1.15rem); font-weight: 700; }
+html[data-layout="cinema"] body .section-title,
+html[data-layout="cinema"] body .panel-title { font-size: clamp(1.35rem, 1.15rem + 1vw, 1.9rem); letter-spacing: -.01em; }
+html[data-layout="cinema"] body .hero-body { padding: clamp(2rem, 5vw, 4rem); }
+html[data-layout="cinema"] body .hero-spotlight,
+html[data-layout="cinema"] body .hero-slide.active { min-height: clamp(420px, 52vw, 640px); }
+html[data-layout="cinema"] body .hero-title { letter-spacing: -.02em; }
+html[data-layout="cinema"] body .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 1rem; }
+html[data-layout="cinema"] body .ep-card { border-radius: 18px; padding: 1rem 1.1rem; }
+html[data-layout="cinema"] body .btn-primary,
+html[data-layout="cinema"] body .btn-secondary { border-radius: 999px; padding: .85rem 1.7rem; font-weight: 800; }
+html[data-layout="cinema"] body .ca-search-pop .sheet { border-radius: 24px; }
+html[data-layout="cinema"] .stat-strip { border-radius: 22px; }
+@media (hover: hover) {
+  html[data-layout="cinema"] body .anime-card:hover { transform: translateY(-7px) scale(1.015); box-shadow: 0 22px 48px rgba(var(--accent-rgb,255,179,71),.18); }
+}
+
+/* ── COMPACT: dense rail-style browsing — tighter posters, tighter type, more per row ── */
+html[data-layout="compact"] body {
+  font-size: clamp(.9rem, .87rem + .15vw, .98rem);
+  line-height: 1.45;
+}
+html[data-layout="compact"] body .main-wrap,
+html[data-layout="compact"] body .container,
+html[data-layout="compact"] body .watch-container { max-width: 1280px; padding-inline: clamp(.85rem, 2.5vw, 1.75rem); }
+html[data-layout="compact"] body .anime-grid,
+html[data-layout="compact"] body .mini-grid,
+html[data-layout="compact"] body .heaven-strip-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); gap: .8rem .6rem; }
+html[data-layout="compact"] body .anime-card { border-radius: 12px; }
+html[data-layout="compact"] body .card-poster-wrap { aspect-ratio: 16 / 9; }
+html[data-layout="compact"] body .card-poster-wrap img { object-fit: cover; }
+html[data-layout="compact"] body .card-body { padding: .45rem .55rem .55rem; }
+html[data-layout="compact"] body .card-title { font-size: .8rem; -webkit-line-clamp: 2; line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+html[data-layout="compact"] body .section-title,
+html[data-layout="compact"] body .panel-title { font-size: clamp(1rem, .9rem + .5vw, 1.2rem); }
+html[data-layout="compact"] body .hero-spotlight,
+html[data-layout="compact"] body .hero-slide.active { min-height: clamp(260px, 34vw, 380px); }
+html[data-layout="compact"] body .hero-body { padding: 1.1rem 1.2rem; }
+html[data-layout="compact"] body .hero-ctas .btn-primary,
+html[data-layout="compact"] body .hero-ctas .btn-secondary { padding: .55rem 1.1rem; font-size: .82rem; }
+html[data-layout="compact"] body .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: .55rem; }
+html[data-layout="compact"] body .ep-card { padding: .55rem .7rem; border-radius: 10px; }
+html[data-layout="compact"] .container { margin-top: clamp(-90px, -8vw, -40px); }
+html[data-layout="compact"] .banner-wrap { height: clamp(160px, 22vw, 260px); }
+@media (max-width: 767px) {
+  html[data-layout="compact"] body .anime-grid,
+  html[data-layout="compact"] body .mini-grid,
+  html[data-layout="compact"] body .heaven-strip-grid,
+  html[data-layout="compact"] body .catalog-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55rem .45rem; }
+  html[data-layout="compact"] body .card-title { font-size: .72rem; }
+}
+
+/* ── MINIMAL: flat editorial — square corners, borders only, no gradients or shadows ── */
+html[data-layout="minimal"] body {
+  font-size: clamp(.95rem, .92rem + .2vw, 1.02rem);
+  line-height: 1.65;
+}
+html[data-layout="minimal"] body .anime-card,
+html[data-layout="minimal"] body .panel-card,
+html[data-layout="minimal"] body .panel-box,
+html[data-layout="minimal"] body .dossier-card,
+html[data-layout="minimal"] body .ca-card,
+html[data-layout="minimal"] body .discovery-filters,
+html[data-layout="minimal"] body .discovery-empty,
+html[data-layout="minimal"] body .ca-search-pop .sheet,
+html[data-layout="minimal"] .stat-strip,
+html[data-layout="minimal"] .release-ticker {
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,.1));
+  box-shadow: none;
+}
+html[data-layout="minimal"] body .btn-primary,
+html[data-layout="minimal"] body .btn-secondary,
+html[data-layout="minimal"] body .discovery-filter-submit {
+  border-radius: 6px;
+  box-shadow: none;
+  background: var(--accent);
+}
+html[data-layout="minimal"] body .btn-secondary,
+html[data-layout="minimal"] body .discovery-filter-reset {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+html[data-layout="minimal"] body .btn-primary:active,
+html[data-layout="minimal"] body .btn-secondary:active { transform: none; }
+html[data-layout="minimal"] body .card-poster-wrap { border-radius: 4px; }
+html[data-layout="minimal"] body .section-title,
+html[data-layout="minimal"] body .panel-title {
+  border-left: 3px solid var(--accent);
+  padding-left: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  font-weight: 800;
+}
+html[data-layout="minimal"] .release-ticker { background: var(--bg-elevated); }
+html[data-layout="minimal"] body .live-schedule-tab { background: var(--accent); box-shadow: none; }
+html[data-layout="minimal"] body .anime-card,
+html[data-layout="minimal"] body .panel-card,
+html[data-layout="minimal"] body .panel-box { transition: none; }
+@media (hover: hover) {
+  html[data-layout="minimal"] body .anime-card:hover { transform: none; box-shadow: none; outline: 1px solid var(--accent); }
+}
+html[data-layout="minimal"] body .hero-body { padding: 1.6rem 1.5rem; }
+html[data-layout="minimal"] .ca-theme-btn,
+html[data-layout="minimal"] .mv-tab,
+html[data-layout="minimal"] .shuffle-btn { border-radius: 6px; }
+
+/* Data-saver trims layout hover effects too */
+html[data-data="low"] body .anime-card:hover { transform: none; box-shadow: none; }
+html[data-motion="reduced"] body .anime-card { transition: none; }

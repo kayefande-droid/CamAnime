@@ -11,8 +11,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261104-themes" rel="stylesheet">
-<script src="/static/js/site.js?v=20261104" defer></script>
+<link href="/static/css/sync.css?v=20261104-layout" rel="stylesheet">
+<script src="/static/js/site.js?v=20261104-layout" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Outfit','Inter',sans-serif;min-height:100vh}
@@ -79,6 +79,18 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
       <button type="button" class="theme-pick" data-theme-name="neo"><span class="theme-dot" style="background:linear-gradient(135deg,#4EA8FF,#070d1c)"></span>Neo Streaming</button>
       <button type="button" class="theme-pick" data-theme-name="tokyo"><span class="theme-dot" style="background:linear-gradient(135deg,#35F1E4,#FF3DDB)"></span>Neon Tokyo</button>
     </div>
+  </div>
+
+  <div class="set-card">
+    <h2><i class="fas fa-table-cells"></i> Layout template</h2>
+    <p>Switch between complete layout designs — grid shape, poster style, hero size, spacing and controls reflow across the whole site. Layouts combine freely with any theme.</p>
+    <div class="theme-grid" id="layoutGrid">
+      <button type="button" class="theme-pick" data-layout-name="classic"><span class="theme-dot" style="background:linear-gradient(135deg,#FFB347,#0e111a)"></span>Classic</button>
+      <button type="button" class="theme-pick" data-layout-name="cinema"><span class="theme-dot" style="background:linear-gradient(135deg,#7C61D4,#FF5E62)"></span>Cinema</button>
+      <button type="button" class="theme-pick" data-layout-name="compact"><span class="theme-dot" style="background:linear-gradient(135deg,#34d399,#0e111a)"></span>Compact</button>
+      <button type="button" class="theme-pick" data-layout-name="minimal"><span class="theme-dot" style="background:linear-gradient(135deg,#64708a,#f6f4ee)"></span>Minimal</button>
+    </div>
+    <p class="storage-line" id="layoutNote">Classic — the original CamAnime layout.</p>
   </div>
 
   <div class="set-card">
@@ -214,6 +226,32 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     b.onclick = function () { pickTheme(b.dataset.mode === 'light' ? 'light' : 'midnight'); };
   });
 
+  // Layout template (complete layout recipes, independent of theme)
+  var LAYOUT_LABELS = {
+    classic: 'Classic — the original CamAnime layout.',
+    cinema: 'Cinema — big posters, wide stage, rounded showtimes feel.',
+    compact: 'Compact — dense grid, landscape posters, more per row.',
+    minimal: 'Minimal — flat editorial: square corners, borders, no gradients.'
+  };
+  function curLayout() {
+    try { var l = localStorage.getItem('camanime-layout'); return (window.caLayouts || ['classic']).indexOf(l) !== -1 ? l : 'classic'; } catch (e) { return 'classic'; }
+  }
+  function paintLayout() {
+    var l = curLayout();
+    document.querySelectorAll('#layoutGrid .theme-pick').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.layoutName === l);
+    });
+    var note = $('layoutNote');
+    if (note) note.textContent = LAYOUT_LABELS[l];
+  }
+  document.querySelectorAll('#layoutGrid .theme-pick').forEach(function (b) {
+    b.onclick = function () {
+      if (window.caSetLayout) window.caSetLayout(b.dataset.layoutName);
+      else { document.documentElement.setAttribute('data-layout', b.dataset.layoutName); try { set('camanime-layout', b.dataset.layoutName); } catch (e) {} }
+      paintLayout(); say('Layout: ' + b.dataset.layoutName + '.');
+    };
+  });
+
   // Network & data saver
   function paintData() {
     var pref = (window.caDataSaver && window.caDataSaver.pref) ? window.caDataSaver.pref() : 'auto';
@@ -275,10 +313,11 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     measure(); say('Watchlist cleared.');
   };
   $('resetAllBtn').onclick = function () {
-    ['camanime-theme', 'camanime-motion', 'camanime-autoplay', 'camanime-audio', 'camanime-schedule-tab', 'camanime-schedule-pos'].forEach(function (k) {
+    ['camanime-theme', 'camanime-motion', 'camanime-autoplay', 'camanime-audio', 'camanime-schedule-tab', 'camanime-schedule-pos', 'camanime-layout'].forEach(function (k) {
       try { localStorage.removeItem(k); } catch (e) {}
     });
     document.documentElement.setAttribute('data-theme', 'midnight');
+    document.documentElement.setAttribute('data-layout', 'classic');
     document.documentElement.dataset.motion = '';
     $('setAutoplay').checked = false; $('setMotion').checked = false;
     applySchedule(); paintTheme(); paintAudio(); paintSchedule(); say('All site settings reset to defaults.');
@@ -304,7 +343,7 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     };
   });
 
-  paintTheme(); paintAudio(); paintSchedule(); measure();
+  paintTheme(); paintLayout(); paintAudio(); paintSchedule(); measure();
 })();
 </script>
 </body>

@@ -2924,6 +2924,11 @@ def promo_page():
     return render_template("promo.html", user=_current_user())
 
 
+@app.route("/advert")
+def advert_page():
+    return render_template("advert.html", user=_current_user())
+
+
 @app.route("/settings")
 def settings_page():
     return render_template("settings.html", user=_current_user())

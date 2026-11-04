@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CamAnime — Every feature, two fast ways to watch</title>
+<meta name="description" content="CamAnime advert: streaming, downloads, adaptive quality, themes and layout templates, community, accounts — on Render and on Cloudflare.">
+<meta name="theme-color" content="#07080d">
+<link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal'].indexOf(l)!==-1)document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>
+<link href="/static/css/sync.css?v=20261104-layout" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
+body{background:var(--bg-canvas,#07080d);color:var(--text-primary,#f3f5fa);font-family:'Outfit','Inter',sans-serif;min-height:100vh;line-height:1.6}
+.ad-wrap{width:100%;max-width:1080px;margin:0 auto;padding:clamp(1rem,4vw,2.5rem)}
+.ad-top{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:clamp(1.5rem,5vw,3rem)}
+.ad-top img{width:min(190px,48vw);height:auto}
+.ad-top a{color:var(--accent,#FFB347);text-decoration:none;font-weight:700}
+.ad-badge{display:inline-flex;align-items:center;gap:.55rem;background:rgba(var(--accent-rgb,255,179,71),.13);border:1px solid rgba(var(--accent-rgb,255,179,71),.4);color:var(--accent,#FFB347);border-radius:999px;padding:.45rem 1.1rem;font-weight:700;font-size:.85rem;margin-bottom:1rem}
+.ad-hero{padding:clamp(1.5rem,5vw,3rem) 0 clamp(2rem,5vw,3.5rem)}
+.ad-hero h1{font-family:'Sora',sans-serif;font-size:clamp(2rem,1.4rem + 4.5vw,4rem);line-height:1.08;letter-spacing:-.02em}
+.ad-hero h1 em{font-style:normal;color:var(--accent,#FFB347)}
+.ad-hero .lede{color:var(--text-secondary,#a0abc0);font-size:clamp(1rem,.95rem + .6vw,1.25rem);max-width:46rem;margin-top:1rem}
+.ad-ctas{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.8rem}
+.ad-btn{display:inline-flex;align-items:center;gap:.6rem;text-decoration:none;border-radius:999px;padding:.95rem 1.6rem;font-weight:800;font-size:.95rem}
+.ad-btn.primary{background:linear-gradient(135deg,var(--accent,#FFB347),var(--accent-crimson,#FF5E62));color:#0a0c14}
+.ad-btn.secondary{border:1px solid rgba(var(--accent-rgb,255,179,71),.5);color:var(--accent,#FFB347)}
+.ad-btn.ghost{border:1px solid rgba(255,255,255,.14);color:var(--text-primary,#f3f5fa)}
+.ad-btn:hover{filter:brightness(1.08)}
+.ad-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem;margin:1.5rem 0 3rem}
+.ad-host{background:var(--bg-elevated,#0e111a);border:1px solid rgba(var(--accent-rgb,255,179,71),.35);border-radius:18px;padding:1.4rem;position:relative}
+.ad-host .tag{position:absolute;top:-.75rem;left:1.2rem;background:var(--accent,#FFB347);color:#0a0c14;font-size:.7rem;font-weight:800;border-radius:999px;padding:.2rem .7rem;letter-spacing:.04em}
+.ad-host:hover .entry{color:var(--accent,#FFB347)}
+.ad-host h2{font-family:'Sora',sans-serif;font-size:1.15rem}
+.ad-host .entry{display:inline-block;margin:.7rem 0 .4rem;font-family:ui-monospace,monospace;font-size:.88rem;color:var(--text-primary,#f3f5fa);word-break:break-all;text-decoration:none;border-bottom:1px dashed rgba(var(--accent-rgb,255,179,71),.5)}
+.ad-host p{color:var(--text-secondary,#a0abc0);font-size:.88rem}
+.ad-sec{margin:clamp(2rem,6vw,3.5rem) 0}
+.ad-sec > h2{font-family:'Sora',sans-serif;font-size:clamp(1.4rem,1.2rem + 1.4vw,2rem);margin-bottom:1.2rem}
+.ad-sec > h2 i{color:var(--accent,#FFB347)}
+.ad-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem}
+.ad-feat{background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:1.2rem}
+.ad-feat i{color:var(--accent,#FFB347);font-size:1.25rem}
+.ad-feat h3{font-size:1rem;margin:.55rem 0 .3rem}
+.ad-feat p{color:var(--text-secondary,#a0abc0);font-size:.86rem}
+.ad-quote{border-left:3px solid var(--accent,#FFB347);padding:.4rem 0 .4rem 1.1rem;color:var(--text-secondary,#a0abc0);font-size:.92rem;margin-top:2.5rem}
+.ad-foot{text-align:center;color:var(--text-muted,#64708a);font-size:.8rem;margin-top:3rem;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.08)}
+</style>
+</head>
+<body>
+<div class="ad-wrap">
+  <div class="ad-top">
+    <a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime"></a>
+    <a href="/">camanime.onrender.com <i class="fas fa-arrow-up-right-from-square"></i></a>
+  </div>
+
+  <header class="ad-hero">
+    <span class="ad-badge"><i class="fas fa-bolt"></i> New release — 2026 rebuild</span>
+    <h1>Every episode you want.<br><em>Two fast ways</em> to watch it.</h1>
+    <p class="lede">CamAnime is a free anime streaming experience with HD sub &amp; dub playback, a smart adaptive player, real offline library tools, and a community that rates and reviews every show today — served from two independent deployments on Render and Cloudflare.</p>
+    <div class="ad-ctas">
+      <a class="ad-btn primary" href="/download"><i class="fas fa-android"></i> Get the Android app</a>
+      <a class="ad-btn secondary" href="https://camanime.onrender.com"><i class="fas fa-fire"></i> Open on Render</a>
+      <a class="ad-btn ghost" href="https://camanjme.camanime.workers.dev"><i class="fas fa-cloud"></i> Open on Cloudflare</a>
+    </div>
+  </header>
+
+  <section class="ad-hosts" aria-label="Both CamAnime deployments">
+    <div class="ad-host">
+      <span class="tag">RENDER</span>
+      <h2><i class="fas fa-fire" style="color:#FF5E62"></i> camanime.onrender.com</h2>
+      <a class="entry" href="https://camanime.onrender.com">camanime.onrender.com</a>
+      <p>The original full-fat deployment: Python scraping pipeline, HD provider extraction, live schedule, forum and admin APIs.</p>
+    </div>
+    <div class="ad-host">
+      <span class="tag" style="background:#35F1E4">CLOUDFLARE</span>
+      <h2><i class="fas fa-cloud" style="color:#35F1E4"></i> camanjme.camanime.workers.dev</h2>
+      <a class="entry" href="https://camanjme.camanime.workers.dev">camanjme.camanime.workers.dev</a>
+      <p>The edge rebuild on Workers + D1 + R2: own database, own storage, own sessions — same catalogue, themes and brand, fully independent.</p>
+    </div>
+  </section>
+
+  <section class="ad-sec">
+    <h2><i class="fas fa-play"></i> Watch without fighting the internet</h2>
+    <div class="ad-grid">
+      <div class="ad-feat"><i class="fas fa-signal"></i><h3>Adaptive video quality</h3><p>Pick Auto and the player lowers quality on weak links, raises it on good ones — or lock 1080p manually per episode or per series.</p></div>
+      <div class="ad-feat"><i class="fas fa-feather"></i><h3>Data saver</h3><p>On slow or metered networks CamAnime trims effects, swaps to light posters and enlarges buffering so episodes never stutter.</p></div>
+      <div class="ad-feat"><i class="fas fa-headphones"></i><h3>Sub &amp; dub</h3><p>Every episode page tracks available SUB and DUB sources separately, with sensible defaults and a choice you make once.</p></div>
+      <div class="ad-feat"><i class="fas fa-bolt"></i><h3>Skip where supported</h3><p>Speed controls, resume positions, autoplay next episode and watch progress saved on this device or to your account.</p></div>
+    </div>
+  </section>
+
+  <section class="ad-sec">
+    <h2><i class="fas fa-table-cells"></i> Make it yours: 8 themes × 4 layouts</h2>
+    <div class="ad-grid">
+      <div class="ad-feat"><i class="fas fa-palette"></i><h3>8 themes, sitewide</h3><p>Midnight, Light, Vibrant, Sakura, Forest, Obsidian, Neo Streaming and Neon Tokyo — remembered on every page, every device you pick them on.</p></div>
+      <div class="ad-feat"><i class="fas fa-table-cells"></i><h3>4 layout templates</h3><p>Classic, Cinema, Compact and Minimal switch the entire layout design — posters, grids, hero, corners — not just colours.</p></div>
+      <div class="ad-feat"><i class="fas fa-low-vision"></i><h3>Reduce motion</h3><p>Animations and transitions off entirely when you need calm scrolling.</p></div>
+      <div class="ad-feat"><i class="fas fa-calendar-days"></i><h3>Live schedule drawer</h3><p>A slide-in release schedule with countdowns, positionable on any screen edge and hideable whenever.</p></div>
+    </div>
+  </section>
+
+  <section class="ad-sec">
+    <h2><i class="fas fa-users"></i> Community, accounts &amp; library</h2>
+    <div class="ad-grid">
+      <div class="ad-feat"><i class="fas fa-comments"></i><h3>Ratings &amp; comments</h3><p>Per-anime ratings, threaded comments, stickers, likes and reply mentions — no account needed.</p></div>
+      <div class="ad-feat"><i class="fas fa-bell"></i><h3>Notifications</h3><p>Episode releases, replies and CEO announcements reach you in-app; browser-optional.</p></div>
+      <div class="ad-feat"><i class="fas fa-user-plus"></i><h3>Accounts</h3><p>Sign up free for synced watch history, resume points and library across devices.</p></div>
+      <div class="ad-feat"><i class="fab fa-android"></i><h3>Android app</h3><p>Take CamAnime anywhere: the APK ships streaming, adaptive quality and offline playback — no account, no ads.</p></div>
+    </div>
+  </section>
+
+  <section class="ad-sec">
+    <h2><i class="fas fa-server"></i> Independent hosting, no single point of failure</h2>
+    <div class="ad-grid">
+      <div class="ad-feat"><i class="fas fa-diagram-project"></i><h3>Two clean paths</h3><p>Render (Python/Flask + its own database) and Cloudflare (Workers + D1 + R2) deploy from the same open repo and share nothing else.</p></div>
+      <div class="ad-feat"><i class="fas fa-database"></i><h3>Self-contained edge app</h3><p>The Cloudflare build keeps its own users, comments, ratings, history and uploads — no proxying, no fallback, no cross-dependency.</p></div>
+      <div class="ad-feat"><i class="fas fa-check"></i><h3>Same look everywhere</h3><p>Both deployments serve the identical CSS/JS, themes, layouts and branding straight from the repo.</p></div>
+      <div class="ad-feat"><i class="fas fa-heart"></i><h3>Always free</h3><p>No pay walls, no ad walls, no region nonsense. Watch what you want.</p></div>
+    </div>
+  </section>
+
+  <div class="ad-ctas" style="justify-content:center;padding-bottom:1rem">
+    <a class="ad-btn primary" href="/download"><i class="fas fa-download"></i> Download CamAnime</a>
+    <a class="ad-btn secondary" href="https://camanime.onrender.com"><i class="fas fa-fire"></i> Render site</a>
+    <a class="ad-btn ghost" href="https://camanjme.camanime.workers.dev"><i class="fas fa-cloud"></i> Cloudflare site</a>
+  </div>
+  <p class="ad-quote">Tell a friend: same brand, same catalogue, same community — pick whichever edge is closer to you today.</p>
+
+  <footer class="ad-foot">CamAnime © 2026 kayefande-droid · <a href="/" style="color:var(--accent,#FFB347)">Home</a></footer>
+</div>
+</body>
+</html>

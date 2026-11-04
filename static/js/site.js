@@ -103,6 +103,24 @@
   else apply();
 })();
 
+/* CamAnime layout templates: complete switchable layout recipes that combine with themes.
+   classic (default), cinema, compact, minimal — reflow grids, posters, hero and controls */
+(function () {
+  var LAYOUTS = ["classic", "cinema", "compact", "minimal"];
+  try {
+    var l = localStorage.getItem("camanime-layout");
+    if (LAYOUTS.indexOf(l) === -1) l = null;
+    document.documentElement.setAttribute("data-layout", l || "classic");
+  } catch (e) {}
+  window.caSetLayout = function (name) {
+    if (LAYOUTS.indexOf(name) === -1) name = "classic";
+    document.documentElement.setAttribute("data-layout", name);
+    try { localStorage.setItem("camanime-layout", name); } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent("camanime:layout", { detail: { layout: name } })); } catch (e) {}
+  };
+  window.caLayouts = LAYOUTS;
+})();
+
 /* CamAnime policy: developer tools, right-click and view-source are intentionally
    left open. Real protection lives on the server (see docs/SECURITY.md) —
    security headers, rate limiting, SSRF containment, scanner-path blocking,

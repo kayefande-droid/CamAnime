@@ -15,8 +15,8 @@ function head(title, desc) {
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/sync.css?v=20261104-themes">
-<script src="/static/js/site.js?v=20261104" defer></script>
+<link rel="stylesheet" href="/static/css/sync.css?v=20261104-layout">
+<script src="/static/js/site.js?v=20261104-layout" defer></script>
 ${THEME_GUARD}
 </head><body>`;
 }
