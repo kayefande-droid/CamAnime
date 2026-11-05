@@ -665,12 +665,12 @@ class Api {
 
 /// One playable episode, carrying enough context for resume and back-to-back
 /// playback without leaking UI state through globals.
-class _EpisodeSource {
+class EpisodeSource {
   final String url;
   final String label;
   final String animeId;
   final int? episode;
-  const _EpisodeSource(
+  const EpisodeSource(
       {required this.url,
       required this.label,
       this.animeId = '',
@@ -730,8 +730,8 @@ class WatchProgress {
     });
     final b = best;
     if (b == null) return null;
-    final pos = int.tryParse('${(b['posMs'] ?? '').toString()}') ?? 0;
-    final dur = int.tryParse('${(b['durMs'] ?? '').toString()}') ?? 0;
+    final pos = int.tryParse((b['posMs'] ?? '').toString()) ?? 0;
+    final dur = int.tryParse((b['durMs'] ?? '').toString()) ?? 0;
     if (pos < 15000 || (dur > 0 && pos >= dur * 0.95) || (b['ep'] ?? 0) == 0) {
       return null;
     }
@@ -1930,7 +1930,7 @@ class _DetailScreenState extends State<DetailScreen>
   Future<void> _playSelected() async {
     if (selected.isEmpty) return;
     final eps = selected.toList()..sort();
-    final sources = <_EpisodeSource>[];
+    final sources = <EpisodeSource>[];
     for (final ep in eps) {
       final bundle = await _sourcesFor(ep);
       currentEpisode = ep;
@@ -1938,7 +1938,7 @@ class _DetailScreenState extends State<DetailScreen>
       final server = _selectServer(bundle);
       final url = (server?['stream_url'] ?? '').toString();
       if (url.isEmpty) continue;
-      sources.add(_EpisodeSource(
+      sources.add(EpisodeSource(
         url: url,
         label:
             '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})',
@@ -2393,7 +2393,7 @@ class _DetailScreenState extends State<DetailScreen>
                             final minsLeft =
                                 dur > pos ? ((dur - pos) / 60000).round() : 0;
                             final left =
-                                minsLeft > 0 ? ' · ${minsLeft} min left' : '';
+                                minsLeft > 0 ? ' · $minsLeft min left' : '';
                             return Padding(
                               padding: const EdgeInsets.only(top: 14),
                               child: Card(
@@ -2917,7 +2917,7 @@ class PlayerScreen extends StatefulWidget {
 
   /// Back-to-back queue in Stream mode. First entry is the one that plays;
   /// the rest auto-advance on completion.
-  final List<_EpisodeSource> playlist;
+  final List<EpisodeSource> playlist;
   final int startIndex;
   final bool resume;
   const PlayerScreen({
@@ -2938,12 +2938,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ChewieController? _chewie;
   String? error;
 
-  List<_EpisodeSource> playlist = [];
+  List<EpisodeSource> playlist = [];
   int index = 0;
   bool _switching = false;
 
-  _EpisodeSource get current => playlist.isEmpty
-      ? _EpisodeSource(url: widget.url, label: widget.label)
+  EpisodeSource get current => playlist.isEmpty
+      ? EpisodeSource(url: widget.url, label: widget.label)
       : playlist[index];
 
   @override
@@ -2951,7 +2951,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     playlist = widget.playlist.isEmpty
         ? [
-            _EpisodeSource(
+            EpisodeSource(
               url: widget.url,
               label: widget.label,
               animeId: '',
