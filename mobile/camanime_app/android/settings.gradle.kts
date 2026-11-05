@@ -14,6 +14,11 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        // DNS-resilient mirrors: same artifacts on alternate hosts, tried in order
+        maven("https://repo1.maven.org/maven2/")
+        maven("https://plugins.gradle.org/m2/")
+        maven("https://maven.aliyun.com/repository/public")
+        maven("https://maven.aliyun.com/repository/google")
     }
 }
 
