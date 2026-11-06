@@ -1028,8 +1028,10 @@ class YouTubeTrailerResolver:
         # 1. Check AniList trailer object first
         if anilist_trailer and isinstance(anilist_trailer, dict):
             site = (anilist_trailer.get("site") or "").lower()
-            vid = anilist_trailer.get("id")
-            if site == "youtube" and vid:
+            vid = str(anilist_trailer.get("id") or "").strip()
+            # Some upstream records carry stray whitespace/tabs; a bad id
+            # produces a broken embed URL, so only accept a real 11-char id.
+            if site == "youtube" and re.fullmatch(r"[A-Za-z0-9_-]{11}", vid):
                 return vid
 
         if not title:
@@ -1047,7 +1049,12 @@ class YouTubeTrailerResolver:
                 timeout=8,
             )
             if resp.status_code == 200:
-                vids = list(dict.fromkeys(re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', resp.text)))
+                vids = [
+                    v for v in dict.fromkeys(
+                        re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', resp.text)
+                    )
+                    if re.fullmatch(r"[A-Za-z0-9_-]{11}", v)
+                ]
                 if vids:
                     self.cache[key] = vids[0]
                     self.cache.move_to_end(key)
