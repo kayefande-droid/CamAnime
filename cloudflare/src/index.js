@@ -1,6 +1,6 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext } from "./catalog.js";
-import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage } from "./pages.js";
+import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage } from "./pages.js";
 import { html, json } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
@@ -15,9 +15,13 @@ export default {
     const path = url.pathname;
 
     // Real static assets (same CSS/JS/icons the Render site serves) via the ASSETS binding.
+    // The bundle mounts static/ at the asset root, so /static/css/x.css must be
+    // requested as /css/x.css. Without this rewrite every asset 404s.
     if (path.startsWith("/static/")) {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = path.slice("/static".length) || "/";
       try {
-        return await env.ASSETS.fetch(request);
+        return await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       } catch {
         return new Response(null, { status: 404 });
       }
@@ -32,7 +36,12 @@ export default {
     }
 
     // Health endpoint for uptime checks / Workers Builds verification.
-    if (path === "/healthz") return json({ ok: true, app: "camanjme", architecture: "workers+d1+r2" });
+    if (path === "/healthz") return json({
+      ok: true,
+      app: "camanjme",
+      architecture: "workers+d1+r2",
+      bindings: { db: Boolean(env.DB), files: Boolean(env.FILES), assets: Boolean(env.ASSETS) },
+    });
 
     // Pages (SSR HTML) — failures render the themed error page.
     try {
@@ -167,12 +176,7 @@ async function pageRoutes(request, env, ctx, path) {
   }
 
   if (path === "/settings") {
-    const inner = `
-      <h1 class="section-title">Site settings</h1>
-      <div class="set-card"><h2>Appearance &amp; networks</h2><p>The full theme picker (8 themes), data saver and per-series quality controls come from <code>/static/js/site.js</code> — identical behaviour to the Render deployment.</p></div>
-      ${user ? `<div class="set-card"><h2>Account</h2><p>Signed in as <strong>${esc(user.name)}</strong> (${esc(user.email)}).</p><form onsubmit='fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"}).then(()=>location.href="/")'><button class="btn-danger" type="submit">Sign out</button></form></div>`
-        : `<div class="set-card"><h2>Account</h2><p><a href="/login">Sign in</a> to save comments, ratings and resume points on this deployment.</p></div>`}`;
-    return html(chrome("Settings", "CamAnime settings.", user?.name, inner));
+    return html(settingsPage(user));
   }
 
   if (path === "/admin") {

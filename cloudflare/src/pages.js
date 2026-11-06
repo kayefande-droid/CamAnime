@@ -3,6 +3,7 @@ import { esc, BRAND } from "./util.js";
 import { card } from "./catalog.js";
 
 const THEME_GUARD = `<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>`;
+const LAYOUT_GUARD = `<script>try{var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal','wide','magazine','wall'].indexOf(l)===-1)l='classic';document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>`;
 
 function head(title, desc) {
   return `<!DOCTYPE html>
@@ -15,9 +16,10 @@ function head(title, desc) {
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/sync.css?v=20261104-layout">
-<script src="/static/js/site.js?v=20261104-layout" defer></script>
+<link rel="stylesheet" href="/static/css/sync.css?v=20261106-flow">
+<script src="/static/js/site.js?v=20261106-flow" defer></script>
 ${THEME_GUARD}
+${LAYOUT_GUARD}
 </head><body>`;
 }
 
@@ -25,22 +27,44 @@ export function chrome(title, desc, userName, inner, active = "home") {
   return `${head(title, desc)}
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header>
-  <div class="nav-inner">
-    <a class="site-logo" href="/">Cam<span style="color:var(--accent, #FFB347)">Anime</span></a>
-    <nav class="nav-links">
-      <a class="nav-link ${active === "home" ? "active" : ""}" href="/">Home</a>
-      <a class="nav-link ${active === "library" ? "active" : ""}" href="/library">My Library</a>
-      <a class="nav-link ${active === "download" ? "active" : ""}" href="/download">Downloads</a>
-      ${userName ? `<a class="nav-link" href="/settings">Account (${esc(userName)})</a>` : `<a class="nav-link" href="/login">Sign in</a>`}
-    </nav>
+  <div class="header-inner">
+    <div class="brand-group">
+      <a class="site-logo" href="/">Cam<span style="color:var(--accent, #FFB347)">Anime</span></a>
+      <nav class="nav-links">
+        <a class="nav-link ${active === "home" ? "active" : ""}" href="/">Home</a>
+        <a class="nav-link ${active === "library" ? "active" : ""}" href="/library">My Library</a>
+        <a class="nav-link ${active === "download" ? "active" : ""}" href="/download">Downloads</a>
+        <a class="nav-link ${active === "settings" ? "active" : ""}" href="/settings">Settings</a>
+        ${userName ? `<a class="nav-link" href="/settings">Account (${esc(userName)})</a>` : `<a class="nav-link" href="/login">Sign in</a>`}
+      </nav>
+    </div>
+    <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()"><i class="fas fa-bars" aria-hidden="true"></i></button>
   </div>
+  <nav class="mobile-nav" id="mobileNav" aria-label="Menu">
+    <a href="/">Home</a>
+    <a href="/library">My Library</a>
+    <a href="/download">Downloads</a>
+    <a href="/settings">Settings</a>
+    ${userName ? `<a href="/settings">Account (${esc(userName)})</a>` : `<a href="/login">Sign in</a>`}
+  </nav>
 </header>
-<main id="main-content" tabindex="-1" style="max-width:1180px;margin:0 auto;padding:1.4rem 1rem 3rem">
+<main class="main-wrap" id="main-content" tabindex="-1">
 ${inner}
 </main>
 <footer style="text-align:center;color:var(--text-muted,#64708a);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">
   <p>CamAnime — watch anime free. Independent Cloudflare deployment (camanjme); not affiliated with the Render origin.</p>
 </footer>
+<script>
+function toggleMobileNav(force) {
+  var nav = document.getElementById('mobileNav'), btn = document.getElementById('navToggle');
+  if (!nav || !btn) return;
+  var open = force !== undefined ? force : !nav.classList.contains('open');
+  nav.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', String(open));
+  btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+}
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleMobileNav(false); });
+</script>
 </body></html>`;
 }
 
@@ -224,4 +248,67 @@ export function errorPage(status, msg) {
       <a class="btn-primary" href="/">Back home</a>
     </div>`;
   return chrome(String(status), "CamAnime", null, inner);
+}
+
+/** Real settings page: working theme + layout pickers (previously only described in text). */
+export function settingsPage(user) {
+  const THEMES = ["midnight", "light", "vibrant", "sakura", "forest", "obsidian", "neo", "tokyo"];
+  const LAYOUTS = ["classic", "cinema", "compact", "minimal", "wide", "magazine", "wall"];
+  const themeRow = THEMES.map((t) => `<button type="button" class="ca-theme-btn" data-theme-name="${t}">${t === "midnight" ? "Midnight" : t[0].toUpperCase() + t.slice(1)}</button>`).join("");
+  const layoutRow = LAYOUTS.map((l) => `<button type="button" class="ca-theme-btn" data-layout-name="${l}">${l[0].toUpperCase() + l.slice(1)}</button>`).join("");
+  const account = user
+    ? `<div class="panel-box"><h2 class="section-title">Account</h2><p>Signed in as <strong>${esc(user.name)}</strong> (${esc(user.email)}).</p><form onsubmit='fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"}).then(function(){location.href="/"})'><button class="btn-danger" type="submit">Sign out</button></form></div>`
+    : `<div class="panel-box"><h2 class="section-title">Account</h2><p><a href="/login">Sign in</a> to save comments, ratings and resume points on this deployment.</p></div>`;
+  const inner = `
+    <h1 class="section-title">Site settings</h1>
+    <div class="panel-box" style="margin-bottom:1rem">
+      <h2 class="section-title">Theme</h2>
+      <p class="muted">Eight themes, applied instantly and remembered on this device.</p>
+      <div class="ca-theme-row" role="group" aria-label="Site theme">${themeRow}</div>
+    </div>
+    <div class="panel-box" style="margin-bottom:1rem">
+      <h2 class="section-title">Layout template</h2>
+      <p class="muted">Seven complete layout recipes — grid shape, poster style, hero scale and spacing reflow across every page.</p>
+      <div class="ca-theme-row" role="group" aria-label="Layout template">${layoutRow}</div>
+      <p class="muted" id="layoutNote"></p>
+    </div>
+    ${account}
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var root = document.documentElement;
+      var LABELS = { classic: 'Classic — the original layout.', cinema: 'Cinema — big posters, wide stage.', compact: 'Compact — dense grid, landscape posters.', minimal: 'Minimal — flat editorial.', wide: 'Wide — full-bleed for large screens.', magazine: 'Magazine — editorial column.', wall: 'Poster Wall — dense poster grid.' };
+      function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+      var themes = ['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'];
+      var layouts = ['classic','cinema','compact','minimal','wide','magazine','wall'];
+      var themeBtns = document.querySelectorAll('[data-theme-name]');
+      var layoutBtns = document.querySelectorAll('[data-layout-name]');
+      var note = document.getElementById('layoutNote');
+      var t = ls('camanime-theme') || 'midnight'; if (themes.indexOf(t) === -1) t = 'midnight';
+      var l = ls('camanime-layout') || 'classic'; if (layouts.indexOf(l) === -1) l = 'classic';
+      function paint(nodes, attr, cur) {
+        for (var i = 0; i < nodes.length; i++) { nodes[i].classList.toggle('active', nodes[i].getAttribute(attr) === cur); }
+      }
+      function setTheme(name) {
+        if (window.caSetTheme) window.caSetTheme(name);
+        else { root.setAttribute('data-theme', name); try { localStorage.setItem('camanime-theme', name); } catch (e) {} }
+        paint(themeBtns, 'data-theme-name', name);
+      }
+      function setLayout(name) {
+        if (window.caSetLayout) window.caSetLayout(name);
+        else { root.setAttribute('data-layout', name); try { localStorage.setItem('camanime-layout', name); } catch (e) {} }
+        paint(layoutBtns, 'data-layout-name', name);
+        if (note) note.textContent = LABELS[name] || '';
+      }
+      paint(themeBtns, 'data-theme-name', t);
+      paint(layoutBtns, 'data-layout-name', l);
+      if (note) note.textContent = LABELS[l] || '';
+      for (var i = 0; i < themeBtns.length; i++) {
+        (function (btn) { btn.onclick = function () { setTheme(btn.getAttribute('data-theme-name')); }; })(themeBtns[i]);
+      }
+      for (var j = 0; j < layoutBtns.length; j++) {
+        (function (btn) { btn.onclick = function () { setLayout(btn.getAttribute('data-layout-name')); }; })(layoutBtns[j]);
+      }
+    });
+    </script>`;
+  return chrome("Settings", "CamAnime settings: themes, layouts and account.", user?.name, inner, "settings");
 }

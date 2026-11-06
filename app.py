@@ -310,18 +310,18 @@ def _inject_live_schedule_drawer(response):
         stylesheet_pattern = r'(href=["\'])/static/css/sync\.css(?:\?[^"\']*)?(["\'])'
         body, stylesheet_count = re.subn(
             stylesheet_pattern,
-            r'\1/static/css/sync.css?v=20261019-themes\2',
+            r'\1/static/css/sync.css?v=20261106-flow\2',
             body,
             count=1,
         )
         body = body.replace(
-            "/static/css/sync.css?v=20261019-themes",
-            "/static/css/sync.css?v=20261019-themes",
+            "/static/css/sync.css?v=20261106-flow",
+            "/static/css/sync.css?v=20261106-flow",
         )
         if not stylesheet_count and "</head>" in body:
             body = body.replace(
                 "</head>",
-                '<link href="/static/css/sync.css?v=20261019-themes" rel="stylesheet"></head>',
+                '<link href="/static/css/sync.css?v=20261106-flow" rel="stylesheet"></head>',
                 1,
             )
         script = ''

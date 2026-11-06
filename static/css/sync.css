@@ -601,3 +601,206 @@ html[data-layout="minimal"] .shuffle-btn { border-radius: 6px; }
 /* Data-saver trims layout hover effects too */
 html[data-data="low"] body .anime-card:hover { transform: none; box-shadow: none; }
 html[data-motion="reduced"] body .anime-card { transition: none; }
+
+/* ════════════════════════════════════════════════════════════════════
+   2026-11 CLEAN FLOW LAYER
+   1. Wide screens: navigation folds under one menu button (nothing overflows).
+   2. Watch page: organised player / servers / episodes grid.
+   3. Three new layout templates: wide, magazine, wall.
+   Pure presentation: no provider, stream or player behaviour is defined here.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Header: at 1280px+ the link row folds into the menu button ── */
+@media (min-width: 1280px) {
+  body > header { position: relative; }
+  body .header-inner { flex-wrap: nowrap; gap: 1rem; }
+  body .header-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+  /* Only pages that own a menu panel fold their links away. */
+  body:has(.mobile-nav) .nav-links { display: none !important; }
+  body:has(.mobile-nav) .nav-toggle { display: inline-flex !important; }
+  body:has(.mobile-nav) .mobile-nav {
+    position: absolute; top: calc(100% - .15rem); right: clamp(1.25rem, 3vw, 2.5rem);
+    width: min(380px, calc(100vw - 2rem)); z-index: 2600;
+    background: var(--bg-elevated, #0e111a);
+    border: 1px solid var(--line, rgba(255,255,255,.14));
+    border-radius: 18px; padding: .6rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    max-height: min(70vh, 560px); overflow-y: auto;
+  }
+  body:has(.mobile-nav) .mobile-nav.open { display: grid !important; gap: .15rem; }
+  body:has(.mobile-nav) .mobile-nav a { border-radius: 12px; padding: .75rem .9rem; }
+}
+
+/* Shared menu button + panel, so every shell (Flask home and the edge app) has
+   the same control instead of relying on one template's inline styles. */
+body .nav-toggle {
+  display: none; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex: 0 0 auto; border-radius: 12px;
+  border: 1px solid var(--line, rgba(255,255,255,.12));
+  background: var(--bg-surface, #141926); color: var(--text, #f3f5fa);
+  font-size: 1rem; cursor: pointer;
+}
+body .nav-toggle:hover { border-color: var(--accent, #FFB347); color: var(--accent, #FFB347); }
+body .mobile-nav {
+  display: none; flex-direction: column; gap: .3rem;
+  padding: .7rem 1rem 1rem; border-top: 1px solid var(--line, rgba(255,255,255,.12));
+}
+body .mobile-nav.open { display: flex; }
+body .mobile-nav a {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .7rem .9rem; border-radius: 12px;
+  color: var(--text-secondary, #a0abc0); font-weight: 600; text-decoration: none;
+}
+body .mobile-nav a:hover, body .mobile-nav a.active {
+  background: rgba(var(--accent-rgb, 255, 179, 71), .12); color: var(--accent, #FFB347);
+}
+@media (max-width: 1279px) {
+  body .nav-toggle { display: inline-flex; }
+  body .nav-links { display: none; }
+}
+
+/* ── 2. Watch page: player + server deck + episode rail in one calm grid ── */
+body .watch-container { max-width: 1560px; }
+body .cinema-grid > *, body .player-column, body .episode-sidebar { min-width: 0; }
+body .player-column { display: flex; flex-direction: column; gap: 1rem; }
+body .video-stage { border-radius: 16px; overflow: hidden; }
+body .server-deck { border-radius: 16px; gap: .85rem; }
+body .server-row { gap: .5rem; }
+body .server-row-label { flex: 0 0 auto; }
+body .server-btn { min-height: 42px; border-radius: 10px; }
+/* Selected server must always read as selected, in every theme. */
+body .server-btn.active,
+body .server-btn[aria-pressed="true"] {
+  background: var(--accent, #FFB347) !important;
+  color: #07080d !important;
+  border-color: var(--accent, #FFB347) !important;
+  box-shadow: 0 6px 18px rgba(var(--accent-rgb, 255, 179, 71), .28);
+}
+body .server-btn.active .server-tag,
+body .server-btn[aria-pressed="true"] .server-tag { background: rgba(0,0,0,.18); color: #07080d; }
+/* Current episode chip must stay legible too. */
+body .ep-rail-item.current {
+  background: var(--accent, #FFB347) !important;
+  color: #07080d !important;
+  border-color: var(--accent, #FFB347) !important;
+  font-weight: 800;
+}
+body .ep-rail-list { scrollbar-width: thin; }
+body .transport-bar { gap: .75rem; }
+body .lower-panels { margin-top: 1rem; }
+/* Below-the-fold download/trailer panels skip layout + paint until they approach
+   the viewport, which keeps the first watch-page render light on long pages. */
+body .lower-panels { content-visibility: auto; contain-intrinsic-size: auto 640px; }
+@media (min-width: 1024px) {
+  body .cinema-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+    gap: 1.15rem;
+    align-items: start;
+  }
+  body .episode-sidebar { position: sticky; top: 1rem; max-height: calc(100dvh - 2rem); }
+}
+@media (min-width: 1440px) {
+  body .cinema-grid { grid-template-columns: minmax(0, 1fr) minmax(340px, 404px); }
+}
+@media (max-width: 1023px) {
+  body .cinema-grid { grid-template-columns: 1fr; }
+  body .episode-sidebar { position: static; max-height: none; }
+  body .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); }
+  body .server-row-label { min-width: 0; }
+}
+
+/* ── 3a. WIDE: full-bleed cinema wall for big monitors ── */
+html[data-layout="wide"] body .main-wrap,
+html[data-layout="wide"] body .container,
+html[data-layout="wide"] body .watch-container {
+  max-width: 1920px;
+  padding-inline: clamp(1.25rem, 3vw, 3.25rem);
+}
+html[data-layout="wide"] body .anime-grid,
+html[data-layout="wide"] body .mini-grid,
+html[data-layout="wide"] body .heaven-strip-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 1.5rem 1.15rem;
+}
+html[data-layout="wide"] body .card-poster-wrap { aspect-ratio: 2 / 3; }
+html[data-layout="wide"] body .section-title,
+html[data-layout="wide"] body .panel-title { font-size: clamp(1.3rem, 1.1rem + .9vw, 1.75rem); }
+html[data-layout="wide"] body .hero-spotlight,
+html[data-layout="wide"] body .hero-slide.active { min-height: clamp(430px, 44vw, 620px); }
+html[data-layout="wide"] body .hero-body { padding: clamp(2rem, 4vw, 3.5rem); }
+html[data-layout="wide"] body .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+html[data-layout="wide"] body .cinema-grid { gap: 1.4rem; }
+
+/* ── 3b. MAGAZINE: editorial column, rule-led sections, landscape cards ── */
+html[data-layout="magazine"] body { line-height: 1.7; }
+html[data-layout="magazine"] body .main-wrap,
+html[data-layout="magazine"] body .container,
+html[data-layout="magazine"] body .watch-container {
+  max-width: 1180px;
+  padding-inline: clamp(1rem, 3vw, 2.25rem);
+}
+html[data-layout="magazine"] body .anime-grid,
+html[data-layout="magazine"] body .mini-grid,
+html[data-layout="magazine"] body .heaven-strip-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
+  gap: 1.8rem 1.4rem;
+}
+html[data-layout="magazine"] body .card-poster-wrap { aspect-ratio: 4 / 3; border-radius: 4px; }
+html[data-layout="magazine"] body .anime-card {
+  background: transparent; border: 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.14));
+  border-radius: 0; box-shadow: none; padding-bottom: .85rem;
+}
+html[data-layout="magazine"] body .card-body { padding: .6rem 0 0; }
+html[data-layout="magazine"] body .card-title { font-size: clamp(1rem, .95rem + .3vw, 1.15rem); font-weight: 700; }
+html[data-layout="magazine"] body .section-title,
+html[data-layout="magazine"] body .panel-title {
+  border-top: 2px solid var(--accent, #FFB347);
+  padding-top: .55rem;
+  letter-spacing: .01em;
+  font-size: clamp(1.2rem, 1.05rem + .8vw, 1.55rem);
+}
+html[data-layout="magazine"] body .hero-body { max-width: 40rem; padding: clamp(1.6rem, 4vw, 3rem); }
+html[data-layout="magazine"] body .hero-title { font-size: clamp(2rem, 1.6rem + 2.4vw, 3.2rem); }
+html[data-layout="magazine"] body .btn-primary,
+html[data-layout="magazine"] body .btn-secondary { border-radius: 4px; }
+html[data-layout="magazine"] body .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); }
+html[data-layout="magazine"] body .panel-card,
+html[data-layout="magazine"] body .panel-box,
+html[data-layout="magazine"] body .dossier-card { border-radius: 4px; }
+@media (hover: hover) {
+  html[data-layout="magazine"] body .anime-card:hover { transform: none; box-shadow: none; }
+  html[data-layout="magazine"] body .card-title { text-decoration: underline; text-decoration-color: rgba(var(--accent-rgb, 255, 179, 71), .5); }
+}
+
+/* ── 3c. WALL: dense poster wall for scanning whole catalogues at a glance ── */
+html[data-layout="wall"] body .main-wrap,
+html[data-layout="wall"] body .container,
+html[data-layout="wall"] body .watch-container { max-width: 1760px; }
+html[data-layout="wall"] body .anime-grid,
+html[data-layout="wall"] body .mini-grid,
+html[data-layout="wall"] body .heaven-strip-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 118px), 1fr));
+  gap: .65rem .5rem;
+}
+html[data-layout="wall"] body .anime-card {
+  background: transparent; border: 0; box-shadow: none; border-radius: 5px;
+}
+html[data-layout="wall"] body .card-poster-wrap { aspect-ratio: 2 / 3; border-radius: 5px; }
+html[data-layout="wall"] body .card-body { padding: .35rem .15rem .1rem; }
+html[data-layout="wall"] body .card-title {
+  font-size: .74rem; font-weight: 700;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+html[data-layout="wall"] body .section-title,
+html[data-layout="wall"] body .panel-title { font-size: clamp(1rem, .95rem + .4vw, 1.2rem); }
+html[data-layout="wall"] body .hero-spotlight,
+html[data-layout="wall"] body .hero-slide.active { min-height: clamp(300px, 34vw, 420px); }
+html[data-layout="wall"] body .hero-title { font-size: clamp(1.6rem, 1.3rem + 1.6vw, 2.4rem); }
+html[data-layout="wall"] body .ep-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr)); gap: .5rem; }
+@media (hover: hover) {
+  html[data-layout="wall"] body .anime-card:hover { transform: translateY(-2px); box-shadow: none; }
+  html[data-layout="wall"] body .anime-card:hover .card-poster-wrap { outline: 2px solid var(--accent, #FFB347); outline-offset: 1px; }
+}
+

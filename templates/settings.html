@@ -11,8 +11,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261104-layout" rel="stylesheet">
-<script src="/static/js/site.js?v=20261104-layout" defer></script>
+<link href="/static/css/sync.css?v=20261106-flow" rel="stylesheet">
+<script src="/static/js/site.js?v=20261106-flow" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Outfit','Inter',sans-serif;min-height:100vh}
@@ -89,6 +89,9 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
       <button type="button" class="theme-pick" data-layout-name="cinema"><span class="theme-dot" style="background:linear-gradient(135deg,#7C61D4,#FF5E62)"></span>Cinema</button>
       <button type="button" class="theme-pick" data-layout-name="compact"><span class="theme-dot" style="background:linear-gradient(135deg,#34d399,#0e111a)"></span>Compact</button>
       <button type="button" class="theme-pick" data-layout-name="minimal"><span class="theme-dot" style="background:linear-gradient(135deg,#64708a,#f6f4ee)"></span>Minimal</button>
+      <button type="button" class="theme-pick" data-layout-name="wide"><span class="theme-dot" style="background:linear-gradient(135deg,#FFD27D,#7C61D4)"></span>Wide</button>
+      <button type="button" class="theme-pick" data-layout-name="magazine"><span class="theme-dot" style="background:linear-gradient(135deg,#f6f4ee,#171a21)"></span>Magazine</button>
+      <button type="button" class="theme-pick" data-layout-name="wall"><span class="theme-dot" style="background:linear-gradient(135deg,#34d399,#4EA8FF)"></span>Poster Wall</button>
     </div>
     <p class="storage-line" id="layoutNote">Classic — the original CamAnime layout.</p>
   </div>
@@ -231,7 +234,10 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     classic: 'Classic — the original CamAnime layout.',
     cinema: 'Cinema — big posters, wide stage, rounded showtimes feel.',
     compact: 'Compact — dense grid, landscape posters, more per row.',
-    minimal: 'Minimal — flat editorial: square corners, borders, no gradients.'
+    minimal: 'Minimal — flat editorial: square corners, borders, no gradients.',
+    wide: 'Wide — full-bleed stage for big monitors, larger posters, more per row.',
+    magazine: 'Magazine — editorial column, landscape thumbnails, rule-led sections.',
+    wall: 'Poster Wall — dense poster grid for scanning a whole catalogue at once.'
   };
   function curLayout() {
     try { var l = localStorage.getItem('camanime-layout'); return (window.caLayouts || ['classic']).indexOf(l) !== -1 ? l : 'classic'; } catch (e) { return 'classic'; }

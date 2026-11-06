@@ -106,7 +106,7 @@
 /* CamAnime layout templates: complete switchable layout recipes that combine with themes.
    classic (default), cinema, compact, minimal — reflow grids, posters, hero and controls */
 (function () {
-  var LAYOUTS = ["classic", "cinema", "compact", "minimal"];
+  var LAYOUTS = ["classic", "cinema", "compact", "minimal", "wide", "magazine", "wall"];
   try {
     var l = localStorage.getItem("camanime-layout");
     if (LAYOUTS.indexOf(l) === -1) l = null;

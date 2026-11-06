@@ -1,0 +1,10 @@
+# Files in /static that must NOT ship inside the Cloudflare Worker asset bundle.
+# Workers caps each asset at 25 MiB; the installer payloads are large binaries
+# served by the Flask/Render deployment, not by the edge worker.
+downloads/
+*.apk
+*.exe
+*.msi
+*.zip
+*.dmg
+*.7z
