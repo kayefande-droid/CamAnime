@@ -48,7 +48,13 @@ void main() {
     await tester.pumpWidget(const CamAnimeApp());
     await tester.pump();
     await tester.tap(find.text('Library'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    // Let the real async work finish (file scan plus the API retry backoff);
+    // fake-async pumps alone cannot drive IO.
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1200)));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('My Library'), findsWidgets);
   });

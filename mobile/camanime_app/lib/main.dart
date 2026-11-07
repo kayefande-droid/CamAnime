@@ -2,24 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
-import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'core/ad_notifications.dart';
+import 'core/app_notifications.dart';
+import 'core/cam_ui.dart';
+import 'core/downloads.dart';
+import 'core/models.dart';
+import 'screens/library_screen.dart';
+import 'screens/player_screen.dart';
+import 'screens/settings_screen.dart';
+import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '1.2.0';
+const String appVersion = '2.5.0';
 const String appCredit = 'Made by kayefande-droid & co.';
-
-// Backend is the CamAnime website itself — always on, no manual linking.
-//   flutter build apk --release --dart-define=CAMANIME_API=https://your-host
-const String apiHost = String.fromEnvironment(
-  'CAMANIME_API',
-  defaultValue: 'https://camanime.onrender.com',
-);
 
 // ── Website-mirrored palette ───────────────────────────
 const bg = Color(0xFF07080D);
@@ -40,6 +42,7 @@ const Map<String, Map<String, dynamic>> appThemes = {
   'vibrant': {'label': 'Vibrant', 'seed': 0xFF7C61D4, 'bg': 0xFF14101F},
   'sakura': {'label': 'Sakura', 'seed': 0xFFFF7AA8, 'bg': 0xFF120A12},
   'forest': {'label': 'Forest', 'seed': 0xFF34D399, 'bg': 0xFF07120E},
+  'neon': {'label': 'Neon', 'seed': 0xFF00E5FF, 'bg': 0xFF05090F},
 };
 
 const List<Map<String, dynamic>> avatarPresets = [
@@ -75,10 +78,42 @@ class AppMode {
 /// user experiences as an app restart landing them in the requested mode.
 final ValueNotifier<String> appMode = ValueNotifier<String>(AppMode.stream);
 
+/// Lets an advert-notification tap open a detail screen from any tab.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+void _openAdvertFromNotification(String animeId, String title) {
+  if (animeId.isEmpty) return;
+  final navigator = appNavigatorKey.currentState;
+  if (navigator == null) {
+    Timer(const Duration(milliseconds: 600),
+        () => _openAdvertFromNotification(animeId, title));
+    return;
+  }
+  navigator.push(MaterialPageRoute(
+      builder: (_) => DetailScreen(
+          animeId: animeId, title: title.isEmpty ? 'Anime' : title)));
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  DownloadManager.instance.headersProvider = Api.headers;
+  AnimeDetailLauncher.builder =
+      (id, title) => DetailScreen(animeId: id, title: title);
   appMode.value = await AppMode.get();
+  // Draw the first frame first. Reading the download queue and scanning the
+  // legacy library is disk work; awaiting it before runApp delayed the first
+  // frame long enough for Android to show "CamAnime isn't responding" on a
+  // cold start with a full library or a slow flash. The Library listens to
+  // the manager, so restored downloads appear as soon as the scan finishes.
   runApp(const CamAnimeApp());
+  unawaited(DownloadManager.instance.init());
+  // Start/stop the Android advert schedule and catch notification taps.
+  unawaited(AdNotifications.init(onOpen: _openAdvertFromNotification));
+  // Heads-up alerts for finished downloads (Android 13+ permission included).
+  unawaited(AppNotifications.init());
+  // Wake the API host early so the first catalogue request is not the one
+  // paying for a cold start.
+  unawaited(Api.warmup());
 }
 
 class CamAnimeApp extends StatefulWidget {
@@ -87,7 +122,8 @@ class CamAnimeApp extends StatefulWidget {
   State<CamAnimeApp> createState() => _CamAnimeAppState();
 }
 
-class _CamAnimeAppState extends State<CamAnimeApp> {
+class _CamAnimeAppState extends State<CamAnimeApp>
+    with WidgetsBindingObserver {
   int tab = 0;
   bool showTutorial = false;
   String themeName = 'midnight';
@@ -103,7 +139,23 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _firstRun();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // Returning to the foreground is the moment a stalled download or a cold
+    // API host can be retried, on WiFi or mobile data alike.
+    unawaited(DownloadManager.instance.kick());
+    unawaited(Api.warmup());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _firstRun() async {
@@ -129,7 +181,7 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
           .timeout(const Duration(seconds: 12));
       final d = json.decode(r.body) as Map<String, dynamic>;
       final latest = (d['app_version'] ?? '').toString();
-      if (latest.isNotEmpty && latest != appVersion && mounted) {
+      if (latest.isNotEmpty && _isNewerVersion(latest, appVersion) && mounted) {
         _updateDialog(latest);
       } else if (manual && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -141,6 +193,19 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
             content: Text('Could not reach the website — check internet.')));
       }
     }
+  }
+
+  bool _isNewerVersion(String latest, String current) {
+    List<int> parts(String v) =>
+        v.split(RegExp(r'[.+-]')).map((e) => int.tryParse(e) ?? 0).toList();
+    final a = parts(latest);
+    final b = parts(current);
+    for (var i = 0; i < 3; i++) {
+      final x = i < a.length ? a[i] : 0;
+      final y = i < b.length ? b[i] : 0;
+      if (x != y) return x > y;
+    }
+    return false;
   }
 
   void _updateDialog(String latest) {
@@ -195,23 +260,8 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
       key: ValueKey('app-$mode-$themeName'),
       title: 'CamAnime',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true).copyWith(
-        scaffoldBackgroundColor: scaffold,
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: seed, brightness: Brightness.dark, primary: seed),
-        cardTheme: CardThemeData(
-            color: card,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18))),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: card2,
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide.none),
-          hintStyle: const TextStyle(color: muted),
-        ),
-      ),
+      navigatorKey: appNavigatorKey,
+      theme: camTheme(seed: seed, background: scaffold),
       home: Stack(
         children: [
           Scaffold(
@@ -233,6 +283,11 @@ class _CamAnimeAppState extends State<CamAnimeApp> {
                         builder: (_) => SettingsScreen(
                             themeName: themeName,
                             onTheme: _applyTheme,
+                            version: appVersion,
+                            credit: appCredit,
+                            themes: appThemes,
+                            onReplayTour: () =>
+                                setState(() => showTutorial = true),
                             onCheckUpdate: () => _checkUpdate(manual: true))));
               },
             ),
@@ -264,63 +319,81 @@ class _FloatingNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xF20B0E16),
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: const Color(0x33FFB347)),
+            color: const Color(0xF20A0D14),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: CamColors.line),
             boxShadow: const [
               BoxShadow(
-                  color: Colors.black54, blurRadius: 18, offset: Offset(0, 6))
+                  color: Color(0xA6000000),
+                  blurRadius: 26,
+                  offset: Offset(0, 12))
             ],
           ),
           child: Row(children: [
             for (var i = 0; i < tabs.length; i++)
-              Expanded(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () => onTab(i),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    decoration: BoxDecoration(
-                      color: tab == i
-                          ? amber.withValues(alpha: 0.16)
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(tab == i ? tabs[i].$3 : tabs[i].$2,
-                          size: 23, color: tab == i ? amber : muted),
-                      const SizedBox(height: 2),
-                      Text(tabs[i].$1,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: tab == i ? amber : muted)),
-                    ]),
-                  ),
-                ),
-              ),
+              Expanded(child: _item(i, accent)),
             Container(
-              margin: const EdgeInsets.only(left: 2),
-              decoration: BoxDecoration(
-                  color: card2, borderRadius: BorderRadius.circular(18)),
-              child: IconButton(
-                tooltip: 'App settings',
-                icon:
-                    const Icon(Icons.settings_outlined, size: 23, color: muted),
-                onPressed: onSettings,
-              ),
+              width: 1,
+              height: 24,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              color: CamColors.line,
+            ),
+            IconButton(
+              tooltip: 'App settings',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.settings_outlined,
+                  size: 22, color: CamColors.inkDim),
+              onPressed: onSettings,
             ),
           ]),
         ),
+      ),
+    );
+  }
+
+  Widget _item(int i, Color accent) {
+    final selected = tab == i;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: () => onTab(i),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: selected
+              ? LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    accent.withValues(alpha: 0.24),
+                    accent.withValues(alpha: 0.04),
+                  ],
+                )
+              : null,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(selected ? tabs[i].$3 : tabs[i].$2,
+              size: 22, color: selected ? accent : CamColors.inkDim),
+          const SizedBox(height: 3),
+          Text(tabs[i].$1,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.1,
+                  color: selected ? accent : CamColors.inkDim)),
+        ]),
       ),
     );
   }
@@ -370,16 +443,35 @@ class Api {
     return p.getInt('avatar_idx') ?? 0;
   }
 
+  /// One pooled client for every JSON call the app makes. Keeping it alive
+  /// saves a DNS lookup and TLS handshake per request, which is what makes
+  /// tab switches feel instant on a good network.
+  static http.Client? _sharedClient;
+  static http.Client _client() => _sharedClient ??= IOClient(HttpClient()
+    ..connectionTimeout = const Duration(seconds: 12)
+    ..idleTimeout = const Duration(seconds: 25)
+    ..maxConnectionsPerHost = 8);
+
+  /// Fire-and-forget ping used at launch and on resume.
+  static Future<void> warmup() async {
+    try {
+      await _get(Uri.parse('${base()}/api/version'),
+          timeout: const Duration(seconds: 12));
+    } catch (_) {
+      // Nothing to do: the next real request retries anyway.
+    }
+  }
+
   static bool _isTransientStatus(int status) => status >= 500;
   static const bool _testMode = bool.fromEnvironment('FLUTTER_TEST');
 
   static Future<http.Response> _get(Uri uri,
       {Duration timeout = const Duration(seconds: 20)}) async {
     Object? lastError;
-    final attempts = _testMode ? 1 : 2;
+    final attempts = _testMode ? 1 : 3;
     for (var attempt = 0; attempt < attempts; attempt++) {
       try {
-        final response = await http.get(uri).timeout(timeout);
+        final response = await _client().get(uri).timeout(timeout);
         if (_isTransientStatus(response.statusCode) && attempt + 1 < attempts) {
           await Future<void>.delayed(const Duration(milliseconds: 350));
           continue;
@@ -450,6 +542,19 @@ class Api {
     final response = await _get(Uri.parse(
         '${base()}/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio'));
     return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Official YouTube trailer id for a title, resolved by the website (AniList
+  /// first, then a live search). Returns null when none is found.
+  static Future<String?> trailer(String animeId, String title) async {
+    final response = await _get(
+        Uri.parse('${base()}/api/trailer'
+            '?anime_id=${Uri.encodeComponent(animeId)}'
+            '&title=${Uri.encodeQueryComponent(title)}'),
+        timeout: const Duration(seconds: 25));
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    final id = (data['youtube_id'] ?? '').toString().trim();
+    return RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id) ? id : null;
   }
 
   static Future<List> genres() async {
@@ -660,130 +765,6 @@ class Api {
     } finally {
       client.close();
     }
-  }
-}
-
-/// One playable episode, carrying enough context for resume and back-to-back
-/// playback without leaking UI state through globals.
-class EpisodeSource {
-  final String url;
-  final String label;
-  final String animeId;
-  final int? episode;
-  const EpisodeSource(
-      {required this.url,
-      required this.label,
-      this.animeId = '',
-      this.episode});
-}
-
-/// Where the user left off, per anime + episode, in plain JSON prefs.
-class WatchProgress {
-  static const _key = 'watch_progress_v1';
-
-  static Future<Map<String, dynamic>> _load() async {
-    final p = await SharedPreferences.getInstance();
-    try {
-      return (json.decode(p.getString(_key) ?? '{}') as Map)
-          .cast<String, dynamic>();
-    } catch (_) {
-      return {};
-    }
-  }
-
-  static Future<void> _save(Map<String, dynamic> map) async {
-    final p = await SharedPreferences.getInstance();
-    await p.setString(_key, json.encode(map));
-  }
-
-  /// Latest saved position for an episode. Returns null when nothing was
-  /// meaningfully started or the episode was nearly finished.
-  static Future<int?> position(String animeId, int episode) async {
-    final data = await _load();
-    final entry = (data[animeId] as Map?)?[episode.toString()];
-    if (entry is! Map) return null;
-    final pos = (int.tryParse('${entry['posMs'] ?? ''}') ?? 0);
-    final dur = (int.tryParse('${entry['durMs'] ?? ''}') ?? 0);
-    if (pos < 15000 || (dur > 0 && pos >= dur * 0.95)) return null;
-    if (dur > 0 && pos > dur) return null;
-    return pos;
-  }
-
-  /// The most recently touched episode for this anime, for a resume chip.
-  static Future<Map<String, dynamic>?> latest(String animeId) async {
-    final data = await _load();
-    final forAnime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
-    if (forAnime.isEmpty) return null;
-    Map<String, dynamic>? best;
-    var bestT = -1;
-    forAnime.forEach((ep, entry) {
-      if (entry is Map) {
-        final t = int.tryParse('${entry['updated'] ?? ''}') ?? 0;
-        if (t > bestT) {
-          bestT = t;
-          best = {
-            ...entry.cast<String, dynamic>(),
-            'ep': int.tryParse(ep) ?? 0
-          };
-        }
-      }
-    });
-    final b = best;
-    if (b == null) return null;
-    final pos = int.tryParse((b['posMs'] ?? '').toString()) ?? 0;
-    final dur = int.tryParse((b['durMs'] ?? '').toString()) ?? 0;
-    if (pos < 15000 || (dur > 0 && pos >= dur * 0.95) || (b['ep'] ?? 0) == 0) {
-      return null;
-    }
-    return b;
-  }
-
-  static Future<void> save(
-      {required String animeId,
-      required String animeTitle,
-      required String image,
-      required int episode,
-      required int posMs,
-      required int durMs}) async {
-    final data = await _load();
-    final anime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
-    anime[episode.toString()] = {
-      'title': animeTitle.substring(0, animeTitle.length.clamp(0, 80)),
-      'image': image,
-      'posMs': posMs,
-      'durMs': durMs,
-      'updated': DateTime.now().millisecondsSinceEpoch,
-    };
-    data[animeId] = anime;
-    // Keep the map bounded so prefs never balloon on a long-lived device.
-    while (data.length > 60) {
-      String? oldest;
-      var oldestT = 1 << 40;
-      for (final entry in data.entries) {
-        final anime = (entry.value as Map?) ?? {};
-        var t = 1 << 40;
-        for (final row in anime.values) {
-          if (row is Map) {
-            t = (int.tryParse('${row['updated'] ?? ''}') ?? t);
-            if (t < oldestT) {
-              oldestT = t;
-              oldest = entry.key.toString();
-            }
-          }
-        }
-      }
-      if (oldest == null) break;
-      data.remove(oldest);
-    }
-    await _save(data);
-  }
-
-  static Future<void> clear(String animeId, int episode) async {
-    final data = await _load();
-    final anime = ((data[animeId] as Map?) ?? {}).cast<String, dynamic>();
-    anime.remove(episode.toString());
-    data[animeId] = anime;
-    await _save(data);
   }
 }
 
@@ -1817,22 +1798,24 @@ class DetailScreen extends StatefulWidget {
   State<DetailScreen> createState() => _DetailScreenState();
 }
 
-class _DetailScreenState extends State<DetailScreen>
-    with SingleTickerProviderStateMixin {
+class _DetailScreenState extends State<DetailScreen> {
   Map info = {};
   bool loading = true;
+  bool dataSaver = false;
   String audio = 'sub';
 
   final Set<int> selected = {};
-  bool dlBusy = false;
-  double? dlProgress;
   String dlStatus = '';
   List comments = [];
   bool commentsBusy = false;
   String commentError = '';
   final _commentCtrl = TextEditingController();
   int? myScore;
-  late TabController _tabs;
+  Map<int, EpisodePreview> previews = {};
+  Map<int, double> watch = {};
+  int? resumeEp;
+  String trailerId = '';
+  bool trailerBusy = false;
 
   /// Real episode count from the website. Never fabricates a number: titles
   /// still airing report their aired count through `next_airing_episode`.
@@ -1850,14 +1833,15 @@ class _DetailScreenState extends State<DetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
     _init();
   }
 
   Future<void> _init() async {
     final p = await SharedPreferences.getInstance();
     audio = (p.getString('app_audio') ?? 'sub') == 'dub' ? 'dub' : 'sub';
+    dataSaver = p.getBool('app_data_saver') ?? false;
     await _load();
+    await _loadViewingState();
     await _loadComments();
   }
 
@@ -1867,11 +1851,32 @@ class _DetailScreenState extends State<DetailScreen>
       if (!mounted) return;
       setState(() {
         info = d;
+        previews = EpisodePreview.fromMetadata(
+            (d['streaming_metadata'] as List?) ?? const []);
+        trailerId = (d['trailer_id'] ?? '').toString().trim();
         loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> _loadViewingState() async {
+    final rows = await WatchProgress.all();
+    final map = <int, double>{};
+    for (final row in rows) {
+      if ('${row['anime_id']}' != widget.animeId) continue;
+      final ep = int.tryParse('${row['ep']}') ?? 0;
+      final pos = int.tryParse('${row['posMs']}') ?? 0;
+      final dur = int.tryParse('${row['durMs']}') ?? 0;
+      if (ep > 0 && dur > 0) map[ep] = (pos / dur).clamp(0.0, 1.0);
+    }
+    final latest = await WatchProgress.latest(widget.animeId);
+    if (!mounted) return;
+    setState(() {
+      watch = map;
+      resumeEp = int.tryParse('${latest?['ep']}');
+    });
   }
 
   Future<void> _loadComments() async {
@@ -1930,20 +1935,22 @@ class _DetailScreenState extends State<DetailScreen>
   Future<void> _playSelected() async {
     if (selected.isEmpty) return;
     final eps = selected.toList()..sort();
+    final title = (info['title'] ?? widget.title).toString();
     final sources = <EpisodeSource>[];
     for (final ep in eps) {
       final bundle = await _sourcesFor(ep);
       currentEpisode = ep;
       if (bundle == null) continue;
-      final server = _selectServer(bundle);
-      final url = (server?['stream_url'] ?? '').toString();
-      if (url.isEmpty) continue;
+      final urls = _mirrorUrls(bundle);
+      if (urls.isEmpty) continue;
       sources.add(EpisodeSource(
-        url: url,
-        label:
-            '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})',
+        url: urls.first,
+        mirrors: urls.skip(1).toList(),
+        label: '$title — Ep $ep (${audio.toUpperCase()})',
         animeId: widget.animeId,
         episode: ep,
+        animeTitle: title,
+        image: (info['image'] ?? '').toString(),
       ));
     }
     if (!mounted) return;
@@ -1953,13 +1960,15 @@ class _DetailScreenState extends State<DetailScreen>
               'No playable stream resolved for the picked episodes — try again.')));
       return;
     }
-    Navigator.push(
+    await Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => PlayerScreen(
                 url: sources.first.url,
                 label: sources.first.label,
-                playlist: sources)));
+                playlist: sources,
+                onOpenAnime: _openAnime)));
+    _loadViewingState();
   }
 
   /// Which of the two app modes we are in right now (stream / download).
@@ -1972,13 +1981,10 @@ class _DetailScreenState extends State<DetailScreen>
     if (mode != appMode.value) mode = appMode.value;
   }
 
-  bool get _downloading => appMode.value == AppMode.download;
-
   /// Resolved episode bundles, memoised per episode + audio.
   /// Also carries the phase where bundles are reused instantly for instant
   /// switching, and the next episode is warmed in the background.
   final Map<String, Map<String, dynamic>> _sourceCache = {};
-  bool _dlCancelled = false;
 
   /// Episode sources, memoised. A resolved bundle is reused instantly so
   /// switching episodes never re-hits the network, and the next episode is
@@ -2000,6 +2006,7 @@ class _DetailScreenState extends State<DetailScreen>
   /// Warm the cache for the following episode in the background (staggered so
   /// it never competes with the episode the user is actually starting).
   void _prefetchNext(int ep) {
+    if (dataSaver) return;
     final next = ep + 1;
     if (totalEps > 0 && next > totalEps) return;
     final key = '${widget.animeId}|$next|$audio';
@@ -2012,50 +2019,270 @@ class _DetailScreenState extends State<DetailScreen>
     });
   }
 
-  Map<String, dynamic>? _selectServer(Map bundle) {
-    final servers = (bundle['servers'] as List?) ?? [];
-    final candidates = servers
-        .whereType<Map>()
-        .map((s) => s.cast<String, dynamic>())
-        .where(
-            (s) => s['playback_mode'] == 'mp4' || s['playback_mode'] == 'hls')
-        .toList();
-    if (candidates.isEmpty) return null;
-    for (final server in candidates) {
-      if (server['audio'] == audio) return server;
-    }
-    return candidates.first;
+  static const _downloadPrefs = {
+    'ask',
+    'best',
+    'smallest',
+    '360',
+    '480',
+    '720',
+    '1080',
+  };
+
+  Future<String> _downloadPref() async {
+    final p = await SharedPreferences.getInstance();
+    final value = p.getString('download_quality') ?? '720';
+    return _downloadPrefs.contains(value) ? value : '720';
   }
 
-  String? _playableUrl(Map bundle) {
-    final server = _selectServer(bundle);
-    final path = (server?['stream_url'] ?? '').toString();
-    return path.isEmpty ? null : Api.abs(path);
+  /// Shows the real file sizes/labels the servers resolved and lets the user
+  /// pick one (used when the preference is "Ask").
+  Future<DownloadOption?> _chooseDownload(List<DownloadOption> options) {
+    if (options.length == 1) return Future.value(options.first);
+    // Ask the servers for the real file size of every option at once, so the
+    // user picks on resolution *and* download size instead of guessing.
+    final sizes = {for (final o in options) o.url: _remoteSize(o.url)};
+    return showModalBottomSheet<DownloadOption>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 0, 18, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Download quality',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 2),
+                    Text('Real video files only — sizes checked live',
+                        style:
+                            TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+                  ]),
+            ),
+          ),
+          for (final option in options)
+            ListTile(
+              leading: const Icon(Icons.high_quality_rounded,
+                  color: CamColors.accent),
+              title: Text(option.qualityLabel),
+              subtitle: Text(
+                '${option.audio.toUpperCase()} · ${option.label}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: FutureBuilder<int?>(
+                future: sizes[option.url],
+                builder: (_, snapshot) {
+                  final bytes = snapshot.data;
+                  final sizeLabel = bytes != null
+                      ? compactBytes(bytes)
+                      : snapshot.connectionState == ConnectionState.done
+                          ? 'size ?'
+                          : '…';
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (option.isHd)
+                        const Text('HD',
+                            style: TextStyle(
+                                color: CamColors.accent,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800)),
+                      Text(sizeLabel,
+                          style: const TextStyle(
+                              color: CamColors.inkDim,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  );
+                },
+              ),
+              onTap: () => Navigator.pop(ctx, option),
+            ),
+          ListTile(
+            leading: const Icon(Icons.close_rounded),
+            title: const Text('Cancel'),
+            onTap: () => Navigator.pop(ctx),
+          ),
+          const SizedBox(height: 6),
+        ]),
+      ),
+    );
   }
 
-  Map<String, dynamic>? _downloadSource(Map bundle) {
+  /// Real size of a download option, from a HEAD request. Returns null when
+  /// the server does not publish a Content-Length (the player still works).
+  Future<int?> _remoteSize(String url) async {
+    final client = http.Client();
+    try {
+      final request = http.Request('HEAD', Uri.parse(Api.abs(url)))
+        ..headers.addAll(await Api.headers());
+      final response =
+          await client.send(request).timeout(const Duration(seconds: 8));
+      await response.stream.drain<void>();
+      final length = int.tryParse(response.headers['content-length'] ?? '');
+      return (length != null && length > 0) ? length : null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _openTrailer() async {
+    if (trailerBusy) return;
+    var id = trailerId;
+    if (id.isEmpty) {
+      setState(() => trailerBusy = true);
+      try {
+        id = await Api.trailer(
+                widget.animeId, (info['title'] ?? widget.title).toString()) ??
+            '';
+        trailerId = id;
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() => trailerBusy = false);
+    }
+    if (!mounted) return;
+    if (id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No official YouTube trailer found for this title.')));
+      return;
+    }
+    _showTrailer(id);
+  }
+
+  void _showTrailer(String id) {
+    final watch = Uri.parse('https://www.youtube.com/watch?v=$id');
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  'https://img.youtube.com/vi/$id/hqdefault.jpg',
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: CamColors.surfaceAlt,
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.movie_outlined,
+                        size: 34, color: CamColors.inkDim),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Official YouTube trailer',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+            ),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: EdgeInsets.only(top: 3),
+                child: Text(
+                    'Plays on YouTube — CamAnime adds no ads of its own.',
+                    style: TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: CamColors.accent,
+                  foregroundColor: Colors.black,
+                  textStyle: const TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w800),
+                ),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  var opened = false;
+                  try {
+                    opened = await launchUrl(watch,
+                        mode: LaunchMode.inAppBrowserView);
+                  } catch (_) {}
+                  if (!opened) {
+                    try {
+                      await launchUrl(watch,
+                          mode: LaunchMode.externalApplication);
+                    } catch (_) {}
+                  }
+                },
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                label: const Text('Watch on YouTube'),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  /// Every playable server URL for an episode, audio-matched first. The
+  /// player walks this list until one initialises.
+  List<String> _mirrorUrls(Map<String, dynamic> bundle) {
     final servers = (bundle['servers'] as List?) ?? [];
-    for (final raw in servers) {
-      if (raw is! Map) continue;
-      final server = raw.cast<String, dynamic>();
-      if (server['audio'] == audio &&
-          server['playback_mode'] == 'mp4' &&
-          (server['download_url'] ?? '').toString().isNotEmpty) {
-        return server;
-      }
+    final maps = servers.whereType<Map>().toList();
+    final ordered = <Map>[
+      ...maps.where((s) => s['audio'] == audio),
+      ...maps.where((s) => s['audio'] != audio),
+    ];
+    final urls = <String>[];
+    for (final server in ordered) {
+      final mode = (server['playback_mode'] ?? '').toString();
+      if (mode != 'mp4' && mode != 'hls') continue;
+      final path = (server['stream_url'] ?? '').toString();
+      if (path.isEmpty) continue;
+      final url = Api.abs(path);
+      if (!urls.contains(url)) urls.add(url);
     }
-    for (final raw in servers) {
-      if (raw is! Map) continue;
-      final server = raw.cast<String, dynamic>();
-      if (server['playback_mode'] == 'mp4' &&
-          (server['download_url'] ?? '').toString().isNotEmpty) {
-        return server;
-      }
-    }
-    return null;
+    return urls;
+  }
+
+  void _openAnime(String id, String title) {
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(animeId: id, title: title)));
   }
 
   Future<void> _play(int ep) async {
+    final animeId = int.tryParse(widget.animeId) ?? 0;
+    final title = (info['title'] ?? widget.title).toString();
+    final task = DownloadManager.instance.taskFor(animeId, ep);
+    final local =
+        task == null ? null : DownloadManager.instance.playableFile(task);
+    if (local != null) {
+      final partial = local.path.endsWith('.part');
+      if (!mounted) return;
+      final suffix = partial ? ' (downloading)' : ' (offline)';
+      Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (_) => PlayerScreen(
+                    url: local.path,
+                    label: '$title — Ep $ep$suffix',
+                    localFile: true,
+                    onOpenAnime: _openAnime,
+                  )));
+      return;
+    }
     final bundle = await _sourcesFor(ep);
     if (!mounted) return;
     if (bundle == null) {
@@ -2063,8 +2290,8 @@ class _DetailScreenState extends State<DetailScreen>
           content: Text('Could not reach streaming servers — try again.')));
       return;
     }
-    final url = _playableUrl(bundle);
-    if (url == null || url.isEmpty) {
+    final urls = _mirrorUrls(bundle);
+    if (urls.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Only embed servers available — watch on the site.')));
       return;
@@ -2073,663 +2300,362 @@ class _DetailScreenState extends State<DetailScreen>
         context,
         MaterialPageRoute(
             builder: (_) => PlayerScreen(
-                url: url,
-                resume: true,
-                label:
-                    '${(info['title'] ?? widget.title).toString()} — Ep $ep (${audio.toUpperCase()})')));
+                  url: urls.first,
+                  mirrors: urls.skip(1).toList(),
+                  resume: true,
+                  label: '$title — Ep $ep (${audio.toUpperCase()})',
+                  onOpenAnime: _openAnime,
+                )));
   }
 
-  /// One-tap “continue where you left off” chip on the detail page.
-  Future<Map<String, dynamic>?> _resumeTarget() =>
-      WatchProgress.latest(widget.animeId);
-
   Future<void> _downloadEp(int ep) async {
-    setState(() {
-      dlBusy = true;
-      _dlCancelled = false;
-      dlProgress = 0;
-      dlStatus = 'Resolving Episode $ep…';
-    });
+    // Respond to the tap immediately; resolving servers can take a moment.
+    if (mounted) {
+      setState(() => dlStatus = 'Episode $ep: finding the best file…');
+    }
     try {
       final bundle = await _sourcesFor(ep);
       if (bundle == null) throw const HttpException('No servers reachable');
-      final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
-      final server = _downloadSource(bundle);
-      if (server == null) {
+      final options =
+          downloadOptions(bundle, preferredAudio: audio, absolute: Api.abs);
+      if (options.isEmpty) {
         throw const HttpException(
-            'No direct MP4 download is available for this episode. HLS/embeds are stream-only.');
+            'No direct video file for this episode — it is stream-only.');
       }
-      final url = Api.abs(server['download_url'].toString());
-      final result = await Api.downloadEpisodeFile(url, '$title.mp4',
-          isCancelled: () => _dlCancelled,
-          onProgress: (rec, total) {
-            if (mounted && total > 0) {
-              setState(() {
-                dlProgress = rec / total;
-                dlStatus =
-                    'Saving Episode $ep… ${(100 * rec / total).round()}%';
-              });
-            }
-          });
-      await MediaLibrary.record(
-        file: result.file,
-        title: title,
-        animeId: int.tryParse(widget.animeId) ?? 0,
-        episode: ep,
-        audio: (server['audio'] ?? audio).toString(),
-        sizeBytes: result.downloadedBytes,
-      );
-      if (mounted) {
-        setState(() => dlStatus =
-            'Downloaded and verified: ${result.file.uri.pathSegments.last}');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Download verified ✓ — available in My Library offline.')));
-      }
+      final pref = await _downloadPref();
+      final chosen = pref == 'ask'
+          ? await _chooseDownload(options)
+          : pickDownloadOption(options, pref);
+      if (chosen == null || !mounted) return;
+      await _queueEpisode(ep, bundle, option: chosen);
+      if (!mounted) return;
+      setState(() => dlStatus = 'Episode $ep queued — it starts immediately.');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Episode $ep added to downloads. It appears in Library now.')));
     } catch (e) {
-      if (mounted) setState(() => dlStatus = 'Episode $ep failed: $e');
+      if (mounted) setState(() => dlStatus = 'Episode $ep: $e');
     }
-    if (mounted) {
-      setState(() {
-        dlBusy = false;
-        dlProgress = null;
-      });
+  }
+
+  Future<void> _queueEpisode(int ep, Map<String, dynamic> bundle,
+      {DownloadOption? option}) async {
+    final options =
+        downloadOptions(bundle, preferredAudio: audio, absolute: Api.abs);
+    final pref = await _downloadPref();
+    final chosen = option ?? pickDownloadOption(options, pref == 'ask' ? '720' : pref);
+    if (chosen == null) {
+      throw const HttpException(
+          'No direct video file for this episode — it is stream-only.');
     }
+    await DownloadManager.instance.enqueue(
+      animeTitle: (info['title'] ?? widget.title).toString(),
+      animeId: int.tryParse(widget.animeId) ?? 0,
+      episode: ep,
+      audio: chosen.audio,
+      url: chosen.url,
+      image: (info['image'] ?? '').toString(),
+    );
   }
 
   Future<void> _downloadSelected() async {
     if (selected.isEmpty) return;
     final eps = selected.toList()..sort();
-    setState(() {
-      dlBusy = true;
-      _dlCancelled = false;
-      dlStatus = 'Starting ${eps.length} downloads…';
-    });
-    var done = 0;
+    var queued = 0;
+    setState(() => dlStatus = 'Queueing ${eps.length} episodes…');
     for (final ep in eps) {
-      if (!mounted || _dlCancelled) break;
-      setState(() {
-        dlStatus = 'Episode $ep (${done + 1}/${eps.length})…';
-        dlProgress = done / eps.length;
-      });
       try {
         final bundle = await _sourcesFor(ep);
-        final title = '${(info['title'] ?? widget.title).toString()} - Ep $ep';
-        final server = bundle == null ? null : _downloadSource(bundle);
-        if (server != null) {
-          final result = await Api.downloadEpisodeFile(
-              Api.abs(server['download_url'].toString()), '$title.mp4',
-              isCancelled: () => _dlCancelled,
-              onProgress: (rec, total) {
-                if (mounted && total > 0) {
-                  setState(() {
-                    dlProgress = (done + rec / total) / eps.length;
-                    dlStatus =
-                        'Episode $ep (${done + 1}/${eps.length})… ${(100 * rec / total).round()}%';
-                  });
-                }
-              });
-          await MediaLibrary.record(
-            file: result.file,
-            title: title,
-            animeId: int.tryParse(widget.animeId) ?? 0,
-            episode: ep,
-            audio: (server['audio'] ?? audio).toString(),
-            sizeBytes: result.downloadedBytes,
-          );
-          done++;
-        }
-      } catch (_) {}
+        if (bundle == null) continue;
+        await _queueEpisode(ep, bundle);
+        queued++;
+      } catch (_) {
+        // The rest of the queue is still processed.
+      }
     }
-    if (mounted) {
-      setState(() {
-        dlBusy = false;
-        dlProgress = null;
-        dlStatus = _dlCancelled
-            ? 'Cancelled: $done/${eps.length} saved to My Library.'
-            : 'Finished: $done/${eps.length} saved to My Library.';
-        selected.clear();
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      dlStatus = '$queued of ${eps.length} episodes queued — see My Library.';
+      selected.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            '$queued episode(s) downloading in the background. Playable parts show in Library.')));
   }
 
   @override
   void dispose() {
     _commentCtrl.dispose();
-    _tabs.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = (info['title'] ?? widget.title).toString();
     final poster = (info['image'] ?? '').toString();
     final backdrop = (info['banner'] ?? poster).toString();
-    final genres = (info['genres'] as List?) ?? [];
+    final genres = ((info['genres'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final current = currentEpisode ?? resumeEp ?? (totalEps > 0 ? 1 : null);
+    final watchLabel = currentEpisode == null && resumeEp != null
+        ? 'Continue EP $resumeEp'
+        : (totalEps > 1 ? 'Watch EP ${current ?? 1}' : 'Watch now');
+
     return Scaffold(
-      appBar: AppBar(
-          title:
-              Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      backgroundColor: CamColors.bg,
       body: loading
-          ? const Center(child: CircularProgressIndicator(color: amber))
-          : ListView(padding: const EdgeInsets.only(bottom: 24), children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Stack(fit: StackFit.expand, children: [
-                  CachedPosterImage(url: backdrop),
-                  const DecoratedBox(
-                      decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0x22000000), Color(0xFF07080D)]))),
-                  Positioned(
-                      left: 18,
-                      right: 18,
-                      bottom: 14,
-                      child: Text((info['title'] ?? widget.title).toString(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.w900))),
-                ]),
-              ),
-              Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
+          ? const Center(
+              child: CircularProgressIndicator(color: CamColors.accent))
+          : Stack(children: [
+              ListView(
+                padding: EdgeInsets.zero,
+                physics: const BouncingScrollPhysics(),
+                children: [
+                  _DetailHero(
+                    title: title,
+                    nativeTitle: (info['title_native'] ?? '').toString(),
+                    backdrop: backdrop,
+                    poster: poster,
+                    rating: (info['rating'] ?? '').toString(),
+                    year: (info['year'] ?? '').toString(),
+                    format: (info['format'] ?? '').toString(),
+                    status: (info['status'] ?? '').toString(),
+                    episodes: totalEps,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: SizedBox(
-                                      width: 100,
-                                      child: AspectRatio(
-                                          aspectRatio: 2 / 2.85,
-                                          child:
-                                              CachedPosterImage(url: poster)))),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                    Text(
-                                        (info['title_native'] ?? '').toString(),
-                                        style: const TextStyle(
-                                            color: muted, fontSize: 12)),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                        '${info['year'] ?? 'Year unknown'} · ${info['format'] ?? 'Anime'} · ${info['status'] ?? ''}',
-                                        style: const TextStyle(
-                                            color: muted, fontSize: 12)),
-                                    const SizedBox(height: 8),
-                                    Text('★ Rating ${info['rating'] ?? 'N/A'}',
-                                        style: const TextStyle(
-                                            color: amber,
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                        totalEps > 0
-                                            ? '$totalEps episodes · ${seasons.length} related'
-                                            : 'Episode list not published yet',
-                                        style: const TextStyle(
-                                            color: muted, fontSize: 12)),
-                                  ])),
-                            ]),
-                        if (genres.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          Wrap(spacing: 7, runSpacing: 7, children: [
-                            for (final genre in genres)
-                              Chip(
-                                  label: Text(genre.toString()),
-                                  visualDensity: VisualDensity.compact,
-                                  backgroundColor: card2,
-                                  side: BorderSide.none)
-                          ]),
-                        ],
+                        if (genres.isNotEmpty) _GenreRow(genres: genres),
                         if ((info['description'] ?? '')
                             .toString()
                             .isNotEmpty) ...[
                           const SizedBox(height: 14),
-                          Text(info['description'].toString(),
-                              style:
-                                  const TextStyle(color: muted, fontSize: 13)),
+                          _Synopsis(text: info['description'].toString()),
                         ],
+                        const SizedBox(height: 16),
+                        _ActionRow(
+                          watchLabel: watchLabel,
+                          myScore: myScore,
+                          onWatch:
+                              current == null ? null : () => _play(current),
+                          onDownload: current == null
+                              ? null
+                              : () => _downloadEp(current),
+                          onRate: _rateSheet,
+                        ),
+                        const SizedBox(height: 16),
+                        _AudioSeasonBar(
+                          audio: audio,
+                          onAudio: _setAudio,
+                          currentId: widget.animeId,
+                          currentTitle: title,
+                          seasons: seasons,
+                          onSeason: _openSeason,
+                        ),
+                        const SizedBox(height: 24),
+                        ..._episodeSection(),
+                        const SizedBox(height: 28),
+                        const _SectionHeading(
+                          eyebrow: 'Picked from the catalogue',
+                          title: 'More like this',
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 236,
+                          child: _RelatedPane(
+                            animeId: widget.animeId,
+                            genres: genres,
+                          ),
+                        ),
                         if (seasons.isNotEmpty) ...[
-                          const SizedBox(height: 18),
-                          Row(children: [
-                            const Text('Seasons & related series',
-                                style: TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w800)),
-                            const SizedBox(width: 8),
-                            Text('${seasons.length}',
-                                style: const TextStyle(
-                                    color: muted, fontSize: 12)),
-                          ]),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 196,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: seasons.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 10),
-                              itemBuilder: (_, i) {
-                                final raw = seasons[i];
-                                final s = raw is Map
-                                    ? raw.cast<String, dynamic>()
-                                    : {};
-                                final id = (s['id'] ?? '').toString();
-                                return GestureDetector(
-                                  onTap: id.isEmpty
-                                      ? null
-                                      : () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                              builder: (_) => DetailScreen(
-                                                  animeId: id,
-                                                  title: (s['title'] ?? 'Anime')
-                                                      .toString()))),
-                                  child: SizedBox(
-                                    width: 112,
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            child: AspectRatio(
-                                                aspectRatio: 2 / 2.85,
-                                                child: CachedPosterImage(
-                                                    url: (s['image'] ?? '')
-                                                        .toString())),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                              (s['relation'] ?? 'Related')
-                                                  .toString()
-                                                  .toUpperCase(),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  color: amber,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w800)),
-                                          Text(
-                                              (s['title'] ?? 'Untitled')
-                                                  .toString(),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w700)),
-                                          Text(
-                                              '${s['episode_count'] ?? '?'} eps · ${s['year'] ?? '—'}',
-                                              style: const TextStyle(
-                                                  color: muted, fontSize: 10)),
-                                        ]),
-                                  ),
-                                );
-                              },
-                            ),
+                          const SizedBox(height: 26),
+                          _SectionHeading(
+                            eyebrow: '${seasons.length} related titles',
+                            title: 'Seasons & side stories',
                           ),
-                        ],
-                        const SizedBox(height: 16),
-                        FutureBuilder<Map<String, dynamic>?>(
-                          future: _resumeTarget(),
-                          builder: (context, snap) {
-                            final entry = snap.data;
-                            if (entry == null || !snap.hasData) {
-                              return const SizedBox.shrink();
-                            }
-                            final ep = (entry['ep'] ?? 0) as int;
-                            final pos =
-                                (int.tryParse('${entry['posMs'] ?? ''}') ?? 0);
-                            final dur =
-                                (int.tryParse('${entry['durMs'] ?? ''}') ?? 0);
-                            final minsLeft =
-                                dur > pos ? ((dur - pos) / 60000).round() : 0;
-                            final left =
-                                minsLeft > 0 ? ' · $minsLeft min left' : '';
-                            return Padding(
-                              padding: const EdgeInsets.only(top: 14),
-                              child: Card(
-                                color: mint.withValues(alpha: 0.12),
-                                child: ListTile(
-                                  leading: const Icon(
-                                      Icons.replay_circle_filled,
-                                      color: mint),
-                                  title: Text('Continue watching — Ep $ep',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w800)),
-                                  subtitle: Text(
-                                      'Resumes where you left off$left',
-                                      style: const TextStyle(
-                                          color: muted, fontSize: 12)),
-                                  trailing: TextButton(
-                                      onPressed: () => _play(ep),
-                                      child: const Text('Resume')),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        Row(children: [
-                          Expanded(
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                  backgroundColor: amber,
-                                  foregroundColor: Colors.black,
-                                  minimumSize: const Size(0, 50)),
-                              onPressed: dlBusy ? null : () => _play(1),
-                              icon: const Icon(Icons.play_arrow),
-                              label: Text(totalEps > 1
-                                  ? 'Stream episodes'
-                                  : 'Watch Ep 1'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 50)),
-                              onPressed: dlBusy ? null : () => _downloadEp(1),
-                              icon: const Icon(Icons.download),
-                              label: const Text('Get Ep 1'),
-                            ),
-                          ),
-                        ]),
-                        const SizedBox(height: 14),
-                        const Text('Rate this anime',
-                            style: TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 6),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(children: [
-                            for (var s = 1; s <= 10; s++)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: ChoiceChip(
-                                  label: Text('$s'),
-                                  selected: myScore == s,
-                                  onSelected: (_) => _rate(s),
-                                ),
-                              ),
-                          ]),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(children: [
-                          const Text('Audio:',
-                              style: TextStyle(fontWeight: FontWeight.w800)),
-                          const SizedBox(width: 10),
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(
-                                  value: 'sub',
-                                  label: Text('SUB'),
-                                  icon: Icon(Icons.closed_caption)),
-                              ButtonSegment(
-                                  value: 'dub',
-                                  label: Text('DUB'),
-                                  icon: Icon(Icons.headphones)),
-                            ],
-                            selected: {audio},
-                            onSelectionChanged: (s) async {
-                              setState(() => audio = s.first);
-                              final p = await SharedPreferences.getInstance();
-                              await p.setString('app_audio', s.first);
-                            },
-                          ),
-                          if (seasons.isNotEmpty) ...[
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: widget.animeId,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                    labelText: 'Switch season',
-                                    contentPadding: EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8)),
-                                items: [
-                                  DropdownMenuItem(
-                                      value: widget.animeId,
-                                      child: Text(
-                                          (info['title'] ?? 'This season')
-                                              .toString(),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis)),
-                                  for (final raw in seasons)
-                                    if (raw is Map &&
-                                        (raw['id'] ?? '').toString().isNotEmpty)
-                                      DropdownMenuItem(
-                                          value: raw['id'].toString(),
-                                          child: Text(
-                                              '${(raw['relation'] ?? 'Related').toString()}: ${(raw['title'] ?? 'Untitled')}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis)),
-                                ],
-                                onChanged: (v) {
-                                  if (v == null || v == widget.animeId) return;
-                                  final match = seasons.firstWhere(
-                                      (r) =>
-                                          r is Map &&
-                                          (r['id'] ?? '').toString() == v,
-                                      orElse: () => null);
-                                  if (match == null) return;
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => DetailScreen(
-                                              animeId: v,
-                                              title: (match['title'] ?? 'Anime')
-                                                  .toString())));
-                                },
-                              ),
-                            ),
-                          ],
-                        ]),
-                        const SizedBox(height: 12),
-                        Row(children: [
-                          Text(
-                              totalEps > 0
-                                  ? 'Episodes (1–$totalEps)'
-                                  : 'Episodes',
-                              style: const TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.w800)),
-                          const Spacer(),
-                          TextButton(
-                              onPressed: () => setState(() {
-                                    if (selected.length == totalEps) {
-                                      selected.clear();
-                                    } else {
-                                      selected.addAll(List.generate(
-                                          totalEps, (i) => i + 1));
-                                    }
-                                  }),
-                              child: Text(selected.length == totalEps
-                                  ? 'Clear all'
-                                  : 'Select all')),
-                        ]),
-                        if (totalEps == 0) ...[
                           const SizedBox(height: 10),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                                color: card2,
-                                borderRadius: BorderRadius.circular(12)),
-                            child: const Text(
-                                'The website has not published an episode list for this title yet — no numbers are invented. You can still try Episode 1 below.',
-                                style: TextStyle(color: muted, fontSize: 12)),
+                          SizedBox(
+                            height: 214,
+                            child: _SeasonsRail(
+                              seasons: seasons,
+                              onOpen: _openSeason,
+                            ),
                           ),
                         ],
-                        Text(
-                            _downloading
-                                ? 'Tick episodes to save for offline · tap the ticket to play too.'
-                                : 'Tap to stream · tick to build a queue that plays one after another.',
-                            style: const TextStyle(color: muted, fontSize: 12)),
-                        const SizedBox(height: 8),
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 4,
-                                  childAspectRatio: 1.15,
-                                  crossAxisSpacing: 8,
-                                  mainAxisSpacing: 8),
-                          itemCount: totalEps,
-                          itemBuilder: (_, i) {
-                            final ep = i + 1;
-                            final on = selected.contains(ep);
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              // Stream mode: tap plays now, tick queues it.
-                              // Download mode: tap selects, tick selects too.
-                              onTap: () => _downloading
-                                  ? setState(() => on
-                                      ? selected.remove(ep)
-                                      : selected.add(ep))
-                                  : _play(ep),
-                              onLongPress: () => setState(() {
-                                on ? selected.remove(ep) : selected.add(ep);
-                              }),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color:
-                                      on ? amber.withValues(alpha: 0.2) : card2,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: on ? amber : Colors.transparent,
-                                      width: 2),
-                                ),
-                                child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Checkbox(
-                                                value: on,
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                                onChanged: (_) => setState(() {
-                                                      on
-                                                          ? selected.remove(ep)
-                                                          : selected.add(ep);
-                                                    })),
-                                            Text('$ep',
-                                                style: const TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w800)),
-                                          ]),
-                                      InkWell(
-                                        onTap: () => _downloadEp(ep),
-                                        child: const Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(Icons.download_rounded,
-                                                  size: 15, color: mint),
-                                              SizedBox(width: 3),
-                                              Text('MP4',
-                                                  style: TextStyle(
-                                                      fontSize: 11,
-                                                      color: mint,
-                                                      fontWeight:
-                                                          FontWeight.w700)),
-                                            ]),
-                                      ),
-                                    ]),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                                backgroundColor:
-                                    _downloading ? mint : Colors.purple,
-                                foregroundColor: Colors.black,
-                                minimumSize: const Size(0, 50)),
-                            onPressed: selected.isEmpty
-                                ? null
-                                : (_downloading
-                                    ? (dlBusy ? null : _downloadSelected)
-                                    : _playSelected),
-                            icon: Icon(_downloading
-                                ? Icons.download
-                                : Icons.play_arrow_rounded),
-                            label: Text(_downloading
-                                ? (selected.isEmpty
-                                    ? 'Download selected (tick episodes)'
-                                    : 'Download ${selected.length} selected')
-                                : (selected.isEmpty
-                                    ? 'Stream selected (tick episodes)'
-                                    : 'Back-to-back stream ${selected.length} selected')),
+                        const SizedBox(height: 26),
+                        _SectionHeading(
+                          eyebrow: 'Community',
+                          title: 'Comments',
+                          trailing: TextButton(
+                            onPressed: _loadComments,
+                            child: const Text('Refresh'),
                           ),
                         ),
-                        if (dlProgress != null) ...[
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                              value: dlProgress, color: mint),
-                        ],
-                        if (dlBusy) ...[
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                              onPressed: () =>
-                                  setState(() => _dlCancelled = true),
-                              icon: const Icon(Icons.cancel_outlined,
-                                  size: 18, color: pink),
-                              label: const Text('Cancel download',
-                                  style: TextStyle(color: pink))),
-                        ],
-                        if (dlStatus.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(dlStatus,
-                              style:
-                                  const TextStyle(color: muted, fontSize: 12)),
-                        ],
-                        const SizedBox(height: 18),
-                        TabBar(
-                          controller: _tabs,
-                          tabs: const [
-                            Tab(text: 'For you'),
-                            Tab(text: 'Comments'),
-                          ],
+                        _CommentsPane(
+                          comments: comments,
+                          busy: commentsBusy,
+                          error: commentError,
+                          controller: _commentCtrl,
+                          onPost: _postComment,
+                          onRefresh: _loadComments,
                         ),
-                        SizedBox(
-                          height: 430,
-                          child: TabBarView(
-                            controller: _tabs,
-                            children: [
-                              _RelatedPane(
-                                  animeId: widget.animeId,
-                                  genres:
-                                      genres.map((e) => e.toString()).toList()),
-                              _CommentsPane(
-                                comments: comments,
-                                busy: commentsBusy,
-                                error: commentError,
-                                controller: _commentCtrl,
-                                onPost: _postComment,
-                                onRefresh: _loadComments,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ])),
+                        const SizedBox(height: 40),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 8,
+                left: 10,
+                child: _RoundButton(
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.maybePop(context),
+                ),
+              ),
+              Positioned(
+                top: MediaQuery.paddingOf(context).top + 8,
+                right: 10,
+                child: _RoundButton(
+                  icon: trailerBusy
+                      ? Icons.hourglass_top_rounded
+                      : Icons.movie_creation_outlined,
+                  tooltip: 'Watch trailer',
+                  onTap: _openTrailer,
+                ),
+              ),
             ]),
+    );
+  }
+
+  List<Widget> _episodeSection() {
+    return [
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 2,
+        children: [
+          const Text(
+            'Episodes',
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -0.2),
+          ),
+          Text(
+            totalEps > 0 ? '1–$totalEps' : 'not listed',
+            style: const TextStyle(color: CamColors.inkDim, fontSize: 11.5),
+          ),
+          TextButton(
+            onPressed: totalEps == 0 ? null : () => _selectAll(true),
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 6)),
+            child: const Text('Select all', style: TextStyle(fontSize: 11.5)),
+          ),
+          TextButton(
+            onPressed: selected.isEmpty ? null : () => _selectAll(false),
+            style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 6)),
+            child: const Text('Deselect all', style: TextStyle(fontSize: 11.5)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      if (selected.isNotEmpty) ...[
+        _SelectionBar(
+          count: selected.length,
+          onPlayQueue: _playSelected,
+          onDownload: _downloadSelected,
+          onClear: () => setState(selected.clear),
+        ),
+        const SizedBox(height: 10),
+      ],
+      EpisodeBoard(
+        animeId: int.tryParse(widget.animeId) ?? 0,
+        totalEpisodes: totalEps,
+        currentEpisode: currentEpisode,
+        selected: selected,
+        previews: previews,
+        progress: watch,
+        onPlay: _play,
+        onToggleSelect: (ep, sel) => setState(() {
+          if (sel) {
+            selected.add(ep);
+          } else {
+            selected.remove(ep);
+          }
+        }),
+        onDownload: _downloadEp,
+        imageBuilder: (url) => CachedPosterImage(url: url),
+      ),
+      if (dlStatus.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text(dlStatus,
+            style: const TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+      ],
+    ];
+  }
+
+  void _selectAll(bool all) {
+    setState(() {
+      selected.clear();
+      if (all && totalEps > 0) {
+        selected.addAll(List<int>.generate(totalEps, (i) => i + 1));
+      }
+    });
+  }
+
+  void _setAudio(String value) {
+    setState(() => audio = value);
+    SharedPreferences.getInstance()
+        .then((p) => p.setString('app_audio', value));
+  }
+
+  void _openSeason(String id, String title) {
+    if (id == widget.animeId || id.isEmpty) return;
+    Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => DetailScreen(animeId: id, title: title)));
+  }
+
+  void _rateSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 2, 20, 28),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Rate this anime',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              const Text('Your score helps other viewers.',
+                  style: TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+              const SizedBox(height: 16),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (var s = 1; s <= 10; s++)
+                  ChoiceChip(
+                    label: Text('$s'),
+                    selected: myScore == s,
+                    onSelected: (_) {
+                      Navigator.pop(ctx);
+                      _rate(s);
+                    },
+                  ),
+              ]),
+            ]),
+      ),
     );
   }
 }
@@ -2760,17 +2686,17 @@ class _RelatedPaneState extends State<_RelatedPane> {
       final pool = [
         ...((data['trending'] as List?) ?? []),
         ...((data['popular'] as List?) ?? []),
+        ...((data['top_rated'] as List?) ?? []),
       ];
       pool.shuffle();
-      if (mounted) {
-        setState(() {
-          items = pool
-              .where((e) => (e as Map)['id'].toString() != widget.animeId)
-              .take(9)
-              .toList();
-          busy = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        items = pool
+            .where((e) => e is Map && '${e['id']}' != widget.animeId)
+            .take(12)
+            .toList();
+        busy = false;
+      });
     } catch (_) {
       if (mounted) setState(() => busy = false);
     }
@@ -2779,23 +2705,23 @@ class _RelatedPaneState extends State<_RelatedPane> {
   @override
   Widget build(BuildContext context) {
     if (busy) {
-      return const Center(child: CircularProgressIndicator(color: amber));
+      return const Center(
+          child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: CamColors.accent)));
     }
     if (items.isEmpty) {
       return const Center(
-          child:
-              Text('No recommendations yet.', style: TextStyle(color: muted)));
+          child: Text('No recommendations yet.',
+              style: TextStyle(color: CamColors.inkDim, fontSize: 12)));
     }
-    return GridView.builder(
-      padding: const EdgeInsets.only(top: 12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          childAspectRatio: 0.56,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 12),
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
       itemCount: items.length,
-      itemBuilder: (_, i) =>
-          PosterCard(item: items[i] as Map, width: double.infinity),
+      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      itemBuilder: (_, i) => PosterCard(item: items[i] as Map, width: 112),
     );
   }
 }
@@ -2817,25 +2743,31 @@ class _CommentsPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
-        padding: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.only(top: 6),
         child: Row(children: [
           Expanded(
             child: TextField(
               controller: controller,
+              style: const TextStyle(fontSize: 12.5),
               decoration: const InputDecoration(
-                  hintText: 'Comment as guest…',
-                  prefixIcon: Icon(Icons.chat_bubble_outline)),
+                  isDense: true,
+                  hintText: 'Add a comment…',
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
               onSubmitted: (_) => onPost(),
             ),
           ),
           const SizedBox(width: 8),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: amber,
+                backgroundColor: CamColors.accent,
                 foregroundColor: Colors.black,
-                minimumSize: const Size(0, 48)),
+                minimumSize: const Size(0, 42),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                textStyle: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w800)),
             onPressed: onPost,
             child: const Text('Post'),
           ),
@@ -2843,295 +2775,82 @@ class _CommentsPane extends StatelessWidget {
       ),
       if (error.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(error, style: const TextStyle(color: pink, fontSize: 12)),
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(error,
+              style: const TextStyle(color: CamColors.danger, fontSize: 11.5)),
         ),
-      Expanded(
-        child: busy
-            ? const Center(child: CircularProgressIndicator(color: amber))
-            : comments.isEmpty
-                ? Center(
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                        const Icon(Icons.forum_outlined,
-                            size: 44, color: muted),
-                        const SizedBox(height: 8),
-                        const Text('No comments yet — start the forum.',
-                            style: TextStyle(color: muted)),
-                        TextButton(
-                            onPressed: onRefresh,
-                            child: const Text('Refresh comments')),
-                      ]))
-                : RefreshIndicator(
-                    color: amber,
-                    backgroundColor: card,
-                    onRefresh: () async => onRefresh(),
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(top: 8),
-                      itemCount: comments.length,
-                      itemBuilder: (_, i) {
-                        final c = comments[i] as Map;
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                                backgroundColor: card2,
-                                child: Text(
-                                    ((c['user'] ?? 'G')
-                                            .toString()
-                                            .characters
-                                            .firstOrNull ??
-                                        'G'),
-                                    style: const TextStyle(
-                                        color: amber,
-                                        fontWeight: FontWeight.w800))),
-                            title: Text((c['user'] ?? 'Guest').toString(),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w800, fontSize: 13)),
-                            subtitle: Text(
-                                (c['text'] ?? c['sticker'] ?? '').toString()),
-                            trailing:
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                              const Icon(Icons.favorite, size: 14, color: pink),
-                              const SizedBox(width: 3),
-                              Text('${c['likes'] ?? 0}',
-                                  style: const TextStyle(
-                                      color: muted, fontSize: 12)),
-                            ]),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-      ),
+      if (busy)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+              child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: CamColors.accent))),
+        )
+      else if (comments.isEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          child: Row(children: [
+            const Icon(Icons.forum_outlined, size: 18, color: CamColors.inkDim),
+            const SizedBox(width: 8),
+            const Expanded(
+                child: Text('No comments yet — start the conversation.',
+                    style: TextStyle(color: CamColors.inkDim, fontSize: 11.5))),
+            TextButton(onPressed: onRefresh, child: const Text('Refresh')),
+          ]),
+        )
+      else
+        ...comments.take(40).map((raw) {
+          final c = raw is Map ? raw : const {};
+          final name = (c['user'] ?? 'Guest').toString();
+          final text = (c['text'] ?? c['sticker'] ?? '').toString();
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              CircleAvatar(
+                radius: 15,
+                backgroundColor: CamColors.surfaceAlt,
+                child: Text(name.characters.firstOrNull?.toUpperCase() ?? 'G',
+                    style: const TextStyle(
+                        color: CamColors.accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text(text,
+                          style: const TextStyle(
+                              color: CamColors.inkDim,
+                              fontSize: 12,
+                              height: 1.4)),
+                    ]),
+              ),
+              const SizedBox(width: 8),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.favorite_rounded,
+                    size: 12, color: CamColors.danger),
+                const SizedBox(width: 3),
+                Text('${c['likes'] ?? 0}',
+                    style: const TextStyle(
+                        color: CamColors.inkDim, fontSize: 10.5)),
+              ]),
+            ]),
+          );
+        }),
     ]);
   }
 }
 
 // ── Player (website's own MP4/HLS streams, in-app) ──────
-class PlayerScreen extends StatefulWidget {
-  final String url;
-  final String label;
-  final bool localFile;
-
-  /// Back-to-back queue in Stream mode. First entry is the one that plays;
-  /// the rest auto-advance on completion.
-  final List<EpisodeSource> playlist;
-  final int startIndex;
-  final bool resume;
-  const PlayerScreen({
-    super.key,
-    required this.url,
-    required this.label,
-    this.localFile = false,
-    this.playlist = const [],
-    this.startIndex = 0,
-    this.resume = false,
-  });
-  @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
-}
-
-class _PlayerScreenState extends State<PlayerScreen> {
-  VideoPlayerController? _video;
-  ChewieController? _chewie;
-  String? error;
-
-  List<EpisodeSource> playlist = [];
-  int index = 0;
-  bool _switching = false;
-
-  EpisodeSource get current => playlist.isEmpty
-      ? EpisodeSource(url: widget.url, label: widget.label)
-      : playlist[index];
-
-  @override
-  void initState() {
-    super.initState();
-    playlist = widget.playlist.isEmpty
-        ? [
-            EpisodeSource(
-              url: widget.url,
-              label: widget.label,
-              animeId: '',
-            )
-          ]
-        : List.of(widget.playlist);
-    index = widget.startIndex.clamp(0, playlist.length - 1);
-    _open();
-  }
-
-  Future<void> _open() async {
-    final src = current;
-    try {
-      final v = widget.localFile
-          ? VideoPlayerController.file(File(src.url))
-          : VideoPlayerController.networkUrl(Uri.parse(src.url));
-      await v.initialize();
-      if (src.animeId.isNotEmpty && src.episode != null && !widget.localFile) {
-        final resumeAt = widget.resume
-            ? await WatchProgress.position(src.animeId, src.episode!)
-            : null;
-        if (resumeAt != null && resumeAt > 0 && mounted) {
-          await v.seekTo(Duration(milliseconds: resumeAt));
-        }
-      }
-      v.addListener(_onVideoTick);
-      final c = ChewieController(
-        videoPlayerController: v,
-        autoPlay: true,
-        looping: false,
-        allowFullScreen: true,
-        allowPlaybackSpeedChanging: true,
-        errorBuilder: (_, msg) => Center(
-            child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('Playback error: $msg',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: muted)))),
-      );
-      if (!mounted) {
-        await v.dispose();
-        c.dispose();
-        return;
-      }
-      setState(() {
-        _video = v;
-        _chewie = c;
-      });
-    } catch (e) {
-      if (mounted) setState(() => error = 'Stream failed: $e');
-    }
-  }
-
-  /// Throttle progress writes so prefs stay quiet while watching.
-  var _lastSaveMs = 0;
-
-  void _onVideoTick() {
-    final v = _video;
-    if (v == null || !v.value.isInitialized) return;
-    final src = current;
-    if (src.animeId.isEmpty || src.episode == null || widget.localFile) return;
-    final pos = v.value.position.inMilliseconds;
-    final dur = v.value.duration.inMilliseconds;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (v.value.isCompleted) {
-      if (src.episode != null) {
-        WatchProgress.clear(src.animeId, src.episode!);
-      }
-      _advance();
-      return;
-    }
-    if (now - _lastSaveMs < 5000) return;
-    _lastSaveMs = now;
-    if (pos < 5000) return;
-    WatchProgress.save(
-      animeId: src.animeId,
-      animeTitle: src.label.split('—').first.trim(),
-      image: '',
-      episode: src.episode ?? 0,
-      posMs: pos,
-      durMs: dur,
-    );
-  }
-
-  /// Next episode in the queue; falls back to nothing when it is the last one.
-  void _advance() {
-    if (_switching || index >= playlist.length - 1) return;
-    _switching = true;
-    final next = index + 1;
-    // Chain: dispose current, open the next episode from scratch.
-    Future<void>(() async {
-      try {
-        _chewie?.dispose();
-        _chewie = null;
-        final old = _video;
-        old?.removeListener(_onVideoTick);
-        await old?.dispose();
-        _video = null;
-        if (mounted) {
-          setState(() {
-            index = next;
-            error = null;
-          });
-          await _open();
-        }
-      } finally {
-        _switching = false;
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    final v = _video;
-    if (v != null) {
-      v.removeListener(_onVideoTick);
-      final src = current;
-      if (src.animeId.isNotEmpty && src.episode != null && !widget.localFile) {
-        final pos = v.value.position.inMilliseconds;
-        final dur = v.value.duration.inMilliseconds;
-        if (pos > 5000 && dur > 0 && pos < dur * 0.95) {
-          // fire and forget — app may be closing
-          WatchProgress.save(
-            animeId: src.animeId,
-            animeTitle: src.label.split('—').first.trim(),
-            image: '',
-            episode: src.episode ?? 0,
-            posMs: pos,
-            durMs: dur,
-          );
-        } else if (pos >= dur * 0.95) {
-          WatchProgress.clear(src.animeId, src.episode!);
-        }
-      }
-      v.dispose();
-    }
-    _chewie?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-            title: Text(playlist.isEmpty ? widget.label : current.label,
-                maxLines: 1, overflow: TextOverflow.ellipsis)),
-        body: ListView(padding: const EdgeInsets.all(16), children: [
-          Container(
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18), color: Colors.black),
-            clipBehavior: Clip.antiAlias,
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: error != null
-                  ? Center(
-                      child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Text(error!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: muted))))
-                  : _chewie == null
-                      ? const Center(
-                          child: CircularProgressIndicator(color: amber))
-                      : Chewie(controller: _chewie!),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-              widget.localFile
-                  ? 'Playing downloaded file offline-ready from My Library.'
-                  : 'Streaming directly from CamAnime website servers — no download required.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: muted, fontSize: 12)),
-          const SizedBox(height: 4),
-          const Text(appCredit,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: muted, fontSize: 12)),
-        ]),
-      );
-}
-
 // ── Search (posters + genre filter) ─────────────────────
 class SearchTab extends StatefulWidget {
   const SearchTab({super.key});
@@ -3336,207 +3055,6 @@ class _SearchTabState extends State<SearchTab> {
 }
 
 // ── Library (downloads live here + app update) ─────────
-class LibraryTab extends StatefulWidget {
-  const LibraryTab({super.key});
-  @override
-  State<LibraryTab> createState() => _LibraryTabState();
-}
-
-class _LibraryTabState extends State<LibraryTab> {
-  List<FileSystemEntity> files = [];
-  Map ver = {};
-  bool busy = false;
-  double? progress;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-    _checkVersion();
-  }
-
-  Future<void> _load() async {
-    final dir = await getApplicationSupportDirectory();
-    final lib = Directory('${dir.path}/camanime_library');
-    if (!await lib.exists()) {
-      await lib.create(recursive: true);
-    }
-    if (!mounted) {
-      return;
-    }
-    final all = lib.listSync().whereType<File>().toList()
-      ..sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
-    setState(() => files = all);
-  }
-
-  Future<void> _checkVersion() async {
-    try {
-      final v = await Api.version();
-      if (mounted) setState(() => ver = v);
-    } catch (_) {}
-  }
-
-  Future<void> _saveToDevice(File f) async {
-    try {
-      final pub = await getDownloadsDirectory() ??
-          await getApplicationDocumentsDirectory();
-      await f.copy('${pub.path}/${f.uri.pathSegments.last}');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Saved to device Downloads')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
-      }
-    }
-  }
-
-  Future<void> _delete(File f) async {
-    try {
-      await f.delete();
-    } catch (_) {}
-    await _load();
-  }
-
-  Future<void> _downloadUpdate() async {
-    setState(() {
-      busy = true;
-      progress = 0;
-    });
-    try {
-      final req = http.Request('GET', Uri.parse('${Api.base()}/get/android'));
-      final resp = await http.Client().send(req);
-      final total = resp.contentLength ?? 0;
-      final dir = await getDownloadsDirectory() ??
-          await getApplicationDocumentsDirectory();
-      final f = File('${dir.path}/CamAnime-update.apk');
-      final sink = f.openWrite();
-      var got = 0;
-      await for (final chunk in resp.stream) {
-        sink.add(chunk);
-        got += chunk.length;
-        if (mounted && total > 0) {
-          setState(() => progress = got / total);
-        }
-      }
-      await sink.close();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Update saved to Downloads — open CamAnime-update.apk to install.')));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Download failed — check internet.')));
-      }
-    }
-    if (mounted) {
-      setState(() {
-        busy = false;
-        progress = null;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final latest = (ver['app_version'] ?? '').toString();
-    final hasUpdate = latest.isNotEmpty && latest != appVersion;
-    return SafeArea(
-      child: RefreshIndicator(
-        color: amber,
-        backgroundColor: card,
-        onRefresh: _load,
-        child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-            children: [
-              const Text('My Library',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-              const Text(
-                  'Episodes you download in the app land here — offline, always yours.',
-                  style: TextStyle(color: muted, fontSize: 12)),
-              const SizedBox(height: 10),
-              if (hasUpdate)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.system_update, color: amber),
-                    title: Text('App update $latest available',
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: progress != null
-                        ? LinearProgressIndicator(value: progress, color: amber)
-                        : const Text('From your CamAnime website'),
-                    trailing: FilledButton(
-                        style: FilledButton.styleFrom(
-                            backgroundColor: amber,
-                            foregroundColor: Colors.black),
-                        onPressed: busy ? null : _downloadUpdate,
-                        child: Text(busy ? '…' : 'Get')),
-                  ),
-                ),
-              const SizedBox(height: 6),
-              if (files.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 30),
-                  child: Column(children: [
-                    Icon(Icons.video_library_outlined, size: 64, color: muted),
-                    SizedBox(height: 10),
-                    Text('No downloads yet',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w800)),
-                    Text('Open any anime → tick episodes → Download.',
-                        style: TextStyle(color: muted)),
-                  ]),
-                )
-              else
-                for (final e in files)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => PlayerScreen(
-                                  url: e.path,
-                                  label: e.uri.pathSegments.last,
-                                  localFile: true))),
-                      leading: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                              color: purple.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12)),
-                          child: const Icon(Icons.movie, color: purple)),
-                      title: Text((e as File).uri.pathSegments.last,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text(
-                          '${(e.statSync().size / 1048576).toStringAsFixed(1)} MB',
-                          style: const TextStyle(color: muted, fontSize: 12)),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                            tooltip: 'Delete',
-                            icon:
-                                const Icon(Icons.delete_outline, color: muted),
-                            onPressed: () => _delete(e)),
-                        FilledButton(
-                            style: FilledButton.styleFrom(
-                                backgroundColor: amber,
-                                foregroundColor: Colors.black),
-                            onPressed: () => _saveToDevice(e),
-                            child: const Text('Save')),
-                      ]),
-                    ),
-                  ),
-            ]),
-      ),
-    );
-  }
-}
-
-// ── Profile (avatar, name, connection, auth) ───────────
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
   @override
@@ -3854,7 +3372,8 @@ class _AuthCardState extends State<_AuthCard> {
       who = (u['email'] ?? '').toString();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Signed in as ${(u['email'] ?? '').toString()} — synced with the website database')));
+            content: Text(
+                'Signed in as ${(u['email'] ?? '').toString()} — synced with the website database')));
       }
     } catch (e) {
       if (mounted) {
@@ -3878,13 +3397,16 @@ class _AuthCardState extends State<_AuthCard> {
                   color: mint.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12)),
               child: const Icon(Icons.verified_user, color: mint)),
-          title: Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
+          title:
+              Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
           subtitle: const Text('Synced automatically when you comment or rate',
               style: TextStyle(color: muted, fontSize: 12)),
-          trailing: TextButton(onPressed: () async {
-            await Api.signOut();
-            await _who();
-          }, child: const Text('Sign out')),
+          trailing: TextButton(
+              onPressed: () async {
+                await Api.signOut();
+                await _who();
+              },
+              child: const Text('Sign out')),
         )),
         if (isAdmin) ...[
           const SizedBox(height: 10),
@@ -3894,40 +3416,41 @@ class _AuthCardState extends State<_AuthCard> {
     }
     return Card(
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Account (optional)',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            const Text('Same permanent database as the site.',
-                style: TextStyle(color: muted, fontSize: 12)),
-            const SizedBox(height: 10),
-            TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                    labelText: 'Email (Gmail / iCloud)',
-                    prefixIcon: Icon(Icons.email_outlined))),
-            const SizedBox(height: 8),
-            TextField(
-                controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: Icon(Icons.lock_outline))),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: FilledButton(
+      padding: const EdgeInsets.all(16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Account (optional)',
+            style: TextStyle(fontWeight: FontWeight.w800)),
+        const Text('Same permanent database as the site.',
+            style: TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 10),
+        TextField(
+            controller: email,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+                labelText: 'Email (Gmail / iCloud)',
+                prefixIcon: Icon(Icons.email_outlined))),
+        const SizedBox(height: 8),
+        TextField(
+            controller: password,
+            obscureText: true,
+            decoration: const InputDecoration(
+                labelText: 'Password', prefixIcon: Icon(Icons.lock_outline))),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+              child: FilledButton(
                   style: FilledButton.styleFrom(
                       backgroundColor: amber, foregroundColor: Colors.black),
                   onPressed: busy ? null : () => _go(false),
                   child: Text(busy ? 'Please wait…' : 'Sign in'))),
-              const SizedBox(width: 8),
-              Expanded(child: OutlinedButton(
+          const SizedBox(width: 8),
+          Expanded(
+              child: OutlinedButton(
                   onPressed: busy ? null : () => _go(true),
                   child: const Text('Register'))),
-            ]),
-          ]),
-        ));
+        ]),
+      ]),
+    ));
   }
 }
 
@@ -4043,8 +3566,7 @@ class _AdminPanelState extends State<AdminPanel> {
       color: purple.withValues(alpha: 0.10),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             const Icon(Icons.shield, color: mint),
             const SizedBox(width: 8),
@@ -4066,13 +3588,14 @@ class _AdminPanelState extends State<AdminPanel> {
           const SizedBox(height: 10),
           TextField(
               controller: annTitle,
-              decoration: const InputDecoration(hintText: 'Announcement title')),
+              decoration:
+                  const InputDecoration(hintText: 'Announcement title')),
           const SizedBox(height: 8),
           TextField(
               controller: annBody,
               maxLines: 3,
-              decoration: const InputDecoration(
-                  hintText: 'Message to all users…')),
+              decoration:
+                  const InputDecoration(hintText: 'Message to all users…')),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -4087,8 +3610,8 @@ class _AdminPanelState extends State<AdminPanel> {
           TextField(
               controller: curPw,
               obscureText: true,
-              decoration: const InputDecoration(
-                  hintText: 'Current admin password')),
+              decoration:
+                  const InputDecoration(hintText: 'Current admin password')),
           const SizedBox(height: 8),
           TextField(
               controller: newPw,
@@ -4116,154 +3639,641 @@ class _AdminPanelState extends State<AdminPanel> {
 }
 
 // ── Settings (gear screen) ─────────────────────────────
-class SettingsScreen extends StatefulWidget {
-  final String themeName;
-  final ValueChanged<String> onTheme;
-  final VoidCallback onCheckUpdate;
-  const SettingsScreen(
-      {super.key,
-      required this.themeName,
-      required this.onTheme,
-      required this.onCheckUpdate});
-  @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  String audio = 'sub';
-  bool autoplay = false;
+// ── Detail screen: cinematic sections ───────────────────
+class _DetailHero extends StatelessWidget {
+  final String title;
+  final String nativeTitle;
+  final String backdrop;
+  final String poster;
+  final String rating;
+  final String year;
+  final String format;
+  final String status;
+  final int episodes;
 
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  Future<void> _init() async {
-    final p = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        audio = (p.getString('app_audio') ?? 'sub') == 'dub' ? 'dub' : 'sub';
-        autoplay = p.getBool('app_autoplay') ?? false;
-      });
-    }
-  }
+  const _DetailHero({
+    required this.title,
+    required this.nativeTitle,
+    required this.backdrop,
+    required this.poster,
+    required this.rating,
+    required this.year,
+    required this.format,
+    required this.status,
+    required this.episodes,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('App settings')),
-      body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            const Text('Appearance',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final e in appThemes.entries)
-                    ChoiceChip(
-                      label: Text(e.value['label'] as String),
-                      selected: widget.themeName == e.key,
-                      avatar: CircleAvatar(
-                          radius: 9,
-                          backgroundColor: Color(e.value['seed'] as int)),
-                      onSelected: (_) => widget.onTheme(e.key),
-                    ),
-                ]),
+    final hasRating = rating.isNotEmpty && rating != '0' && rating != 'null';
+    return SizedBox(
+      height: 324,
+      child: Stack(fit: StackFit.expand, children: [
+        CachedPosterImage(url: backdrop.isNotEmpty ? backdrop : poster),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: [0, 0.42, 1],
+              colors: [Color(0xE605060A), Color(0x3305060A), CamColors.bg],
+            ),
+          ),
+        ),
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: 14,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 94,
+                height: 140,
+                child: CachedPosterImage(url: poster),
               ),
             ),
-            const SizedBox(height: 16),
-            const Text('Playback',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Card(
-              child: Column(children: [
-                ListTile(
-                  title: const Text('Default audio',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                  trailing: SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'sub', label: Text('SUB')),
-                      ButtonSegment(value: 'dub', label: Text('DUB')),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (nativeTitle.isNotEmpty)
+                      Text(nativeTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: CamColors.inkDim, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    Text(title,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 23,
+                            height: 1.12,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5)),
+                    const SizedBox(height: 9),
+                    Wrap(spacing: 6, runSpacing: 6, children: [
+                      if (hasRating) _RatingPill(rating),
+                      if (year.isNotEmpty) _FactPill(year),
+                      if (format.isNotEmpty) _FactPill(format),
+                      if (episodes > 0) _FactPill('$episodes EP'),
+                    ]),
+                    if (status.isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(status.toUpperCase(),
+                          style: const TextStyle(
+                              color: CamColors.accent,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1)),
                     ],
-                    selected: {audio},
-                    onSelectionChanged: (s) async {
-                      setState(() => audio = s.first);
-                      final p = await SharedPreferences.getInstance();
-                      await p.setString('app_audio', s.first);
-                    },
-                  ),
-                ),
-                SwitchListTile(
-                  title: const Text('Autoplay next episode'),
-                  subtitle: const Text('Same as the website focus mode.',
-                      style: TextStyle(color: muted, fontSize: 12)),
-                  value: autoplay,
-                  onChanged: (v) async {
-                    setState(() => autoplay = v);
-                    final p = await SharedPreferences.getInstance();
-                    await p.setBool('app_autoplay', v);
-                  },
-                ),
-              ]),
-            ),
-            const SizedBox(height: 16),
-            const Text('Website connection',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                        color: mint.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12)),
-                    child: const Icon(Icons.link, color: mint)),
-                title: Text(apiHost,
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-                subtitle: const Text(
-                    'Built into the app — always on when you have internet. No setup needed.',
-                    style: TextStyle(color: muted, fontSize: 12)),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text('More',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Card(
-              child: Column(children: [
-                ListTile(
-                  leading: const Icon(Icons.tour_outlined, color: amber),
-                  title: const Text('Replay app tour',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                  trailing: const Icon(Icons.chevron_right, color: muted),
-                  onTap: () async {
-                    final p = await SharedPreferences.getInstance();
-                    await p.setBool('tutorial_done', false);
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.system_update, color: amber),
-                  title: Text('Check for updates (v$appVersion)',
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
-                  trailing: const Icon(Icons.chevron_right, color: muted),
-                  onTap: widget.onCheckUpdate,
-                ),
-                const ListTile(
-                  leading: Icon(Icons.info_outline, color: muted),
-                  title: Text(appCredit),
-                  subtitle: Text(
-                      'Free forever · SUB & DUB · downloads included',
-                      style: TextStyle(color: muted, fontSize: 12)),
-                ),
-              ]),
+                  ]),
             ),
           ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RatingPill extends StatelessWidget {
+  final String rating;
+  const _RatingPill(this.rating);
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: CamColors.accent.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: CamColors.accent.withValues(alpha: 0.4)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.star_rounded, size: 13, color: CamColors.accent),
+          const SizedBox(width: 3),
+          Text(rating,
+              style: const TextStyle(
+                  color: CamColors.accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      );
+}
+
+class _FactPill extends StatelessWidget {
+  final String text;
+  const _FactPill(this.text);
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: CamColors.line),
+        ),
+        child: Text(text,
+            style: const TextStyle(
+                color: CamColors.ink,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700)),
+      );
+}
+
+class _GenreRow extends StatelessWidget {
+  final List<String> genres;
+  const _GenreRow({required this.genres});
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final genre in genres.take(8))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: CamColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: CamColors.line),
+              ),
+              child: Text(genre,
+                  style: const TextStyle(
+                      color: CamColors.inkDim,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600)),
+            ),
+        ],
+      );
+}
+
+class _Synopsis extends StatefulWidget {
+  final String text;
+  const _Synopsis({required this.text});
+  @override
+  State<_Synopsis> createState() => _SynopsisState();
+}
+
+class _SynopsisState extends State<_Synopsis> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      AnimatedSize(
+        duration: const Duration(milliseconds: 180),
+        alignment: Alignment.topCenter,
+        child: Text(
+          widget.text,
+          maxLines: _open ? null : 3,
+          overflow: _open ? TextOverflow.visible : TextOverflow.ellipsis,
+          style: const TextStyle(
+              color: CamColors.inkDim, fontSize: 12.5, height: 1.55),
+        ),
+      ),
+      GestureDetector(
+        onTap: () => setState(() => _open = !_open),
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(_open ? 'Show less' : 'Read more',
+              style: const TextStyle(
+                  color: CamColors.accent,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700)),
+        ),
+      ),
+    ]);
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  final String watchLabel;
+  final int? myScore;
+  final VoidCallback? onWatch;
+  final VoidCallback? onDownload;
+  final VoidCallback onRate;
+
+  const _ActionRow({
+    required this.watchLabel,
+    required this.myScore,
+    required this.onWatch,
+    required this.onDownload,
+    required this.onRate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(children: [
+      Expanded(
+        flex: 3,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            gradient: const LinearGradient(
+                colors: [Color(0xFFFFC46B), Color(0xFFFF9A3D)]),
+          ),
+          child: SizedBox(
+            height: 46,
+            width: double.infinity,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11)),
+                textStyle: const TextStyle(
+                    fontSize: 13.5, fontWeight: FontWeight.w800),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              onPressed: onWatch,
+              icon: const Icon(Icons.play_arrow_rounded, size: 21),
+              label: Text(watchLabel,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        flex: 2,
+        child: SizedBox(
+          height: 46,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: CamColors.surfaceAlt,
+              foregroundColor: CamColors.ink,
+              side: const BorderSide(color: CamColors.line),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(11)),
+              textStyle:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+            ),
+            onPressed: onDownload,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('Download',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      _RoundButton(
+        icon: Icons.star_outline_rounded,
+        tooltip: myScore == null ? 'Rate this anime' : 'Rated $myScore/10',
+        onTap: onRate,
+        badge: myScore?.toString(),
+        size: 46,
+      ),
+    ]);
+  }
+}
+
+class _AudioSeasonBar extends StatelessWidget {
+  final String audio;
+  final ValueChanged<String> onAudio;
+  final String currentId;
+  final String currentTitle;
+  final List seasons;
+  final void Function(String id, String title) onSeason;
+
+  const _AudioSeasonBar({
+    required this.audio,
+    required this.onAudio,
+    required this.currentId,
+    required this.currentTitle,
+    required this.seasons,
+    required this.onSeason,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: CamColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CamColors.line),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                  value: 'sub',
+                  icon: Icon(Icons.closed_caption_rounded, size: 14),
+                  label: Text('SUB')),
+              ButtonSegment(
+                  value: 'dub',
+                  icon: Icon(Icons.headphones_rounded, size: 14),
+                  label: Text('DUB')),
+            ],
+            selected: {audio},
+            showSelectedIcon: false,
+            onSelectionChanged: (value) => onAudio(value.first),
+            expandedInsets: EdgeInsets.zero,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              minimumSize: const WidgetStatePropertyAll(Size(0, 36)),
+              textStyle: const WidgetStatePropertyAll(TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5)),
+              side: const WidgetStatePropertyAll(
+                  BorderSide(color: CamColors.line)),
+            ),
+          ),
+        ),
+        if (seasons.isNotEmpty) ...[
+          const SizedBox(width: 6),
+          Container(width: 0.8, height: 24, color: CamColors.line),
+          const SizedBox(width: 6),
+          PopupMenuButton<String>(
+            tooltip: 'Switch season',
+            onSelected: (id) {
+              Map? match;
+              for (final raw in seasons) {
+                if (raw is Map && '${raw['id']}' == id) match = raw;
+              }
+              if (match == null) return;
+              onSeason(id, (match['title'] ?? 'Anime').toString());
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                  value: currentId,
+                  child: Text(currentTitle,
+                      maxLines: 1, overflow: TextOverflow.ellipsis)),
+              for (final raw in seasons)
+                if (raw is Map && '${raw['id'] ?? ''}'.isNotEmpty)
+                  PopupMenuItem(
+                    value: '${raw['id']}',
+                    child: Text(
+                        '${raw['relation'] ?? 'Related'}: ${raw['title'] ?? 'Untitled'}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+            ],
+            child: Container(
+              height: 36,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: CamColors.surfaceAlt,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: const [
+                Icon(Icons.swap_horiz_rounded,
+                    size: 15, color: CamColors.inkDim),
+                SizedBox(width: 5),
+                Text('Season',
+                    style:
+                        TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+                SizedBox(width: 2),
+                Icon(Icons.expand_more_rounded,
+                    size: 15, color: CamColors.inkDim),
+              ]),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onPlayQueue;
+  final VoidCallback onDownload;
+  final VoidCallback onClear;
+
+  const _SelectionBar({
+    required this.count,
+    required this.onPlayQueue,
+    required this.onDownload,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 10),
+      decoration: BoxDecoration(
+        color: CamColors.accent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CamColors.accent.withValues(alpha: 0.35)),
+      ),
+      child: Column(children: [
+        Row(children: [
+          const Icon(Icons.check_circle_rounded,
+              size: 15, color: CamColors.accent),
+          const SizedBox(width: 6),
+          Text('$count selected',
+              style: const TextStyle(
+                  color: CamColors.accent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800)),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Clear selection',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            onPressed: onClear,
+          ),
+        ]),
+        const SizedBox(height: 2),
+        Row(children: [
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: CamColors.accent,
+                  foregroundColor: Colors.black,
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w800),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                onPressed: onPlayQueue,
+                icon: const Icon(Icons.playlist_play_rounded, size: 18),
+                label: Text('Play queue ($count)',
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SizedBox(
+              height: 40,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: CamColors.ink,
+                  side: const BorderSide(color: CamColors.line),
+                  textStyle: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                onPressed: onDownload,
+                icon: const Icon(Icons.download_rounded, size: 17),
+                label: const Text('Download',
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  final String eyebrow;
+  final String title;
+  final Widget? trailing;
+  const _SectionHeading(
+      {required this.eyebrow, required this.title, this.trailing});
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(eyebrow.toUpperCase(),
+                  style: const TextStyle(
+                      color: CamColors.inkDim,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2)),
+              const SizedBox(height: 3),
+              Text(title,
+                  style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2)),
+            ]),
+          ),
+          if (trailing != null) trailing!,
+        ],
+      );
+}
+
+class _SeasonsRail extends StatelessWidget {
+  final List seasons;
+  final void Function(String id, String title) onOpen;
+  const _SeasonsRail({required this.seasons, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: seasons.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      itemBuilder: (_, i) {
+        final raw = seasons[i];
+        final s = raw is Map ? raw : const {};
+        final id = '${s['id'] ?? ''}';
+        return InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap:
+              id.isEmpty ? null : () => onOpen(id, '${s['title'] ?? 'Anime'}'),
+          child: SizedBox(
+            width: 108,
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: SizedBox(
+                  width: 108,
+                  height: 150,
+                  child: CachedPosterImage(url: '${s['image'] ?? ''}'),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text((s['relation'] ?? 'Related').toString().toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: CamColors.accent,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6)),
+              const SizedBox(height: 2),
+              Text('${s['title'] ?? 'Untitled'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      height: 1.25)),
+              const SizedBox(height: 2),
+              Text('${s['episode_count'] ?? '?'} EP · ${s['year'] ?? '—'}',
+                  style:
+                      const TextStyle(color: CamColors.inkDim, fontSize: 9.5)),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RoundButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final String? badge;
+  final double size;
+
+  const _RoundButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.badge,
+    this.size = 38,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.5),
+        shape: CircleBorder(side: BorderSide(color: CamColors.line)),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Stack(alignment: Alignment.center, children: [
+            SizedBox(
+              width: size,
+              height: size,
+              child: Icon(icon, size: size * 0.48, color: CamColors.ink),
+            ),
+            if (badge != null)
+              Positioned(
+                right: 5,
+                top: 5,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: CamColors.accent,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(badge!,
+                      style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900)),
+                ),
+              ),
+          ]),
+        ),
+      ),
     );
   }
 }

@@ -34,6 +34,13 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // WorkManager + Room are reached reflectively; without these rules R8
+            // strips them and the app crashes inside androidx.startup.
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -46,4 +53,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Periodic anime-advert notifications (every 30 minutes = 2 per hour).
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 }
