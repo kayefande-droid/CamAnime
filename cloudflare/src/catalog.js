@@ -1,5 +1,5 @@
 /** AniList catalog: home grids, search, details, episodes. Public GraphQL, cached at the edge. */
-const AL_GRAPHQL = "https://graphql.anilist.co";
+import { alQuery } from "./anilist.js";
 
 const CARD_FIELDS = `
   id
@@ -16,35 +16,26 @@ const CARD_FIELDS = `
   description
 `;
 
-async function alQuery(query, variables) {
-  const body = JSON.stringify({ query, variables });
-  const cacheKey = new Request(`https://ca-cache.internal/anilist?${encodeURIComponent(body)}`);
-  const cache = caches.default;
-  const hit = await cache.match(cacheKey);
-  if (hit) return hit.json();
-  const res = await fetch(AL_GRAPHQL, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body,
-  });
-  if (!res.ok) throw new Error(`AniList ${res.status}`);
-  const data = await res.json();
-  await cache.put(cacheKey, new Response(JSON.stringify(data), {
-    headers: { "content-type": "application/json", "cache-control": "public, max-age=600" },
-  }));
-  return data;
-}
-
+/**
+ * The whole home page in ONE GraphQL request. Three separate queries meant
+ * three rate-limit hits per visitor; aliasing them into a single document
+ * keeps the same data for a third of the budget.
+ */
 export async function homeGrids() {
-  const [trending, airing, movies] = await Promise.all([
-    alQuery(`query{Page(perPage:24){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${CARD_FIELDS}}}}`, {}),
-    alQuery(`query{Page(perPage:18){media(type:ANIME,sort:SCORE_DESC,status:RELEASING,isAdult:false){${CARD_FIELDS}}}}`, {}),
-    alQuery(`query{Page(perPage:12){media(type:ANIME,sort:POPULARITY_DESC,format:MOVIE,isAdult:false){${CARD_FIELDS}}}}`, {}),
-  ]);
+  const payload = await alQuery(
+    `query{
+      trending: Page(perPage:24){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${CARD_FIELDS}}}
+      airing: Page(perPage:18){media(type:ANIME,sort:SCORE_DESC,status:RELEASING,isAdult:false){${CARD_FIELDS}}}
+      movies: Page(perPage:12){media(type:ANIME,sort:POPULARITY_DESC,format:MOVIE,isAdult:false){${CARD_FIELDS}}}
+    }`,
+    {},
+    { ttl: 900 }
+  );
+  const data = payload.data;
   return {
-    trending: trending.data.Page.media,
-    airing: airing.data.Page.media,
-    movies: movies.data.Page.media,
+    trending: data.trending.media,
+    airing: data.airing.media,
+    movies: data.movies.media,
   };
 }
 

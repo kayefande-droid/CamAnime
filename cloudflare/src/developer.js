@@ -203,7 +203,6 @@ export async function stream(env, request, url, animeId, epRaw) {
       type: "video/mp4",
       quality: s.quality || "1080p",
       url: absolute(s.stream_url),
-      referer: s.raw_url ? absolute(s.stream_url).split("url=")[1]?.split("&")[0] : undefined,
     })),
     usage: { calls_today: calls, daily_limit: DAILY_LIMIT },
     attribution: "Powered by CamAnime — https://camanime.onrender.com",

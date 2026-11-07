@@ -241,6 +241,7 @@ export async function proxyMedia(env, request) {
     if (upstream.headers.get(h)) out.set(h, upstream.headers.get(h));
   }
   if (!out.has("accept-ranges")) out.set("accept-ranges", "bytes"); // seeks keep working
+  out.set("access-control-allow-origin", "*"); // developer API streams are embedded cross-origin
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
@@ -257,6 +258,7 @@ export async function proxyHls(env, request) {
       if (res.headers.get(h)) headers.set(h, res.headers.get(h));
     }
     headers.set("accept-ranges", "bytes");
+    headers.set("access-control-allow-origin", "*");
     return new Response(res.body, { status: res.status, headers });
   }
   const text = await res.text();

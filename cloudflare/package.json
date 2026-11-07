@@ -8,7 +8,7 @@
     "dev": "wrangler dev",
     "db:init": "wrangler d1 execute camanime --remote --file=./schema.sql",
     "db:init:local": "wrangler d1 execute camanime --local --file=./schema.sql",
-    "test": "node --test test/smoke.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

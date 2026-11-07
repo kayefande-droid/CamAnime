@@ -10,6 +10,14 @@
   "compatibility_date": "2026-11-04",
   "workers_dev": true,
 
+  // Workers Logs + Traces: streaming download failures upstream (rotating
+  // provider domains) are otherwise invisible in production.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  },
+
   "d1_databases": [
     {
       "binding": "DB",
