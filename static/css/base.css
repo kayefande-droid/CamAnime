@@ -840,7 +840,11 @@ html[data-data="low"] body { background-attachment: scroll; }
 
 .dev-note { margin-top: 1.6rem; color: var(--text-muted, #64708a); font-size: .78rem; max-width: 74ch; }
 
+.dev-table-scroll { width: 100%; }
+
 @media (max-width: 767px) {
   .dev-bullets { gap: .35rem; }
-  .dev-table { display: block; overflow-x: auto; min-width: 560px; }
+  /* Scroll the wrapper, never widen the page. */
+  .dev-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .dev-table-scroll .dev-table { min-width: 560px; }
 }

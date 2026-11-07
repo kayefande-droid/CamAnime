@@ -304,7 +304,7 @@ export function developersPage(user) {
       <p class="muted">The same route exists on the Cloudflare deployment: <code>https://camanjme.camanime.workers.dev/api/v1/stream/16498/1</code>.</p>
 
       <h2 class="section-title">Endpoints</h2>
-      <table class="dev-table">
+      <div class="dev-table-scroll"><table class="dev-table">
         <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Returns</th></tr></thead>
         <tbody>
           <tr><td><code>GET</code></td><td><code>/api/v1/stream/:animeId/:ep</code></td><td><code>x-api-key</code></td><td>Stream URLs for that episode</td></tr>
@@ -312,7 +312,7 @@ export function developersPage(user) {
           <tr><td><code>POST</code></td><td><code>/api/developer/keys</code></td><td>Session cookie</td><td>A new key — shown once</td></tr>
           <tr><td><code>DELETE</code></td><td><code>/api/developer/keys/:id</code></td><td>Session cookie</td><td>Revokes the key</td></tr>
         </tbody>
-      </table>
+      </table></div>
 
       <h2 class="section-title">Response</h2>
       <pre class="dev-code">{
@@ -346,7 +346,7 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
 
     <section id="limits">
       <h2 class="section-title">Free tier, in plain numbers</h2>
-      <table class="dev-table">
+      <div class="dev-table-scroll"><table class="dev-table">
         <thead><tr><th>What</th><th>Free</th></tr></thead>
         <tbody>
           <tr><td>Calls per key per day</td><td><b>1,000</b></td></tr>
@@ -355,7 +355,7 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
           <tr><td>Subtitles / dubs</td><td>Provider files as-is (sub)</td></tr>
           <tr><td>Commercial use</td><td>Ask first — the key is personal</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p class="dev-note">CamAnime does not host these files; it resolves and proxies them from the provider the site already uses. Keep your key private, link back to CamAnime, and respect the provider's terms and your local law. Rate limits exist so one integration cannot take the shared provider offline for the site and the app.</p>
     </section>
 
