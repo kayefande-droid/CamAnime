@@ -16,3 +16,5 @@ static/downloads/*.apk
 static/downloads/*.zip
 static/downloads/*.exe
 mobile/camanime_app/build_log*.txt
+mobile/apk/
+.shots/

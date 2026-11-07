@@ -23,6 +23,9 @@ class EpisodeSource {
   final String animeTitle;
   final String image;
 
+  /// Pixel height advertised by the provider (0 when it does not say).
+  final int height;
+
   const EpisodeSource({
     required this.url,
     required this.label,
@@ -31,7 +34,10 @@ class EpisodeSource {
     this.mirrors = const [],
     this.animeTitle = '',
     this.image = '',
+    this.height = 0,
   });
+
+  String get qualityLabel => height > 0 ? '${height}p' : 'Auto';
 
   EpisodeSource copyWith({String? url, List<String>? mirrors}) => EpisodeSource(
         url: url ?? this.url,
@@ -41,7 +47,88 @@ class EpisodeSource {
         mirrors: mirrors ?? this.mirrors,
         animeTitle: animeTitle,
         image: image,
+        height: height,
       );
+}
+
+/// Streaming quality preferences offered in Settings and the player.
+const List<String> kStreamQualities = ['auto', '360', '480', '720', '1080'];
+
+String streamQualityLabel(String preference) {
+  if (preference != 'auto' || int.tryParse(preference) != null) {
+    final h = int.tryParse(preference);
+    if (h != null) return '${h}p or lower';
+  }
+  return 'Auto (best available)';
+}
+
+/// Builds the playable server list for one episode from an episode bundle.
+///
+/// Ordering is what makes playback feel fast: the preferred audio first, then
+/// the best source inside the user's quality cap, so a 720p cap never starts a
+/// 1080p stream by accident and never drops below 480p when a 480p exists.
+List<EpisodeSource> episodeSourcesFromBundle(
+  Map bundle, {
+  required String animeId,
+  required int episode,
+  required String animeTitle,
+  required String image,
+  required String preferredAudio,
+  required String Function(String) absolute,
+  String qualityPreference = 'auto',
+}) {
+  final servers = (bundle['servers'] as List?) ?? const [];
+  final sources = <EpisodeSource>[];
+  final seen = <String>{};
+  for (final raw in servers) {
+    if (raw is! Map) continue;
+    final mode = (raw['playback_mode'] ?? '').toString();
+    if (mode != 'mp4' && mode != 'hls') continue;
+    final path = (raw['stream_url'] ?? '').toString();
+    if (path.isEmpty) continue;
+    final url = absolute(path);
+    if (!seen.add(url)) continue;
+    final height = downloadHeight((raw['quality'] ?? '').toString());
+    final name = (raw['name'] ?? 'Server').toString();
+    sources.add(EpisodeSource(
+      url: url,
+      label: '$name${height > 0 ? ' · ${height}p' : ''}',
+      animeId: animeId,
+      episode: episode,
+      animeTitle: animeTitle,
+      image: image,
+      height: height,
+    ));
+  }
+  final cap = int.tryParse(qualityPreference) ?? 0;
+  int audioRank(EpisodeSource s) =>
+      ((bundle['servers'] as List?) ?? const []).any((raw) =>
+              raw is Map &&
+              (raw['stream_url'] ?? '').toString().isNotEmpty &&
+              (raw['audio'] ?? '').toString() == preferredAudio &&
+              absolute((raw['stream_url'] ?? '').toString()) == s.url)
+          ? 0
+          : 1;
+  int qualityRank(EpisodeSource s) {
+    if (cap <= 0 || s.height <= 0) return s.height > 0 ? 1 : 2;
+    if (s.height <= cap) return 0;
+    return 2;
+  }
+
+  sources.sort((a, b) {
+    final audio = audioRank(a).compareTo(audioRank(b));
+    if (audio != 0) return audio;
+    final q = qualityRank(a).compareTo(qualityRank(b));
+    if (q != 0) return q;
+    if (cap > 0 && a.height <= cap && b.height <= cap) {
+      return b.height.compareTo(a.height);
+    }
+    if (cap > 0 && a.height > cap && b.height > cap) {
+      return a.height.compareTo(b.height);
+    }
+    return b.height.compareTo(a.height);
+  });
+  return sources;
 }
 
 /// One downloadable file the backend resolved for an episode.

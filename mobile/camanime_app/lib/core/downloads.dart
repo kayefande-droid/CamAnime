@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_notifications.dart';
+import 'device_storage.dart';
 
 /// Lifecycle of one offline episode.
 enum DownloadStage {
@@ -54,6 +55,19 @@ class DownloadTask {
   final String image;
   String? localName;
 
+  /// "Spring 2013" style label; library folders group by anime + season.
+  final String season;
+
+  /// Advertised pixel height of the saved file (0 when the provider is vague).
+  final int height;
+
+  /// Set the moment the file is complete, so the Library can say exactly when
+  /// the episode became watchable offline.
+  int completedAt;
+
+  /// Location of the exported public copy (`Download/CamAnime/...`), if any.
+  String? devicePath;
+
   int received;
   int total;
 
@@ -75,6 +89,10 @@ class DownloadTask {
     required this.fileName,
     this.image = '',
     this.localName,
+    this.season = '',
+    this.height = 0,
+    this.completedAt = 0,
+    this.devicePath,
     this.received = 0,
     this.total = 0,
     this.estimated = false,
@@ -86,6 +104,19 @@ class DownloadTask {
   double? get progress => total > 0 ? (received / total).clamp(0.0, 1.0) : null;
 
   String get displayTitle => '$animeTitle · Ep $episode';
+
+  String get qualityLabel => height > 0 ? '${height}p' : 'Auto';
+
+  /// "Completed · 2.4 GB · 12:41" for the Library, empty while still running.
+  String get completedLabel {
+    if (stage != DownloadStage.completed) return '';
+    final at = completedAt > 0 ? DateTime.fromMillisecondsSinceEpoch(completedAt) : null;
+    final when = at == null
+        ? ''
+        : ' · ${at.day.toString().padLeft(2, '0')}/${at.month.toString().padLeft(2, '0')} '
+            '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    return 'Completed$when';
+  }
 
   bool get isPlayablePartially => received > 1024 * 1024;
 
@@ -99,6 +130,10 @@ class DownloadTask {
         'file_name': fileName,
         'image': image,
         'local_name': localName,
+        'season': season,
+        'height': height,
+        'completed_at': completedAt,
+        'device_path': devicePath,
         'received': received,
         'total': total,
         'estimated': estimated,
@@ -117,6 +152,10 @@ class DownloadTask {
         fileName: (json['file_name'] ?? 'episode.mp4').toString(),
         image: (json['image'] ?? '').toString(),
         localName: json['local_name']?.toString(),
+        season: (json['season'] ?? '').toString(),
+        height: int.tryParse('${json['height'] ?? 0}') ?? 0,
+        completedAt: int.tryParse('${json['completed_at'] ?? 0}') ?? 0,
+        devicePath: json['device_path']?.toString(),
         received: int.tryParse('${json['received'] ?? 0}') ?? 0,
         total: int.tryParse('${json['total'] ?? 0}') ?? 0,
         estimated: json['estimated'] == true,
@@ -144,6 +183,31 @@ class BackgroundKeepAlive {
       // Desktop/web or a platform without the service — downloads still run.
     }
   }
+}
+
+/// One shelf in the Library: every downloaded episode of one anime season.
+///
+/// Season grouping is what keeps a 100-episode shonen from burying the rest of
+/// the library: episodes of the same season always land in the same folder.
+class DownloadFolder {
+  final String animeTitle;
+  final String season;
+  final List<DownloadTask> tasks;
+
+  const DownloadFolder({
+    required this.animeTitle,
+    required this.season,
+    required this.tasks,
+  });
+
+  String get key => '$animeTitle|$season';
+  String get title => animeTitle;
+  String get subtitle => season.isEmpty ? 'All episodes' : season;
+  int get bytes => tasks.fold(0, (sum, t) => sum + max(t.total, t.received));
+  String get cover =>
+      tasks.firstWhere((t) => t.image.isNotEmpty, orElse: () => tasks.first).image;
+  List<int> get episodes => tasks.map((t) => t.episode).toList()..sort();
+  bool get allExported => tasks.every((t) => (t.devicePath ?? '').isNotEmpty);
 }
 
 /// Persistent, resumable episode download queue.
@@ -240,6 +304,27 @@ class DownloadManager extends ChangeNotifier {
   List<DownloadTask> get completed =>
       _tasks.values.where((t) => t.stage == DownloadStage.completed).toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
+  /// Completed episodes folded into anime + season folders, newest first.
+  List<DownloadFolder> get folders {
+    final groups = <String, List<DownloadTask>>{};
+    for (final task in completed) {
+      final season = task.season.trim();
+      groups.putIfAbsent('${task.animeTitle}|$season', () => []).add(task);
+    }
+    final out = <DownloadFolder>[];
+    groups.forEach((key, tasks) {
+      final first = tasks.first;
+      tasks.sort((a, b) => a.episode.compareTo(b.episode));
+      out.add(DownloadFolder(
+        animeTitle: first.animeTitle,
+        season: first.season.trim(),
+        tasks: tasks,
+      ));
+    });
+    out.sort((a, b) => b.tasks.first.updatedAt.compareTo(a.tasks.first.updatedAt));
+    return out;
+  }
 
   int get activeCount => active.length;
   int get readyCount => completed.length;
@@ -437,6 +522,8 @@ class DownloadManager extends ChangeNotifier {
     required String audio,
     required String url,
     String image = '',
+    String season = '',
+    int height = 0,
   }) async {
     await init();
     if (_root == null) throw const FileSystemException('Storage unavailable');
@@ -469,6 +556,8 @@ class DownloadManager extends ChangeNotifier {
       sourceUrl: url,
       fileName: '$safeTitle.${_extensionFor(url)}',
       image: image,
+      season: season.trim(),
+      height: height,
       total: 0,
       stage: DownloadStage.queued,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -730,7 +819,9 @@ class DownloadManager extends ChangeNotifier {
           break;
         }
         buffer.add(chunk);
-        if (buffer.length >= 256 * 1024) {
+        // 1 MiB batches: a fast link delivers several hundred KB per burst, so
+        // larger writes cut syscalls (and CPU per byte) without adding latency.
+        if (buffer.length >= 1024 * 1024) {
           await raf.writeFrom(buffer.takeBytes());
         }
         received += chunk.length;
@@ -854,6 +945,7 @@ class DownloadManager extends ChangeNotifier {
       ..estimated = false
       ..stage = DownloadStage.completed
       ..error = ''
+      ..completedAt = DateTime.now().millisecondsSinceEpoch
       ..updatedAt = DateTime.now().millisecondsSinceEpoch;
     // Heads-up alert the moment the episode is watchable offline.
     unawaited(AppNotifications.downloadComplete(
@@ -861,6 +953,53 @@ class DownloadManager extends ChangeNotifier {
       episode: task.episode,
       taskId: task.id,
     ));
+    // Exported copy (public Downloads) is best effort and never blocks saying
+    // "completed": the in-app offline file is already playable.
+    if (task.devicePath == null || task.devicePath!.isEmpty) {
+      unawaited(_autoExport(task));
+    }
+  }
+
+  Future<void> _autoExport(DownloadTask task) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('save_to_device') ?? true)) return;
+    } catch (_) {
+      return;
+    }
+    await exportToDevice(task);
+  }
+
+  /// Copies a completed episode into public device storage and remembers where
+  /// it went, so the Library can show the folder even after a restart.
+  Future<String?> exportToDevice(DownloadTask task) async {
+    if (task.stage != DownloadStage.completed) return null;
+    final file = completedFile(task);
+    if (file == null) return null;
+    final season = task.season.trim();
+    final location = await DeviceStorage.save(
+      sourcePath: file.path,
+      folder: _safeName(task.animeTitle),
+      subfolder: season.isEmpty ? '' : _safeName(season),
+      fileName: task.fileName,
+    );
+    if (location != null && location.isNotEmpty) {
+      task.devicePath = location;
+      task.updatedAt = DateTime.now().millisecondsSinceEpoch;
+      await _persist();
+      _safeNotify();
+    }
+    return location;
+  }
+
+  /// Saves every episode of one folder; returns how many copies were made.
+  Future<int> exportFolder(DownloadFolder folder) async {
+    var saved = 0;
+    for (final task in folder.tasks) {
+      if ((task.devicePath ?? '').isNotEmpty) continue;
+      if (await exportToDevice(task) != null) saved++;
+    }
+    return saved;
   }
 
   Future<void> _persist() async {

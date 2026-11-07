@@ -608,6 +608,28 @@ def test_mobile_navigation_and_drawer_have_touch_sized_controls(api):
     assert b"body.schedule-drawer-open .live-schedule-tab{z-index:4197;pointer-events:none}" in Path(api.app.static_folder or "static", "css", "sync.css").read_bytes()
 
 
+def test_catalog_home_ships_playable_classic_anime(api):
+    dashboard = {
+        "trending": {"media": [anime()]},
+        "popularSeason": {"media": []},
+        "topRated": {"media": []},
+        "recentlyAdded": {"media": []},
+        "featuredMovie": {"media": []},
+        "series": {"media": []},
+    }
+    classics_page = {"Page": {"media": [anime(anime_id=16498, title="Attack on Titan")]}}
+    with patch.object(
+        api, "fetch_anilist", side_effect=[dashboard, classics_page]
+    ):
+        response = api.app.test_client().get("/api/v1/catalog/home")
+    assert response.status_code == 200
+    rows = response.json["catalog"]["classics"]
+    assert rows, "classics must render even when the catalogue is sparse"
+    assert rows[0]["id"] == 16498
+    assert rows[0]["title"] == "Attack on Titan"
+    assert "why" in rows[0]
+
+
 def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
     client = api.app.test_client()
     for path in ("/", "/anime/123"):

@@ -22,6 +22,16 @@ class PlayerScreen extends StatefulWidget {
   final bool resume;
   final List<String> mirrors;
   final void Function(String animeId, String title)? onOpenAnime;
+  final int? episode;
+
+  /// Resolves the next episode when the queue has no more entries, so the
+  /// player can continue a series without the user going back to the detail
+  /// page. Returning null means "no next episode exists".
+  final Future<EpisodeSource?> Function(int episode)? fetchEpisode;
+
+  /// Other qualities of the *same* episode, so the quality chips can switch
+  /// 1080p → 720p → 480p → 360p without leaving the player.
+  final List<EpisodeSource> variants;
 
   const PlayerScreen({
     super.key,
@@ -33,6 +43,9 @@ class PlayerScreen extends StatefulWidget {
     this.resume = false,
     this.mirrors = const [],
     this.onOpenAnime,
+    this.episode,
+    this.fetchEpisode,
+    this.variants = const [],
   });
 
   @override
@@ -53,6 +66,11 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _volume = 1.0;
   double _brightness = 1.0;
   int _preferredServer = 0;
+  EpisodeSource? _variant;
+
+  /// Quality variants belong to one episode; they are cleared whenever the
+  /// player moves on, so a chip can never switch back to the previous episode.
+  List<EpisodeSource> _episodeVariants = const [];
 
   late List<EpisodeSource> playlist;
   int index = 0;
@@ -65,16 +83,37 @@ class _PlayerScreenState extends State<PlayerScreen>
           url: widget.url,
           label: widget.label,
           mirrors: widget.mirrors,
+          episode: widget.episode,
         )
       : playlist[index];
 
+  /// Distinct heights advertised across the resolved sources.
+  List<int> get _qualities {
+    final set = <int>{};
+    for (final source in _variants) {
+      if (source.height > 0) set.add(source.height);
+    }
+    final list = set.toList()..sort((a, b) => b.compareTo(a));
+    return list;
+  }
+
+  int get _activeHeight => _variant?.height ?? current.height;
+
+  /// The URL currently playing: the chosen quality variant, else the episode's
+  /// primary source. Mirrors still provide the automatic server fallback.
+  String get _primaryUrl => _variant?.url ?? current.url;
+
   List<String> get _urls {
     final list = <String>[];
-    for (final raw in [current.url, ...current.mirrors]) {
+    for (final raw in [_primaryUrl, ...current.mirrors]) {
       if (raw.trim().isNotEmpty && !list.contains(raw)) list.add(raw);
     }
     return list;
   }
+
+  List<EpisodeSource> get _variants => _episodeVariants.isNotEmpty
+      ? _episodeVariants
+      : (playlist.length > 1 ? playlist : const <EpisodeSource>[]);
 
   bool get _isPartial => widget.localFile && current.url.endsWith('.part');
 
@@ -88,10 +127,13 @@ class _PlayerScreenState extends State<PlayerScreen>
               url: widget.url,
               label: widget.label,
               mirrors: widget.mirrors,
+              episode: widget.episode,
             )
           ]
         : List.of(widget.playlist);
     index = widget.startIndex.clamp(0, playlist.length - 1);
+    _episodeVariants = widget.variants;
+    _variant = _episodeVariants.isEmpty ? null : _episodeVariants.first;
     _prefs();
     _loadCurrent();
     _loadRecommendationsWhenIdle();
@@ -101,7 +143,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _autoplayNext = p.getBool('app_autoplay') ?? false;
+      _autoplayNext = p.getBool('app_autoplay') ?? true;
       _resumeEnabled = p.getBool('app_resume') ?? true;
       _volume = (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
       _brightness =
@@ -362,33 +404,87 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  /// Auto-advance a user-built queue, or the next episode when the user has
-  /// enabled autoplay in Settings.
+  /// Switches to the source closest to the requested height: an exact match,
+  /// otherwise the nearest lower quality, otherwise the nearest higher one.
+  Future<void> _selectQuality(int height) async {
+    EpisodeSource? best;
+    var bestScore = 1 << 30;
+    for (final source in _variants) {
+      final h = source.height;
+      if (h <= 0) continue;
+      final score = h == height
+          ? -1000
+          : (h <= height ? height - h : 1000 + (h - height));
+      if (score < bestScore) {
+        bestScore = score;
+        best = source;
+      }
+    }
+    if (best == null || best.url == _primaryUrl) return;
+    _urlIndex = 0;
+    setState(() => _variant = best);
+    await _disposePlayback();
+    await _tryUrls();
+  }
+
+  /// Auto-advance a user-built queue, then keep the series going by resolving
+  /// the next episode when the user has enabled autoplay in Settings.
   void _advance() {
     if (_switching) return;
-    final hasNext = index < playlist.length - 1;
-    if (!hasNext) {
-      if (_autoplayNext && mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Episode finished.')));
-      }
+    if (index < playlist.length - 1) {
+      if (!_autoplayNext && playlist.length == 1) return;
+      _switching = true;
+      Future<void>(() async {
+        try {
+          await _disposePlayback();
+          if (!mounted) return;
+          setState(() {
+            index += 1;
+            _variant = null;
+            _episodeVariants = const [];
+            _error = null;
+          });
+          await _tryUrls();
+        } finally {
+          _switching = false;
+        }
+      });
       return;
     }
-    if (!_autoplayNext && playlist.length == 1) return;
-    _switching = true;
-    Future<void>(() async {
-      try {
-        await _disposePlayback();
-        if (!mounted) return;
-        setState(() {
-          index += 1;
-          _error = null;
-        });
-        await _tryUrls();
-      } finally {
-        _switching = false;
-      }
-    });
+    final fetch = widget.fetchEpisode;
+    if (_autoplayNext && fetch != null && !widget.localFile) {
+      final base = current.episode ?? widget.episode;
+      if (base == null || base <= 0) return;
+      _switching = true;
+      Future<void>(() async {
+        try {
+          final next = await fetch(base + 1);
+          if (!mounted) return;
+          if (next == null) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Episode finished.')));
+            return;
+          }
+          await _disposePlayback();
+          if (!mounted) return;
+          setState(() {
+            playlist = [...playlist, next];
+            index = playlist.length - 1;
+            _variant = null;
+            _episodeVariants = const [];
+            _error = null;
+          });
+          await _tryUrls();
+        } finally {
+          _switching = false;
+        }
+      });
+      return;
+    }
+    if (_autoplayNext && mounted && !widget.localFile) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Episode finished.')));
+    }
   }
 
   Future<void> _goTo(int target) async {
@@ -397,6 +493,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted) return;
     setState(() {
       index = target;
+      _variant = null;
+      _episodeVariants = const [];
       _error = null;
     });
     await _tryUrls();
@@ -509,8 +607,30 @@ class _PlayerScreenState extends State<PlayerScreen>
                     icon: Icons.downloading_rounded, color: CamColors.accent),
               if (!widget.localFile && _resumeEnabled)
                 const MetaPill('RESUME ON', color: CamColors.inkDim),
+              if (_autoplayNext && !widget.localFile)
+                const MetaPill('AUTO-NEXT ON',
+                    icon: Icons.skip_next_rounded, color: CamColors.success),
             ]),
           ),
+          if (_qualities.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: Row(children: [
+                const Icon(Icons.high_quality_rounded,
+                    size: 17, color: CamColors.inkDim),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Wrap(spacing: 7, runSpacing: 7, children: [
+                    for (final height in _qualities)
+                      ChoiceChip(
+                        label: Text('${height}p'),
+                        selected: _activeHeight == height,
+                        onSelected: (_) => _selectQuality(height),
+                      ),
+                  ]),
+                ),
+              ]),
+            ),
           _tuningCard(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

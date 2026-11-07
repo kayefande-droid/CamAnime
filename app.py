@@ -3209,6 +3209,31 @@ def api_v1_schedule():
     return response
 
 
+
+def _classics_cards() -> List[Dict]:
+    """Curated older/classic anime as ordinary cards.
+
+    They stream and download through the exact same provider pipeline as every
+    other title; only the source of the row differs. AniList being unreachable
+    must not hide the row, so the curated ids still render.
+    """
+    why_map = {c["id"]: c.get("why", "") for c in ANIME_CLASSICS}
+    raw = (fetch_anilist(CLASSICS_CARD_QUERY, {"ids": [c["id"] for c in ANIME_CLASSICS]})
+           .get("Page", {}).get("media") or [])
+    cards: List[Dict] = []
+    for item in raw:
+        if not item:
+            continue
+        card = format_anime_card(item)
+        card["why"] = why_map.get(card.get("id"), "")
+        cards.append(card)
+    if not cards:
+        cards = [{**c, "image": "", "banner": "", "rating": "",
+                  "episode": "CLASSIC", "format": "TV", "status": "Finished"}
+                 for c in ANIME_CLASSICS]
+    return cards
+
+
 @app.route("/api/v1/catalog/home")
 def api_v1_catalog_home():
     data = fetch_anilist(HOME_DASHBOARD_QUERY)
@@ -3224,6 +3249,7 @@ def api_v1_catalog_home():
                 "movies": [format_anime_card(a) for a in fb_lists.get("movies", [])],
                 "series": [format_anime_card(a) for a in (fb_lists.get("series") or fb_lists.get("trending", []))],
             }
+            cards["classics"] = _classics_cards()
             cards["featured"] = (cards["trending"] or [None])[0]
             response = jsonify({"status": "success",
                                 "catalog_source": _FALLBACK_API_NAMES.get(fb_source, fb_source),
@@ -3239,6 +3265,8 @@ def api_v1_catalog_home():
         "movies": [format_anime_card(a) for a in (data.get("featuredMovie", {}).get("media") or []) if a],
         "series": [format_anime_card(a) for a in (data.get("series", {}).get("media") or []) if a],
     }
+    # Older / classic titles are first-class catalogue rows, not decoration.
+    cards["classics"] = _classics_cards()
     cards["featured"] = (cards["trending"] or cards["popular"] or [None])[0]
     response = jsonify({"status": "success", "catalog_source": "AniList", "catalog": cards})
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"

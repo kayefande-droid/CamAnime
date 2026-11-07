@@ -1188,7 +1188,28 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       fresh = [],
       movies = [],
       series = [],
+      classics = [],
       ann = [];
+  /// Shown when the deployed API predates the classics row. These are real
+  /// AniList ids, so tapping one resolves the normal streaming servers — the
+  /// classics are not a special case in the player or the downloader.
+  static const List<Map<String, dynamic>> _classicFallback = [
+    {'id': 1, 'title': 'Cowboy Bebop', 'format': 'TV', 'year': 1998},
+    {'id': 16429, 'title': 'Death Note', 'format': 'TV', 'year': 2006},
+    {
+      'id': 5114,
+      'title': 'Fullmetal Alchemist: Brotherhood',
+      'format': 'TV',
+      'year': 2009
+    },
+    {'id': 321, 'title': 'Samurai Champloo', 'format': 'TV', 'year': 2004},
+    {'id': 199, 'title': 'Spirited Away', 'format': 'MOVIE', 'year': 2001},
+    {'id': 20, 'title': 'Naruto Shippuden', 'format': 'TV', 'year': 2007},
+    {'id': 16498, 'title': 'Attack on Titan', 'format': 'TV', 'year': 2013},
+    {'id': 5680, 'title': 'K-On!', 'format': 'TV', 'year': 2009},
+    {'id': 11719, 'title': 'Sword Art Online', 'format': 'TV', 'year': 2012},
+  ];
+
   Map? featured;
   bool loading = true;
   bool offline = false;
@@ -1244,6 +1265,8 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         fresh = list('recently_added');
         movies = list('movies');
         series = list('series');
+        classics = list('classics');
+        if (classics.isEmpty) classics = List.of(_classicFallback);
         featured = hero;
         offline = result['offline'] == true;
         err = trending.isEmpty && popular.isEmpty && topRated.isEmpty
@@ -1387,6 +1410,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     out.add(_rail('Recently Added', fresh));
     out.add(_rail('Popular Movies', movies));
     out.add(_rail('Popular Series', series));
+    out.add(_rail('Anime Classics', classics));
     if (offline) {
       out.add(const Padding(
           padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -1941,16 +1965,17 @@ class _DetailScreenState extends State<DetailScreen> {
       final bundle = await _sourcesFor(ep);
       currentEpisode = ep;
       if (bundle == null) continue;
-      final urls = _mirrorUrls(bundle);
-      if (urls.isEmpty) continue;
+      final list = await _streamSources(ep, bundle);
+      if (list.isEmpty) continue;
       sources.add(EpisodeSource(
-        url: urls.first,
-        mirrors: urls.skip(1).toList(),
+        url: list.first.url,
+        mirrors: list.skip(1).map((s) => s.url).toList(),
         label: '$title — Ep $ep (${audio.toUpperCase()})',
         animeId: widget.animeId,
         episode: ep,
         animeTitle: title,
         image: (info['image'] ?? '').toString(),
+        height: list.first.height,
       ));
     }
     if (!mounted) return;
@@ -2234,32 +2259,38 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Every playable server URL for an episode, audio-matched first. The
-  /// player walks this list until one initialises.
-  List<String> _mirrorUrls(Map<String, dynamic> bundle) {
-    final servers = (bundle['servers'] as List?) ?? [];
-    final maps = servers.whereType<Map>().toList();
-    final ordered = <Map>[
-      ...maps.where((s) => s['audio'] == audio),
-      ...maps.where((s) => s['audio'] != audio),
-    ];
-    final urls = <String>[];
-    for (final server in ordered) {
-      final mode = (server['playback_mode'] ?? '').toString();
-      if (mode != 'mp4' && mode != 'hls') continue;
-      final path = (server['stream_url'] ?? '').toString();
-      if (path.isEmpty) continue;
-      final url = Api.abs(path);
-      if (!urls.contains(url)) urls.add(url);
-    }
-    return urls;
-  }
-
   void _openAnime(String id, String title) {
     Navigator.push(
         context,
         MaterialPageRoute(
             builder: (_) => DetailScreen(animeId: id, title: title)));
+  }
+
+  Future<List<EpisodeSource>> _streamSources(
+      int ep, Map<String, dynamic> bundle) async {
+    final p = await SharedPreferences.getInstance();
+    final pref = p.getString('stream_quality') ?? 'auto';
+    return episodeSourcesFromBundle(
+      bundle,
+      animeId: widget.animeId,
+      episode: ep,
+      animeTitle: (info['title'] ?? widget.title).toString(),
+      image: (info['image'] ?? '').toString(),
+      preferredAudio: audio,
+      absolute: Api.abs,
+      qualityPreference: pref,
+    );
+  }
+
+  /// Next episode for auto-next: its preferred source plus its other servers
+  /// as mirrors, so a dead provider is still skipped automatically.
+  Future<EpisodeSource?> _sourceForEpisode(int ep) async {
+    final bundle = await _sourcesFor(ep);
+    if (bundle == null) return null;
+    final list = await _streamSources(ep, bundle);
+    if (list.isEmpty) return null;
+    return list.first
+        .copyWith(mirrors: list.skip(1).map((s) => s.url).toList());
   }
 
   Future<void> _play(int ep) async {
@@ -2290,8 +2321,9 @@ class _DetailScreenState extends State<DetailScreen> {
           content: Text('Could not reach streaming servers — try again.')));
       return;
     }
-    final urls = _mirrorUrls(bundle);
-    if (urls.isEmpty) {
+    final sources = await _streamSources(ep, bundle);
+    if (!mounted) return;
+    if (sources.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Only embed servers available — watch on the site.')));
       return;
@@ -2300,9 +2332,12 @@ class _DetailScreenState extends State<DetailScreen> {
         context,
         MaterialPageRoute(
             builder: (_) => PlayerScreen(
-                  url: urls.first,
-                  mirrors: urls.skip(1).toList(),
+                  url: sources.first.url,
+                  mirrors: sources.skip(1).map((s) => s.url).toList(),
+                  variants: sources,
+                  episode: ep,
                   resume: true,
+                  fetchEpisode: _sourceForEpisode,
                   label: '$title — Ep $ep (${audio.toUpperCase()})',
                   onOpenAnime: _openAnime,
                 )));
@@ -2355,6 +2390,8 @@ class _DetailScreenState extends State<DetailScreen> {
       audio: chosen.audio,
       url: chosen.url,
       image: (info['image'] ?? '').toString(),
+      season: (info['season'] ?? '').toString(),
+      height: chosen.height,
     );
   }
 

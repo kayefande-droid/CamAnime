@@ -37,11 +37,13 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _manager = DownloadManager.instance;
   String audio = 'sub';
-  bool autoplay = false;
+  bool autoplay = true;
   bool resume = true;
   bool dataSaver = false;
   int concurrency = 2;
   String quality = '720';
+  String streamQuality = 'auto';
+  bool saveToDevice = true;
   bool adverts = true;
   String email = '';
   bool downloadAlerts = true;
@@ -58,7 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
     setState(() {
       audio = (p.getString('app_audio') ?? 'sub') == 'dub' ? 'dub' : 'sub';
-      autoplay = p.getBool('app_autoplay') ?? false;
+      autoplay = p.getBool('app_autoplay') ?? true;
       resume = p.getBool('app_resume') ?? true;
       dataSaver = p.getBool('app_data_saver') ?? false;
       concurrency = _manager.concurrency;
@@ -67,6 +69,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               .contains(savedQuality)
           ? savedQuality
           : '720';
+      final savedStream = p.getString('stream_quality') ?? 'auto';
+      streamQuality = kStreamQualities.contains(savedStream)
+          ? savedStream
+          : 'auto';
+      saveToDevice = p.getBool('save_to_device') ?? true;
       adverts = p.getBool(AdNotifications.prefKey) ?? true;
       email = p.getString('user_email') ?? '';
       downloadAlerts = p.getBool(AppNotifications.prefKey) ?? true;
@@ -135,6 +142,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   await _setBool('app_autoplay', v);
                 },
               ),
+              _tile(
+                icon: Icons.high_quality_rounded,
+                title: 'Streaming quality',
+                subtitle: streamQuality == 'auto'
+                    ? 'Best server available · switches quality without restarting'
+                    : '${streamQualityLabel(streamQuality)} · saves data on mobile',
+                trailing: DropdownButton<String>(
+                  value: streamQuality,
+                  underline: const SizedBox.shrink(),
+                  items: const [
+                    DropdownMenuItem(value: 'auto', child: Text('Auto')),
+                    DropdownMenuItem(value: '1080', child: Text('1080p')),
+                    DropdownMenuItem(value: '720', child: Text('720p')),
+                    DropdownMenuItem(value: '480', child: Text('480p')),
+                    DropdownMenuItem(value: '360', child: Text('360p')),
+                  ],
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    setState(() => streamQuality = value);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setString('stream_quality', value);
+                  },
+                ),
+              ),
               _switchTile(
                 icon: Icons.restore_rounded,
                 title: 'Resume playback',
@@ -158,6 +189,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
             _group('Downloads', [
+              _switchTile(
+                icon: Icons.smartphone_rounded,
+                title: 'Save to device storage',
+                subtitle: Platform.isAndroid
+                    ? 'Copy finished episodes to Download/CamAnime, grouped by anime and season'
+                    : 'Available on Android',
+                value: saveToDevice,
+                onChanged: (v) async {
+                  setState(() => saveToDevice = v);
+                  await _setBool('save_to_device', v);
+                },
+              ),
               _switchTile(
                 icon: Icons.sync_rounded,
                 title: 'Auto-resume downloads',
