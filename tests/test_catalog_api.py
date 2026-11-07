@@ -369,7 +369,7 @@ def test_release_schedule_api_includes_all_current_season_airings(api, monkeypat
         item.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
         item["nextAiringEpisode"] = {
             "episode": index + 2,
-            "airingAt": 1793000000 + index * 3600,
+            "airingAt": int(time.time()) + 7200 + index * 3600,
             "timeUntilAiring": 1800 + index * 3600,
         }
         media.append(item)
@@ -506,7 +506,7 @@ def test_release_schedule_handles_aired_unknown_and_finished_titles(api, monkeyp
     monkeypatch.setattr(api, "current_anime_season", lambda: ("FALL", 2026))
     active = anime(anime_id=701, title="Still Airing")
     active.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
-    active["nextAiringEpisode"] = {"episode": 5, "airingAt": 1793000000, "timeUntilAiring": 10}
+    active["nextAiringEpisode"] = {"episode": 5, "airingAt": int(time.time()) + 3600, "timeUntilAiring": 10}
     past = anime(anime_id=703, title="Past Air Time")
     past.update({"status": "RELEASING", "season": "FALL", "seasonYear": 2026})
     past["nextAiringEpisode"] = {"episode": 6, "airingAt": 1700000000, "timeUntilAiring": 0}
