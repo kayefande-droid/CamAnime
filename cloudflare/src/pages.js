@@ -16,7 +16,8 @@ function head(title, desc) {
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/sync.css?v=20261106-flow">
+<link rel="stylesheet" href="/static/css/base.css?v=20261108-ui">
+<link rel="stylesheet" href="/static/css/sync.css?v=20261108-ui">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
@@ -35,6 +36,7 @@ export function chrome(title, desc, userName, inner, active = "home") {
         <a class="nav-link ${active === "library" ? "active" : ""}" href="/library">My Library</a>
         <a class="nav-link ${active === "download" ? "active" : ""}" href="/download">Downloads</a>
         <a class="nav-link ${active === "settings" ? "active" : ""}" href="/settings">Settings</a>
+        <a class="nav-link ${active === "dev" ? "active" : ""}" href="/developers">Developers</a>
         ${userName ? `<a class="nav-link" href="/settings">Account (${esc(userName)})</a>` : `<a class="nav-link" href="/login">Sign in</a>`}
       </nav>
     </div>
@@ -45,6 +47,7 @@ export function chrome(title, desc, userName, inner, active = "home") {
     <a href="/library">My Library</a>
     <a href="/download">Downloads</a>
     <a href="/settings">Settings</a>
+    <a href="/developers">Developers API</a>
     ${userName ? `<a href="/settings">Account (${esc(userName)})</a>` : `<a href="/login">Sign in</a>`}
   </nav>
 </header>
@@ -83,6 +86,20 @@ export function homePage(grids, userName) {
           <a class="btn-primary" href="#trending">Start watching</a>
           <a class="btn-secondary" href="/settings">Site settings</a>
         </div>
+      </div>
+    </section>
+    <section class="dev-ad" aria-labelledby="devAdTitle">
+      <span class="dev-eyebrow">Developer API · Free</span>
+      <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
+      <p class="dev-lede">Create a key, call one endpoint, play a direct MP4 on your own site. A thousand calls a day, no card, CORS enabled.</p>
+      <ul class="dev-bullets">
+        <li>Direct MP4 — no iframe, no ads</li>
+        <li>One provider, resolved live</li>
+        <li>Keys you can revoke anytime</li>
+      </ul>
+      <div class="hero-ctas">
+        <a class="btn-primary" href="/developers#keys">Create a free API key</a>
+        <a class="btn-secondary" href="/developers#docs">View the docs</a>
       </div>
     </section>
     <section id="trending">${section("Trending now", grids.trending)}</section>
@@ -251,6 +268,156 @@ export function errorPage(status, msg) {
 }
 
 /** Real settings page: working theme + layout pickers (previously only described in text). */
+/** Developer advert + docs + key manager. One free provider, one endpoint. */
+export function developersPage(user) {
+  const keyPanel = user
+    ? `<form class="dev-form" id="devKeyForm">
+         <input id="devKeyName" placeholder="What are you building? (optional)" maxlength="40" aria-label="Key label">
+         <button class="btn-primary" type="submit">Create API key</button>
+       </form>
+       <div id="devKeyOut" aria-live="polite"></div>
+       <div class="dev-keys" id="devKeys"><p class="muted">Loading your keys…</p></div>`
+    : `<div class="discovery-empty">Sign in to create and manage your free API keys. <a href="/login">Sign in</a> — it takes a name, an email and a password.</div>`;
+
+  const inner = `
+    <header class="dev-hero">
+      <span class="dev-eyebrow">Developer API · Free tier</span>
+      <h1>Ship anime playback on your own site with <em>one endpoint</em>.</h1>
+      <p class="dev-lede">CamAnime exposes a single streaming provider — AnimeHeaven direct MP4 — behind a key you create here. No iframe, no ads injected into your page, no card, no waiting for approval.</p>
+      <div class="hero-ctas">
+        <a class="btn-primary" href="${user ? "#keys" : "/login"}">${user ? "Create a free API key" : "Sign in to get a key"}</a>
+        <a class="btn-secondary" href="#docs">Read the docs</a>
+      </div>
+    </header>
+
+    <section class="dev-grid" aria-label="What the API gives you">
+      <div class="dev-card"><h3>Direct MP4</h3><p>A real <code>video/mp4</code> URL you can set as a <code>&lt;video&gt;</code> source or hand to any player. Seeking works.</p></div>
+      <div class="dev-card"><h3>One provider</h3><p>AnimeHeaven, resolved live through the same extractor this site plays with. If a title has no file, you get a 404 — never a dead link.</p></div>
+      <div class="dev-card"><h3>Keyed + CORS</h3><p><code>x-api-key</code> auth, per-key daily quota, revoke anytime, and <code>access-control-allow-origin: *</code> so browser calls just work.</p></div>
+      <div class="dev-card"><h3><b>1,000</b> calls / day</h3><p>Free per key, reset at 00:00 UTC. Up to <b>3</b> active keys per account. Attribution is the only price.</p></div>
+    </section>
+
+    <section id="docs">
+      <h2 class="section-title">Quickstart</h2>
+      <pre class="dev-code"><span class="tok-key">curl</span> -s "https://camanime.onrender.com/api/v1/stream/16498/1" \\\\
+  -H "x-api-key: ca_live_your_key_here"</pre>
+      <p class="muted">The same route exists on the Cloudflare deployment: <code>https://camanjme.camanime.workers.dev/api/v1/stream/16498/1</code>.</p>
+
+      <h2 class="section-title">Endpoints</h2>
+      <table class="dev-table">
+        <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET</code></td><td><code>/api/v1/stream/:animeId/:ep</code></td><td><code>x-api-key</code></td><td>Stream URLs for that episode</td></tr>
+          <tr><td><code>GET</code></td><td><code>/api/developer/keys</code></td><td>Session cookie</td><td>Your keys and today's usage</td></tr>
+          <tr><td><code>POST</code></td><td><code>/api/developer/keys</code></td><td>Session cookie</td><td>A new key — shown once</td></tr>
+          <tr><td><code>DELETE</code></td><td><code>/api/developer/keys/:id</code></td><td>Session cookie</td><td>Revokes the key</td></tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title">Response</h2>
+      <pre class="dev-code">{
+  "api": "camanime-stream",
+  "version": 1,
+  "provider": "animeheaven",
+  "anime": { "id": "16498", "title": "Attack on Titan", "episodes": 25 },
+  "episode": 1,
+  "audio": "sub",
+  "streams": [
+    { "label": "AnimeHeaven Primary", "type": "video/mp4", "quality": "1080p", "url": "https://…/api/proxy/video?url=…" }
+  ],
+  "usage": { "calls_today": 1, "daily_limit": 1000 },
+  "attribution": "Powered by CamAnime"
+}</pre>
+
+      <h2 class="section-title">Embed it</h2>
+      <pre class="dev-code">const res = await fetch("https://camanime.onrender.com/api/v1/stream/16498/1", {
+  headers: { "x-api-key": "ca_live_your_key_here" }
+});
+const data = await res.json();
+player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/video&gt;</pre>
+      <p class="muted">Keep the key server-side when you can. The proxy URL is Referer-safe, so it plays from your domain without extra headers.</p>
+    </section>
+
+    <section id="keys">
+      <h2 class="section-title">Your API keys</h2>
+      <p class="muted">${user ? `Signed in as <strong>${esc(user.name)}</strong>. A key is shown once — copy it then, and revoke it here if it leaks.` : "Keys are tied to your CamAnime account."}</p>
+      ${keyPanel}
+    </section>
+
+    <section id="limits">
+      <h2 class="section-title">Free tier, in plain numbers</h2>
+      <table class="dev-table">
+        <thead><tr><th>What</th><th>Free</th></tr></thead>
+        <tbody>
+          <tr><td>Calls per key per day</td><td><b>1,000</b></td></tr>
+          <tr><td>Active keys per account</td><td><b>3</b></td></tr>
+          <tr><td>Providers</td><td>1 — AnimeHeaven direct MP4</td></tr>
+          <tr><td>Subtitles / dubs</td><td>Provider files as-is (sub)</td></tr>
+          <tr><td>Commercial use</td><td>Ask first — the key is personal</td></tr>
+        </tbody>
+      </table>
+      <p class="dev-note">CamAnime does not host these files; it resolves and proxies them from the provider the site already uses. Keep your key private, link back to CamAnime, and respect the provider's terms and your local law. Rate limits exist so one integration cannot take the shared provider offline for the site and the app.</p>
+    </section>
+
+    ${user ? `<script>
+    (function () {
+      var out = document.getElementById('devKeyOut');
+      var list = document.getElementById('devKeys');
+      var form = document.getElementById('devKeyForm');
+      if (!out || !list || !form) return;
+      function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
+      function render(keys) {
+        list.innerHTML = '';
+        if (!keys.length) { list.appendChild(el('p', 'muted', 'No keys yet — create one above.')); return; }
+        keys.forEach(function (k) {
+          var row = el('div', 'dev-key-row' + (k.revoked ? ' is-revoked' : ''));
+          var box = el('div', '');
+          box.appendChild(el('div', 'dev-key-name', k.name || 'Untitled key'));
+          box.appendChild(el('div', 'dev-key-meta', k.prefix + '… · created ' + new Date(k.created).toLocaleDateString() + ' · ' + (k.calls_today || 0) + ' calls today'));
+          row.appendChild(box);
+          if (!k.revoked) {
+            var btn = el('button', 'ctrl-btn', 'Revoke');
+            btn.type = 'button';
+            btn.onclick = function () {
+              if (!confirm('Revoke this key? Any site using it stops working.')) return;
+              fetch('/api/developer/keys/' + k.id, { method: 'DELETE', credentials: 'same-origin' }).then(load);
+            };
+            row.appendChild(btn);
+          } else {
+            row.appendChild(el('span', 'dev-key-meta', 'revoked'));
+          }
+          list.appendChild(row);
+        });
+      }
+      function load() {
+        fetch('/api/developer/keys', { credentials: 'same-origin' })
+          .then(function (r) { return r.ok ? r.json() : { keys: [] }; })
+          .then(function (d) { render(d.keys || []); })
+          .catch(function () { list.textContent = 'Could not load keys right now.'; });
+      }
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var name = document.getElementById('devKeyName').value;
+        out.innerHTML = '';
+        fetch('/api/developer/keys', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name }) })
+          .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (!res.ok) { out.textContent = res.d.error || 'Could not create a key.'; return; }
+            var code = el('code', 'dev-key-plain', res.d.key);
+            out.appendChild(code);
+            out.appendChild(el('p', 'muted', res.d.note || 'Copy this key now.'));
+            form.reset();
+            load();
+          })
+          .catch(function () { out.textContent = 'Network error — try again.'; });
+      };
+      load();
+    })();
+    </script>` : ""}`;
+
+  return chrome("Developer API", "Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day.", user?.name, inner, "dev");
+}
+
 export function settingsPage(user) {
   const THEMES = ["midnight", "light", "vibrant", "sakura", "forest", "obsidian", "neo", "tokyo"];
   const LAYOUTS = ["classic", "cinema", "compact", "minimal", "wide", "magazine", "wall"];

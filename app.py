@@ -43,6 +43,12 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# Free developer streaming API (one provider, keyed access) — same routes the
+# Cloudflare worker serves, so both deployments document one contract.
+from developer_api import developer_bp  # noqa: E402
+
+app.register_blueprint(developer_bp)
+
 
 def _load_secret_key():
     """Synced secret without needing Render env on first login.

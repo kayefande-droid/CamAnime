@@ -42,7 +42,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261106-flow" rel="stylesheet">
+<link href="/static/css/base.css?v=20261108-ui" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261108-ui" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
@@ -917,6 +918,9 @@
                 <a href="/settings" class="nav-link">
                     <i class="fas fa-cog"></i> Settings
                 </a>
+                <a href="/developers" class="nav-link">
+                    <i class="fas fa-code"></i> Developers
+                </a>
             </nav>
         </div>
 
@@ -1069,6 +1073,21 @@
          Shown only on the homepage (not on genre/format/search result pages),
          so switching genre is not hidden behind a permanent watchlist row.
          Signed-in users get server-side rows that sync to every device. ── -->
+    <section class="dev-ad" aria-labelledby="devAdTitle">
+        <span class="dev-eyebrow">Developer API · Free</span>
+        <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
+        <p class="dev-lede">Create a key, call one endpoint, play a direct MP4 on your own site. A thousand calls a day, no card, CORS enabled.</p>
+        <ul class="dev-bullets">
+            <li>Direct MP4 — no iframe, no ads</li>
+            <li>One provider, resolved live</li>
+            <li>Keys you can revoke anytime</li>
+        </ul>
+        <div class="hero-ctas">
+            <a class="btn-primary" href="/developers#keys">Create a free API key</a>
+            <a class="btn-secondary" href="/developers#docs">View the docs</a>
+        </div>
+    </section>
+
     <section class="section-block" id="watchlistSection" style="display: none;">
         <div class="section-head" style="flex-wrap: wrap; gap: 0.5rem;">
             <div class="section-title-wrap">

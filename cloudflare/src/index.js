@@ -1,9 +1,11 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext } from "./catalog.js";
-import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage } from "./pages.js";
+import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage } from "./pages.js";
 import { html, json } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
+import * as mobile from "./mobile.js";
+import * as developer from "./developer.js";
 
 function segments(pathname) {
   return pathname.split("/").filter(Boolean);
@@ -61,6 +63,22 @@ async function apiRoutes(request, env, url, path) {
   const [p0, p1, p2, p3, p4] = parts;
 
   if (p0 !== "api") return null;
+
+  // The endpoints the Flutter build actually calls. Served here from AniList +
+  // D1, so an app pointed at this worker never needs the Render origin.
+  const mobileResponse = await mobile.route(env, request, url, parts);
+  if (mobileResponse) return mobileResponse;
+
+  // Developer API: free-tier keys (session auth) + the public keyed stream endpoint.
+  if (p1 === "v1" && p2 === "stream") {
+    if (method === "OPTIONS") return developer.preflight();
+    return developer.stream(env, request, url, p3, p4);
+  }
+  if (p1 === "developer" && p2 === "keys") {
+    if (method === "GET") return developer.listKeys(env, request);
+    if (method === "POST" && !p3) return developer.createKey(env, request);
+    if ((method === "DELETE" || method === "POST") && p3) return developer.revokeKey(env, request, p3);
+  }
 
   if (p1 === "auth") {
     if (p2 === "register" && method === "POST") return auth.register(env, request);
@@ -177,6 +195,10 @@ async function pageRoutes(request, env, ctx, path) {
 
   if (path === "/settings") {
     return html(settingsPage(user));
+  }
+
+  if (path === "/developers" || path === "/developers/keys") {
+    return html(developersPage(user));
   }
 
   if (path === "/admin") {

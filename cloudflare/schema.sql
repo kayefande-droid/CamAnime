@@ -84,5 +84,25 @@ CREATE TABLE IF NOT EXISTS user_history (
   PRIMARY KEY (email, anime_id)
 );
 CREATE INDEX IF NOT EXISTS idx_history_email ON user_history(email, t);
+-- Developer streaming API: free-tier keys + daily usage.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  prefix TEXT NOT NULL DEFAULT '',
+  key_hash TEXT NOT NULL UNIQUE,
+  plan TEXT NOT NULL DEFAULT 'free',
+  created INTEGER NOT NULL,
+  last_used INTEGER NOT NULL DEFAULT 0,
+  revoked INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_email ON api_keys(email, created);
+CREATE TABLE IF NOT EXISTS api_usage (
+  key_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  calls INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (key_id, day)
+);
+
 INSERT OR IGNORE INTO counters (key, value) VALUES ('player_starts', 0);
 INSERT OR IGNORE INTO counters (key, value) VALUES ('visits', 0);
