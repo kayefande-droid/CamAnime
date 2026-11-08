@@ -558,7 +558,8 @@ class AnimeHeavenProvider(StreamingProvider):
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({
                     "url": u,
-                    "quality": "1080p / 720p MP4",
+                    # AnimeHeaven does not publish a pixel size for these files.
+                    "quality": "Source MP4",
                     "label": label,
                     "isM3u8": False,
                     "isMp4": True,

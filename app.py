@@ -2083,7 +2083,7 @@ def watch(anime_id: int, ep_num: int):
                 "audio": "sub",
                 "playback_mode": "iframe",
                 "stream_url": embeds["vidlink_sub"],
-                "quality": "1080p Embed",
+                "quality": "Provider embed",
                 "subtitles": [],
                 "badge": "MIRROR SUB",
             })

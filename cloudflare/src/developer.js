@@ -202,7 +202,7 @@ export async function stream(env, request, url, animeId, epRaw) {
       id: s.id || `stream-${i + 1}`,
       label: s.name || `Mirror ${i + 1}`,
       type: "video/mp4",
-      quality: s.quality || "1080p",
+      quality: s.quality || "Source",
       url: absolute(s.stream_url),
     })),
     usage: { calls_today: calls, daily_limit: DAILY_LIMIT },

@@ -435,7 +435,7 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
     const host = safeHost(url);
     return {
       url,
-      quality: "1080p / 720p MP4",
+      quality: "Source MP4",
       label: idx === 0 ? "Direct MP4 (Primary CDN)" : `Direct MP4 (${host.split(".")[0].toUpperCase()} Mirror)`,
       isM3u8: false,
       isMp4: true,
@@ -1014,7 +1014,6 @@ export async function episodeBundle({
               url: stream.m3u8,
               title: `${list[0] || "Anime"} - Ep ${episode} ${audio.toUpperCase()}`,
               ref: stream.referer,
-              height: 1080,
             }),
             direct: true,
             provider: `CamStream ${srv.name}`,

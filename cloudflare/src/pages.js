@@ -323,7 +323,7 @@ export function developersPage(user) {
   "episode": 1,
   "audio": "sub",
   "streams": [
-    { "label": "AnimeHeaven Primary", "type": "video/mp4", "quality": "1080p", "url": "https://…/api/proxy/video?url=…" }
+    { "label": "AnimeHeaven Primary", "type": "video/mp4", "quality": "Source MP4", "height": 0, "url": "https://…/api/proxy/video?url=…" }
   ],
   "usage": { "calls_today": 1, "daily_limit": 1000 },
   "attribution": "Powered by CamAnime"

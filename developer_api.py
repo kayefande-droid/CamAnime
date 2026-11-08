@@ -480,7 +480,7 @@ def stream(anime_id: int, ep: int):
                 "id": s.get("id") or f"stream-{i + 1}",
                 "label": s.get("name") or f"Mirror {i + 1}",
                 "type": "video/mp4",
-                "quality": s.get("quality") or "1080p",
+                "quality": s.get("quality") or "Source",
                 "url": (s.get("stream_url") or "").replace("/api/proxy/video", origin + "/api/proxy/video", 1)
                 if (s.get("stream_url") or "").startswith("/api/")
                 else s.get("stream_url"),
