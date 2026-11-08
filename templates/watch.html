@@ -547,6 +547,18 @@
                     <a id="downloadCurrentBtn" class="ctrl-btn download-cta" href="{{ active_server.download_url or (downloads[0].url if downloads else '#') }}" download>
                         <i class="fas fa-download"></i> Download Playing Ep
                     </a>
+                    {% if bundle.transcode_available %}
+                    <span class="ctrl-btn" style="cursor:default;gap:.35rem" title="Save a smaller file converted on the server — 360p is roughly a third of 1080p">
+                        <i class="fas fa-compress-alt"></i>
+                        <select id="dlQualitySel" aria-label="Download resolution" style="background:transparent;border:0;color:inherit;font:inherit;font-weight:700;cursor:pointer">
+                            <option value="original">Size: Original</option>
+                            <option value="720">Size: 720p</option>
+                            <option value="480">Size: 480p</option>
+                            <option value="360">Size: 360p</option>
+                            <option value="360">Size: 360p (smallest)</option>
+                        </select>
+                    </span>
+                    {% endif %}
                     <button type="button" class="ctrl-btn" onclick="document.getElementById('downloadPanel').scrollIntoView({behavior:'smooth'})">
                         <i class="fas fa-list"></i> All Files
                     </button>
@@ -757,6 +769,39 @@
         }
         return '#';
     }
+    function transcodeUrlFor(srv, height) {
+        if (!srv || !srv.raw_url) return '#';
+        const title = document.title || 'CamAnime_Episode';
+        const ref = srv.referer || location.origin;
+        return `/api/download/transcode?url=${encodeURIComponent(srv.raw_url)}&height=${encodeURIComponent(height)}&title=${encodeURIComponent(title)}&ref=${encodeURIComponent(ref)}`;
+    }
+    // Real pixel switching for the website: the server returns an ffmpeg
+    // re-encode at the chosen height instead of only relabelling the source.
+    function streamUrlFor(srv, height) {
+        if (!srv || !srv.raw_url || !height) return srv ? srv.stream_url : '';
+        const title = document.title || 'CamAnime_Episode';
+        const ref = srv.referer || location.origin;
+        return `/api/stream/transcode?url=${encodeURIComponent(srv.raw_url)}&height=${encodeURIComponent(height)}&title=${encodeURIComponent(title)}&ref=${encodeURIComponent(ref)}`;
+    }
+    function caApplyStreamQuality() {
+        var sel = document.getElementById('qualitySel');
+        var video = document.getElementById('nativeVideo');
+        var srv = (typeof currentServer !== 'undefined') ? currentServer : null;
+        if (!sel || !video || !srv || !srv.raw_url) return;
+        if (['360', '480', '720'].indexOf(sel.value) === -1) return;
+        if (video.style.display === 'none') return;
+        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+        var at = video.currentTime || 0;
+        var playing = !video.paused;
+        video.src = streamUrlFor(srv, sel.value);
+        video.load();
+        video.addEventListener('loadedmetadata', function () {
+            try { if (at > 1) video.currentTime = at; } catch (e) {}
+            if (playing) video.play().catch(function () {});
+        }, { once: true });
+    }
+    window.caApplyStreamQuality = caApplyStreamQuality;
+
     function switchServer(srv, opts) {
         if (!srv) return;
         opts = opts || {};
@@ -767,8 +812,12 @@
         document.getElementById('activeServerStatus').textContent = `Active Server: ${srv.name} (${(srv.quality || '1080p')})`;
         document.getElementById('playbackBadge').textContent = (srv.playback_mode || 'STREAM').toUpperCase();
         const dlBtn = document.getElementById('downloadCurrentBtn');
+        const dlQualitySelNow = document.getElementById('dlQualitySel');
         if (dlBtn) {
-            const durl = downloadUrlFor(srv);
+            const chosen = dlQualitySelNow ? dlQualitySelNow.value : 'original';
+            const durl = (chosen === 'original' || !srv.raw_url)
+                ? downloadUrlFor(srv)
+                : transcodeUrlFor(srv, chosen);
             if (durl === '#') { dlBtn.classList.add('disabled'); dlBtn.removeAttribute('href'); }
             else { dlBtn.classList.remove('disabled'); dlBtn.href = durl; }
         }
@@ -1003,6 +1052,17 @@
             } catch (e) {}
         });
         const dlBtn0 = document.getElementById('downloadCurrentBtn');
+        const dlQualitySel = document.getElementById('dlQualitySel');
+        if (dlQualitySel) {
+            dlQualitySel.addEventListener('change', () => {
+                const btn = document.getElementById('downloadCurrentBtn');
+                if (!btn || !currentServer) return;
+                const q = dlQualitySel.value;
+                btn.href = (q === 'original' || !currentServer.raw_url)
+                    ? downloadUrlFor(currentServer)
+                    : transcodeUrlFor(currentServer, q);
+            });
+        }
         function dlMsg(text, ok) {
             const st = document.getElementById('dlStatus');
             if (!st) return;
@@ -1188,6 +1248,7 @@
     sel.onchange = function () {
         ls(kSeries, sel.value); // per-series (also covers TV shows: one id = one show)
         try { document.dispatchEvent(new CustomEvent('camanime:quality')); } catch (e) {}
+        try { window.caApplyStreamQuality(); } catch (e) {}
     };
 })();
 </script>

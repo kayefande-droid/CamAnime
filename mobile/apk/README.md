@@ -1,32 +1,38 @@
-# CamAnime Android APK artifacts
+# CamAnime APK builds
 
-Built APKs from the current `mobile/camanime_app` source tree (Flutter 2.7.0, release build).
+Release APKs built from the current `mobile/camanime_app` tree (Flutter 2.8.0,
+Dart obfuscation, split debug symbols).
 
 | File | Version | SHA-256 |
-|---|---|---|
-| `CamAnime-2.7.0.apk` | 2.7.0 (versionCode 17) | `2c94dce964f4cedf2072864cff527d5b4070e5dd62416fa6f7d306c4359917e9` |
+| --- | --- | --- |
+| `CamAnime-2.8.0.apk` | 2.8.0 (versionCode 18) | `c488100809fc31444a6e97a873e1d563ccb13c3db5c42ce18cc250d411e5f2f0` |
 
-Only the current version is published here and on the website download page.
+Size: 53,316,395 bytes. Signed with the same key as every previous CamAnime
+build, so older installs update in place and keep their downloads, watchlist
+and watch history.
 
-## What 2.7.0 changes
+## What this build changes
 
-- **No administration in the app.** Admin screens, admin service calls, role
-  sniffing and privileged tokens are gone; administration lives at `/admin` on
-  the website only.
-- **Mandatory update enforcement.** The server rejects protected API calls from
-  builds below the minimum with HTTP 426, and the app shows a blocking update
-  screen with a retry state and the official download link.
-- **Hardened build.** Dart obfuscation with private debug symbols, R8
-  minification and resource shrinking, HTTPS-only network security config,
-  backups disabled.
+- **Real quality switching**: picking 720p / 480p / 360p plays a genuine
+  ffmpeg re-encode from `/api/stream/transcode`, not a relabelled 1080p file.
+  Converted downloads use the same bounded-bitrate ladder.
+- **Works for newer seasons too**: when a bundle only resolves one full-size
+  source, the app synthesises the real quality ladder for the selected audio,
+  so titles like Black Clover S2 still drop pixels and file size.
+- **Player**: immersive fullscreen that adapts to the screen, brightness and
+  volume sliders, episode chips directly under the video, “More to watch”
+  similar-anime rail, and auto-skip intro (first ~90s) / auto-skip outro into
+  the next episode — both toggleable.
+- **Trailers** open from the detail screen on the website and in the app.
+- **Updates**: checks the website on launch/resume (throttled to every six
+  hours) plus a manual Settings check, downloads the APK in-app and opens
+  Android's installer. Updates never clear the offline library, watchlist or
+  watch history; finished files are re-adopted if the queue index is lost.
+- Version 2.7.0 and older are refused by the API and the Cloudflare edge.
 
-## Building from source
+## Rebuild
 
 ```bash
-flutter build apk --release   --obfuscate   --split-debug-info=D:/tmp/camanime_symbols_270
+cd mobile/camanime_app
+flutter build apk --release --obfuscate --split-debug-info=D:/tmp/camanime_symbols_280
 ```
-
-Keep the split-debug-info folder privately: it maps obfuscated frames back to
-source and is not committed. Release signing intentionally continues the
-existing CamAnime debug keystore so 2.6.x users can update in place; switching
-keys would force every user to uninstall.

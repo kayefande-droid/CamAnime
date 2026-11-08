@@ -14,8 +14,8 @@ import 'models.dart' show apiHost;
 
 /// Build identity reported to the server. Kept here so the gate has no
 /// dependency on the UI layer (and no import cycle through main.dart).
-const String kAppVersion = '2.7.0';
-const int kAppBuildNumber = 17;
+const String kAppVersion = '2.8.0';
+const int kAppBuildNumber = 18;
 
 /// Server-driven release policy.
 ///
@@ -33,6 +33,16 @@ class VersionPolicy {
   final String message;
   final String releaseNotes;
 
+  /// True when the server has retired this release outright (2.6.5 and older),
+  /// which is a stronger message than "outdated".
+  final bool discontinued;
+  final String discontinuedVersion;
+
+  /// Official mirror (Cloudflare) shown beside the primary download link, so a
+  /// device is never stranded when one host is unreachable.
+  final String mirrorDownloadUrl;
+  final String reason;
+
   const VersionPolicy({
     required this.latestVersion,
     required this.latestVersionCode,
@@ -42,6 +52,10 @@ class VersionPolicy {
     required this.downloadUrl,
     required this.message,
     required this.releaseNotes,
+    this.discontinued = false,
+    this.discontinuedVersion = '',
+    this.mirrorDownloadUrl = '',
+    this.reason = '',
   });
 
   static VersionPolicy? fromJson(Map<String, dynamic>? json) {
@@ -59,6 +73,12 @@ class VersionPolicy {
       downloadUrl: (json['download_url'] ?? '').toString(),
       message: (json['message'] ?? '').toString(),
       releaseNotes: (json['release_notes'] ?? '').toString(),
+      discontinued: json['discontinued'] == true || json['discontinued'] == 1,
+      discontinuedVersion:
+          (json['discontinued_at_or_below_version'] ?? '').toString(),
+      mirrorDownloadUrl: ((json['download_urls'] as Map?)?['cloudflare'] ?? '')
+          .toString(),
+      reason: (json['reason'] ?? '').toString(),
     );
   }
 
@@ -67,6 +87,13 @@ class VersionPolicy {
     if (downloadUrl.startsWith('http')) return downloadUrl;
     final base = apiHost.replaceFirst(RegExp(r'/+$'), '');
     return '$base${downloadUrl.startsWith('/') ? '' : '/'}$downloadUrl';
+  }
+
+  String get resolvedMirrorUrl {
+    if (mirrorDownloadUrl.isEmpty) return '';
+    if (mirrorDownloadUrl.startsWith('http')) return mirrorDownloadUrl;
+    final base = apiHost.replaceFirst(RegExp(r'/+$'), '');
+    return '$base${mirrorDownloadUrl.startsWith('/') ? '' : '/'}$mirrorDownloadUrl';
   }
 }
 
@@ -217,19 +244,22 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
         : 'Android blocked the installer. Allow unknown sources and retry.');
   }
 
-  Future<void> _openWebsite() async {
+  Future<void> _openLink(String url) async {
     try {
-      final ok = await launchUrl(
-        Uri.parse(widget.policy.downloadUrl.startsWith('http')
-            ? widget.policy.resolvedDownloadUrl
-            : 'https://camanime.onrender.com/get/android'),
-        mode: LaunchMode.externalApplication,
-      );
+      final ok = await launchUrl(Uri.parse(url),
+          mode: LaunchMode.externalApplication);
       if (!ok) _snack('Open camanime.onrender.com in your browser to download.');
     } catch (_) {
       _snack('Open camanime.onrender.com in your browser to download.');
     }
   }
+
+  Future<void> _openWebsite() => _openLink(
+      widget.policy.downloadUrl.startsWith('http')
+          ? widget.policy.resolvedDownloadUrl
+          : 'https://camanime.onrender.com/get/android');
+
+  Future<void> _openMirror() => _openLink(widget.policy.resolvedMirrorUrl);
 
   Future<void> _retry() async {
     setState(() => retrying = true);
@@ -283,7 +313,7 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
                           fontWeight: FontWeight.w900,
                           letterSpacing: -.5)),
                   const SizedBox(height: 26),
-                  Text('Update Required',
+                  Text(p.discontinued ? 'Version Discontinued' : 'Update Required',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           fontSize: 22,
@@ -352,6 +382,14 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
                     label: const Text('Official website'),
                   ),
+                  if (p.resolvedMirrorUrl.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _openMirror,
+                      icon: const Icon(Icons.cloud_download_rounded, size: 18),
+                      label: const Text('Cloudflare mirror'),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   TextButton(
                     onPressed: (busy || retrying) ? null : _retry,

@@ -415,7 +415,57 @@ def _write_bootstrap_credentials(password: str) -> None:
               "CAMANIME_DEFAULT_ADMIN_PASSWORD instead.", flush=True)
 
 
-def create_admin_user(email: str, name: str, password: str) -> Dict:
+ROLES = ("owner", "developer", "support", "user", "suspended")
+
+
+def normalize_role(role: str) -> str:
+    """Legacy 'admin' rows are owners; everything else is its own name."""
+    value = (role or "user").strip().lower()
+    if value == "admin":
+        return "owner"
+    return value if value in ROLES else "user"
+
+
+def list_users(limit: int = 200) -> List[Dict]:
+    """Accounts for the dashboard. Never returns password hashes or tokens."""
+    _init()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT email,name,role,created FROM users"
+            " ORDER BY created DESC LIMIT ?",
+            (max(1, min(int(limit or 200), 500)),)).fetchall()
+    return [{"email": r["email"], "name": r["name"],
+             "role": normalize_role(r["role"]), "created": r["created"]}
+            for r in rows]
+
+
+def set_user_role(email: str, role: str, actor: str = "admin") -> Dict:
+    """Owner-only role change. Refuses to leave the project without an owner."""
+    key = (email or "").strip().lower()
+    new_role = normalize_role(role)
+    if new_role not in ROLES:
+        raise ValueError("Unknown role.")
+    if key == (actor or "").strip().lower() and new_role != "owner":
+        raise ValueError("You cannot demote your own owner account.")
+    _init()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email=?", (key,)).fetchone()
+        if not row:
+            raise ValueError("Account not found.")
+        if normalize_role(row["role"]) == "owner" and new_role != "owner":
+            owners = conn.execute(
+                "SELECT COUNT(*) c FROM users WHERE role IN ('admin','owner')"
+            ).fetchone()["c"]
+            if owners <= 1:
+                raise ValueError("The last owner account cannot be demoted.")
+        conn.execute("UPDATE users SET role=? WHERE email=?", (new_role, key))
+        if new_role != normalize_role(row["role"]):
+            conn.execute("DELETE FROM tokens WHERE email=?", (key,))
+    return {"email": key, "role": new_role}
+
+
+def create_admin_user(email: str, name: str, password: str,
+                     role: str = "owner") -> Dict:
     """Create an extra admin. Caller must already be an admin (checked in app.py)."""
     key = (email or "").strip().lower()
     if not key or "@" not in key:
@@ -429,7 +479,8 @@ def create_admin_user(email: str, name: str, password: str) -> Dict:
         conn.execute(
             "INSERT INTO users(email,name,pw,role,avatar,created) VALUES (?,?,?,?,?,?)",
             (key, (name or "").strip() or key.split("@")[0],
-             generate_password_hash(password), "admin", "", int(time.time())),
+             generate_password_hash(password), normalize_role(role), "",
+             int(time.time())),
         )
         row = conn.execute("SELECT * FROM users WHERE email=?", (key,)).fetchone()
         return _row_user(row)
@@ -487,6 +538,8 @@ def verify_user(data: Dict, email: str, password: str) -> Dict:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (key,)).fetchone()
     if not row or not check_password_hash(row["pw"], password or ""):
         raise ValueError("Invalid email or password.")
+    if normalize_role(row["role"]) == "suspended":
+        raise ValueError("This account is suspended. Contact the CamAnime owner.")
     return _row_user(row)
 
 

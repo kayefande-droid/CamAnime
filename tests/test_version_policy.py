@@ -44,7 +44,7 @@ def test_version_endpoint_is_reachable_from_an_outdated_build(api):
     res = client.get("/api/app/version", headers=app_headers(16, "2.6.5"))
     assert res.status_code == 200
     body = res.get_json()
-    assert body["policy"]["latest_version"] == "2.7.0"
+    assert body["policy"]["latest_version"] == "2.8.0"
     assert body["policy"]["minimum_supported_version_code"] == 17
     assert body["required"] is True
 
@@ -57,9 +57,12 @@ def test_outdated_build_gets_structured_426_on_protected_api(api):
     body = res.get_json()
     assert body["code"] == "APP_UPDATE_REQUIRED"
     assert body["force_update"] is True
-    assert body["latest_version"] == "2.7.0"
+    assert body["latest_version"] == "2.8.0"
     assert body["download_url"].startswith("https://camanime.onrender.com")
-    assert "outdated" in body["message"].lower()
+    # Build 16 is 2.6.5, which is discontinued: the message says that instead
+    # of the generic "outdated" wording.
+    assert body["discontinued"] is True
+    assert "discontinued" in body["message"].lower()
     assert res.headers["X-CamAnime-Min-Build"] == "17"
 
 

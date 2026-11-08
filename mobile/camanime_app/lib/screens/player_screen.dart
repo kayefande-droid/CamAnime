@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -13,8 +13,12 @@ import '../core/cam_ui.dart';
 import '../core/mini_player.dart';
 import '../core/models.dart';
 
-/// Premium, distraction-free player with automatic backup-server fallback,
-/// episode queue, and recommendations underneath the video surface.
+/// Distraction-free player.
+///
+/// The video is the whole interface: controls appear on a tap and disappear
+/// again after a few seconds of inactivity. Everything secondary (quality,
+/// speed, autoplay, episode list) lives in a bottom sheet, and the mini-player
+/// shares the exact same controller so pausing/seek never desynchronises.
 class PlayerScreen extends StatefulWidget {
   final String url;
   final String label;
@@ -26,14 +30,15 @@ class PlayerScreen extends StatefulWidget {
   final void Function(String animeId, String title)? onOpenAnime;
   final int? episode;
 
-  /// Resolves the next episode when the queue has no more entries, so the
-  /// player can continue a series without the user going back to the detail
-  /// page. Returning null means "no next episode exists".
+  /// Resolves the next episode in the *currently selected* audio language.
+  /// Returning null means there is no next episode.
   final Future<EpisodeSource?> Function(int episode)? fetchEpisode;
 
-  /// Other qualities of the *same* episode, so the quality chips can switch
-  /// 1080p → 720p → 480p → 360p without leaving the player.
+  /// Other qualities of the same episode.
   final List<EpisodeSource> variants;
+
+  /// Set when the mini-player hands its live session back to the full player.
+  final MiniPlayback? handoff;
 
   const PlayerScreen({
     super.key,
@@ -48,6 +53,7 @@ class PlayerScreen extends StatefulWidget {
     this.episode,
     this.fetchEpisode,
     this.variants = const [],
+    this.handoff,
   });
 
   @override
@@ -57,53 +63,55 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen>
     with WidgetsBindingObserver {
   VideoPlayerController? _video;
-  ChewieController? _chewie;
   String? _error;
   bool _loading = true;
   bool _switching = false;
+  bool _advancing = false;
   int _urlIndex = 0;
   String _attempt = '';
-  bool _autoplayNext = false;
+  bool _autoplayNext = true;
   bool _resumeEnabled = true;
-  double _volume = 1.0;
-  double _brightness = 1.0;
   int _preferredServer = 0;
   EpisodeSource? _variant;
 
-  // Live play-time readout under the video.
+  // Control overlay.
+  bool _showControls = true;
+  Timer? _hideTimer;
+  bool _ended = false;
+  int? _dragMs;
+
+  double _speed = 1.0;
+  double _volume = 1.0;
+  double _brightness = 1.0;
+  bool _fullscreen = false;
+  bool _autoSkipIntro = true;
+  bool _autoSkipOutro = true;
+  bool _introSkipped = false;
+  bool _outroHandled = false;
+  static const MethodChannel _playerChannel = MethodChannel('camanime/player');
+
   int _posMs = 0;
   int _durMs = 0;
-  int _posSecond = -1;
+  int _lastSaveMs = 0;
 
-  /// Quality variants belong to one episode; they are cleared whenever the
-  /// player moves on, so a chip can never switch back to the previous episode.
+  /// Guard against runaway automatic episode chains.
+  int _autoHops = 0;
+  bool _closing = false;
+
+  /// Quality variants belong to one episode; cleared whenever the player moves
+  /// on so a chip can never switch back to the previous episode.
   List<EpisodeSource> _episodeVariants = const [];
 
   late List<EpisodeSource> playlist;
   int index = 0;
   List<Map> _recommended = const [];
   bool _recsLoading = false;
-  int _lastSaveMs = 0;
 
-  /// Screen-awake bookkeeping. The lock is held only while an episode is
-  /// actually streaming or playing: it is released when playback pauses, when
-  /// the player leaves the full-screen surface, when the app is backgrounded,
-  /// and when the player is disposed.
   bool _awake = false;
-
-  /// True while the episode comes from disk. Flipped to false if the queue
-  /// continues onto a stream after the downloaded folder runs out.
   late bool _local;
-  EpisodeSource get current => playlist.isEmpty
-      ? EpisodeSource(
-          url: widget.url,
-          label: widget.label,
-          mirrors: widget.mirrors,
-          episode: widget.episode,
-        )
-      : playlist[index];
 
-  /// Distinct heights advertised across the resolved sources.
+  EpisodeSource get current => playlist[index];
+
   List<int> get _qualities {
     final set = <int>{};
     for (final source in _variants) {
@@ -115,8 +123,6 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   int get _activeHeight => _variant?.height ?? current.height;
 
-  /// Key used to remember watch progress. The catalogue id when there is one,
-  /// otherwise the title, so a downloaded file still resumes after a restart.
   String get _progressId {
     final src = current;
     if (src.animeId.isNotEmpty) return src.animeId;
@@ -124,8 +130,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     return title.isEmpty ? '' : 'title:$title';
   }
 
-  /// The URL currently playing: the chosen quality variant, else the episode's
-  /// primary source. Mirrors still provide the automatic server fallback.
   String get _primaryUrl => _variant?.url ?? current.url;
 
   List<String> get _urls {
@@ -140,7 +144,16 @@ class _PlayerScreenState extends State<PlayerScreen>
       ? _episodeVariants
       : (playlist.length > 1 ? playlist : const <EpisodeSource>[]);
 
-  bool get _isPartial => _local && current.url.endsWith('.part');
+  /// True while an episode is queued after this one, or when the live source
+  /// can be resolved by the caller (series continues past the saved queue).
+  bool get _canHaveNext =>
+      index + 1 < playlist.length ||
+      (widget.fetchEpisode != null && (current.episode ?? 0) > 0);
+
+  String get _preferredKey {
+    final id = current.animeId;
+    return id.isEmpty ? '' : 'player_server_$id';
+  }
 
   @override
   void initState() {
@@ -160,42 +173,48 @@ class _PlayerScreenState extends State<PlayerScreen>
     index = widget.startIndex.clamp(0, playlist.length - 1);
     _episodeVariants = widget.variants;
     _variant = _episodeVariants.isEmpty ? null : _episodeVariants.first;
-    _prefs();
+    _boot();
     _loadRecommendationsWhenIdle();
   }
 
-  Future<void> _prefs() async {
+  Future<void> _boot() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
-    setState(() {
-      _autoplayNext = p.getBool('app_autoplay') ?? true;
-      _resumeEnabled = p.getBool('app_resume') ?? true;
-      _volume = (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
-      _brightness =
-          (p.getDouble('player_brightness') ?? 1.0).clamp(0.2, 1.0).toDouble();
-    });
+    _autoplayNext = p.getBool('app_autoplay') ?? true;
+    _resumeEnabled = p.getBool('app_resume') ?? true;
+    _speed = (p.getDouble('player_speed') ?? 1.0).clamp(0.5, 2.0).toDouble();
+    _volume =
+        (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
+    _brightness =
+        (p.getDouble('player_brightness') ?? 1.0).clamp(0.05, 1.0).toDouble();
+    _autoSkipIntro = p.getBool('player_skip_intro') ?? true;
+    _autoSkipOutro = p.getBool('player_skip_outro') ?? true;
+    if (_brightness < 0.99) unawaited(_applyBrightness(_brightness));
     _preferredServer = p.getInt(_preferredKey) ?? 0;
-    _applyVolume();
-    _applyStreamPreference(p);
+    final live = widget.handoff;
+    if (live != null && live.controller.value.isInitialized) {
+      _adopt(live);
+      return;
+    }
     await _loadCurrent();
   }
 
-  /// Streaming pixel moderation: open at the height picked in Settings, and cap
-  /// it at 480p when the data saver is on, so a mobile-data episode does not
-  /// spend more internet than it has to.
-  void _applyStreamPreference(SharedPreferences p) {
-    if (_local || _variant != null) return;
-    final wanted = (p.getString('stream_quality') ?? 'auto').trim();
-    final cap = (p.getBool('app_data_saver') ?? false)
-        ? 480
-        : (int.tryParse(wanted) ?? 0);
-    if (cap <= 0 || _variants.isEmpty) return;
-    EpisodeSource? best;
-    for (final source in _variants) {
-      if (source.height <= 0 || source.height > cap) continue;
-      if (best == null || source.height > best.height) best = source;
-    }
-    if (best != null) _variant = best;
+  /// Continues the episode the mini-player was playing, on its own controller.
+  void _adopt(MiniPlayback live) {
+    final controller = live.controller;
+    controller.addListener(_onTick);
+    _video = controller;
+    _posMs = controller.value.position.inMilliseconds;
+    _durMs = controller.value.duration.inMilliseconds;
+    setState(() {
+      _loading = false;
+      _error = null;
+      _attempt = '';
+      _ended = false;
+    });
+    _applySpeed();
+    _scheduleHide();
+    if (!controller.value.isPlaying) unawaited(controller.play());
   }
 
   @override
@@ -203,24 +222,20 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       _saveProgress(force: true);
-      // Leaving the app ends the "keep the screen awake" promise.
       _releaseAwake();
     }
   }
 
-  /// Keeps the screen on while an episode is streaming or playing from disk.
   Future<void> _holdAwake() async {
     if (_awake) return;
     _awake = true;
     try {
       await WakelockPlus.enable();
     } catch (_) {
-      // Desktop/tests have no wake-lock host; playback is unaffected.
       _awake = false;
     }
   }
 
-  /// Releases the wake lock so the device can sleep again.
   void _releaseAwake() {
     if (!_awake) return;
     _awake = false;
@@ -228,27 +243,13 @@ class _PlayerScreenState extends State<PlayerScreen>
       WakelockPlus.disable();
     } catch (_) {}
   }
-  String get _preferredKey {
-    final id = current.animeId;
-    return id.isEmpty ? '' : 'player_server_$id';
-  }
 
-  void _applyVolume() {
+  void _applySpeed() {
     try {
-      _video?.setVolume(_volume);
-    } catch (_) {
-      // Controller already disposed; the next one gets the volume on init.
-    }
+      _video?.setPlaybackSpeed(_speed);
+    } catch (_) {}
   }
 
-  Future<void> _saveTuning() async {
-    final p = await SharedPreferences.getInstance();
-    await p.setDouble('player_volume', _volume);
-    await p.setDouble('player_brightness', _brightness);
-  }
-
-  /// Remembers which server actually worked for this anime, so the next
-  /// episode starts there instead of re-probing a dead provider first.
   Future<void> _rememberServer(int index) async {
     _preferredServer = index;
     final key = _preferredKey;
@@ -263,10 +264,13 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _loadCurrent() async {
     if (!mounted) return;
+    _introSkipped = false;
+    _outroHandled = false;
     _urlIndex = 0;
     setState(() {
       _loading = true;
       _error = null;
+      _ended = false;
       _attempt = _local
           ? 'Opening downloaded episode…'
           : 'Connecting to CamAnime servers…';
@@ -286,8 +290,6 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       return;
     }
-    // Start from the server that last worked for this anime, then keep going
-    // through the rest: a dead provider is skipped in seconds, not minutes.
     final start = _urlIndex > 0
         ? _urlIndex
         : _preferredServer.clamp(0, urls.length - 1).toInt();
@@ -321,43 +323,18 @@ class _PlayerScreenState extends State<PlayerScreen>
           }
         }
         video.addListener(_onTick);
-        final chewie = ChewieController(
-          videoPlayerController: video,
-          autoPlay: true,
-          looping: false,
-          allowFullScreen: true,
-          allowPlaybackSpeedChanging: true,
-          allowMuting: true,
-          showControlsOnInitialize: false,
-          // Keep the screen awake while an episode is streaming or playing
-          // from the device; Chewie releases the wake lock as soon as playback
-          // pauses, the episode ends, or the player is closed.
-          allowedScreenSleep: false,
-          // Keep control of the chrome after full screen so the surface returns
-          // to the normal player, where the wake lock is released on pause.
-          deviceOrientationsOnEnterFullScreen: const [],
-          materialProgressColors: ChewieProgressColors(
-            playedColor: CamColors.accent,
-            handleColor: CamColors.accent,
-            bufferedColor: Colors.white38,
-            backgroundColor: Colors.white24,
-          ),
-          playbackSpeeds: const [0.5, 0.75, 1, 1.25, 1.5, 2],
-          errorBuilder: (_, message) => _PlaybackError(
-            message: message,
-            canRetry: urls.length > i + 1,
-            onRetry: () => _nextMirror(),
-          ),
-        );
         setState(() {
           _video = video;
-          _chewie = chewie;
           _loading = false;
           _error = null;
           _attempt = '';
+          _ended = false;
         });
-        _applyVolume();
+        await video.setPlaybackSpeed(_speed);
+        await video.setVolume(_volume);
+        await video.play();
         unawaited(_rememberServer(i));
+        _scheduleHide();
         return;
       } catch (e) {
         try {
@@ -398,12 +375,10 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   Future<void> _retry() async {
     _urlIndex = 0;
+    _autoHops = 0;
     await _loadCurrent();
   }
 
-  /// Recommendations wait until the episode is actually buffering. Fetching
-  /// the whole catalogue at the same moment as the video competed for
-  /// bandwidth and made the first frame noticeably slower on mobile data.
   Future<void> _loadRecommendationsWhenIdle() async {
     final p = await SharedPreferences.getInstance();
     if (p.getBool('app_data_saver') ?? false) return;
@@ -441,11 +416,38 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
+  /// Episode-only intro/outro handling, for streaming and downloaded files.
+  ///
+  /// Openings and endings are not published as metadata, so this uses the
+  /// conventional anime layout (opening inside the first ~90s, ending in the
+  /// final ~80s). It runs at most once per episode load, never for films, and
+  /// both halves can be turned off in Playback settings.
+  void _maybeAutoSkip(int pos, int duration) {
+    if (duration < 120000) return;
+    final episodic = current.episode != null || playlist.length > 1;
+    if (!episodic) return;
+    if (_autoSkipIntro &&
+        !_introSkipped &&
+        duration > 300000 &&
+        pos > 4000 &&
+        pos < 92000) {
+      _introSkipped = true;
+      unawaited(_seekTo(90000));
+      _snack('Intro skipped');
+      return;
+    }
+    if (_autoSkipOutro &&
+        !_outroHandled &&
+        _canHaveNext &&
+        duration - pos <= 80000) {
+      _outroHandled = true;
+      unawaited(_goNext(auto: true));
+    }
+  }
+
   void _onTick() {
     final v = _video;
     if (v == null || !v.value.isInitialized) return;
-    // Screen stays awake exactly while the episode is rolling: pausing, the
-    // episode ending, or the app going away all release the lock.
     if (v.value.isPlaying) {
       unawaited(_holdAwake());
     } else {
@@ -457,18 +459,15 @@ class _PlayerScreenState extends State<PlayerScreen>
         return;
       }
     }
-    final src = current;
     if (v.value.isCompleted) {
-      if (_progressId.isNotEmpty && src.episode != null) {
-        unawaited(WatchProgress.clear(_progressId, src.episode!));
-      }
-      _advance();
+      _onEnded();
       return;
     }
     final pos = v.value.position.inMilliseconds;
-    final second = pos ~/ 1000;
-    if (second != _posSecond) {
-      _posSecond = second;
+    _maybeAutoSkip(pos, v.value.duration.inMilliseconds);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastSaveMs > 500 || _dragMs == null) {
+      _lastSaveMs = now;
       if (mounted) {
         setState(() {
           _posMs = pos;
@@ -476,10 +475,26 @@ class _PlayerScreenState extends State<PlayerScreen>
         });
       }
     }
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (pos < 5000 || now - _lastSaveMs < 5000) return;
-    _lastSaveMs = now;
+    if (pos < 5000) return;
+    if (now % 10000 > 600) return;
     unawaited(_saveProgress());
+  }
+
+  /// The episode actually reached its end. Autoplay only runs here — never on a
+  /// manual pause, a minimize, or a close.
+  Future<void> _onEnded() async {
+    if (_ended || _closing || !mounted) return;
+    final src = current;
+    if (_progressId.isNotEmpty && src.episode != null) {
+      unawaited(WatchProgress.clear(_progressId, src.episode!));
+    }
+    setState(() {
+      _ended = true;
+      _showControls = true;
+    });
+    _hideTimer?.cancel();
+    if (!_autoplayNext) return;
+    await _goNext(auto: true);
   }
 
   Future<void> _saveProgress({bool force = false}) async {
@@ -504,17 +519,14 @@ class _PlayerScreenState extends State<PlayerScreen>
     );
   }
 
-  /// Switches to the source closest to the requested height: an exact match,
-  /// otherwise the nearest lower quality, otherwise the nearest higher one.
   Future<void> _selectQuality(int height) async {
     EpisodeSource? best;
     var bestScore = 1 << 30;
     for (final source in _variants) {
       final h = source.height;
       if (h <= 0) continue;
-      final score = h == height
-          ? -1000
-          : (h <= height ? height - h : 1000 + (h - height));
+      final score =
+          h == height ? -1000 : (h <= height ? height - h : 1000 + (h - height));
       if (score < bestScore) {
         bestScore = score;
         best = source;
@@ -527,85 +539,167 @@ class _PlayerScreenState extends State<PlayerScreen>
     await _tryUrls();
   }
 
-  /// Auto-advance a user-built queue, then keep the series going by resolving
-  /// the next episode when the user has enabled autoplay in Settings.
-  void _advance() {
-    if (_switching) return;
-    if (index < playlist.length - 1) {
-      if (!_autoplayNext && playlist.length == 1) return;
-      _switching = true;
-      Future<void>(() async {
-        try {
-          await _disposePlayback();
-          if (!mounted) return;
-          setState(() {
-            index += 1;
-            _variant = null;
-            _episodeVariants = const [];
-            _error = null;
-          });
-          await _tryUrls();
-        } finally {
-          _switching = false;
-        }
-      });
+  /// Moves to the next episode of *this* anime and *this* audio language.
+  ///
+  /// The next source is resolved before anything is torn down, so a provider
+  /// failure leaves the current episode playing and offers a retry instead of
+  /// silently jumping to an unrelated title.
+  Future<void> _goNext({bool auto = false}) async {
+    if (_advancing || _closing) return;
+    if (auto && _autoHops >= 30) {
+      _snack('Automatic playback stopped after 30 episodes.');
       return;
     }
-    final fetch = widget.fetchEpisode;
-    // Also covers offline playback: once the saved folder runs out the series
-    // continues from the streaming servers instead of stopping dead.
-    if (_autoplayNext && fetch != null) {
-      final base = current.episode ?? widget.episode;
-      if (base == null || base <= 0) return;
-      _switching = true;
-      Future<void>(() async {
-        try {
-          final next = await fetch(base + 1);
-          if (!mounted) return;
-          if (next == null) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text('Episode finished.')));
-            return;
-          }
-          await _disposePlayback();
-          if (!mounted) return;
-          setState(() {
-            playlist = [...playlist, next];
-            index = playlist.length - 1;
-            _variant = null;
-            _episodeVariants = const [];
-            _error = null;
-            // The queue has moved past the downloaded file onto a stream.
-            _local = false;
-          });
-          await _tryUrls();
-        } finally {
-          _switching = false;
+    _advancing = true;
+    _hideTimer?.cancel();
+    setState(() {});
+    try {
+      await _saveProgress(force: true);
+      EpisodeSource? next;
+      if (index + 1 < playlist.length) {
+        next = playlist[index + 1];
+      } else {
+        final fetch = widget.fetchEpisode;
+        final base = current.episode ?? widget.episode;
+        if (fetch == null || base == null || base <= 0) {
+          _snack('No next episode is available for this title.');
+          return;
         }
+        next = await fetch(base + 1);
+        if (next == null || next.url.trim().isEmpty) {
+          _snack(
+            'Episode ${base + 1} is not available in this language right now.',
+            action: SnackBarAction(label: 'Retry', onPressed: () => _goNext()),
+          );
+          return;
+        }
+      }
+      if (!mounted) return;
+      await _disposePlayback();
+      if (!mounted) return;
+      setState(() {
+        if (index + 1 < playlist.length) {
+          index += 1;
+        } else {
+          playlist = [...playlist, next!];
+          index = playlist.length - 1;
+        }
+        _variant = null;
+        _episodeVariants = const [];
+        _error = null;
+        _ended = false;
+        _posMs = 0;
+        _durMs = 0;
+        _local = false;
       });
-      return;
-    }
-    if (_autoplayNext && mounted && !_local) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Episode finished.')));
+      if (auto) _autoHops += 1;
+      await _tryUrls();
+    } catch (_) {
+      if (!mounted) return;
+      _snack(
+        'Could not start the next episode. Check your connection.',
+        action: SnackBarAction(label: 'Retry', onPressed: () => _goNext()),
+      );
+    } finally {
+      _advancing = false;
+      if (mounted) setState(() {});
     }
   }
 
   Future<void> _goTo(int target) async {
-    if (target < 0 || target >= playlist.length) return;
-    await _disposePlayback();
-    if (!mounted) return;
-    setState(() {
-      index = target;
-      _variant = null;
-      _episodeVariants = const [];
-      _error = null;
-    });
-    await _tryUrls();
+    if (target < 0 || target >= playlist.length || _advancing) return;
+    _advancing = true;
+    try {
+      await _saveProgress(force: true);
+      await _disposePlayback();
+      if (!mounted) return;
+      setState(() {
+        index = target;
+        _variant = null;
+        _episodeVariants = const [];
+        _error = null;
+        _ended = false;
+        _autoHops = 0;
+      });
+      await _tryUrls();
+    } finally {
+      _advancing = false;
+      if (mounted) setState(() {});
+    }
   }
 
-  /// Hands playback to the app-level miniplayer and steps out of the player, so
-  /// the episode keeps playing while the user browses.
+  Future<void> _togglePlay() async {
+    final v = _video;
+    if (v == null || !v.value.isInitialized) return;
+    if (_ended) {
+      await v.seekTo(Duration.zero);
+      setState(() => _ended = false);
+      await v.play();
+    } else if (v.value.isPlaying) {
+      await v.pause();
+    } else {
+      await v.play();
+    }
+    _showControlsNow();
+    setState(() {});
+  }
+
+  Future<void> _skip(int seconds) async {
+    final v = _video;
+    if (v == null || !v.value.isInitialized) return;
+    final target = v.value.position + Duration(seconds: seconds);
+    final end = v.value.duration;
+    final clamped = target < Duration.zero
+        ? Duration.zero
+        : (end > Duration.zero && target > end ? end : target);
+    await v.seekTo(clamped);
+    _showControlsNow();
+    setState(() {
+      _posMs = clamped.inMilliseconds;
+      if (_ended && clamped < end) _ended = false;
+    });
+  }
+
+  Future<void> _seekTo(int ms) async {
+    final v = _video;
+    if (v == null || !v.value.isInitialized) return;
+    final target = ms.clamp(0, v.value.duration.inMilliseconds);
+    await v.seekTo(Duration(milliseconds: target));
+    if (mounted) {
+      setState(() {
+        _posMs = target;
+        _ended = false;
+      });
+    }
+  }
+
+  void _showControlsNow() {
+    if (!_showControls && mounted) setState(() => _showControls = true);
+    _scheduleHide();
+  }
+
+  void _toggleControls() {
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _scheduleHide();
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    if (_ended) return;
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      final playing = _video?.value.isPlaying ?? false;
+      if (playing) setState(() => _showControls = false);
+    });
+  }
+
+  void _snack(String message, {SnackBarAction? action}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), action: action),
+    );
+  }
+
   Future<void> _minimize() async {
     final video = _video;
     if (video == null || !video.value.isInitialized) {
@@ -613,40 +707,40 @@ class _PlayerScreenState extends State<PlayerScreen>
       return;
     }
     final src = current;
-    final url = _primaryUrl;
-    final position = video.value.position;
-    final playing = video.value.isPlaying;
-    final title = playlist.isEmpty ? widget.label : src.label;
-    final subtitle = _local
-        ? 'Offline episode'
-        : (src.episode != null ? 'Episode ${src.episode}' : 'Streaming');
-    final adopted = await MiniPlayer.start(
-      url: url,
-      title: title,
-      subtitle: subtitle,
+    await _saveProgress(force: true);
+    _hideTimer?.cancel();
+    _closing = true;
+    // Stop owning the controller before handing it over: dispose() must not
+    // tear down the session the mini-player is about to continue.
+    _video = null;
+    video.removeListener(_onTick);
+    final adopted = MiniPlayer.adopt(
+      controller: video,
+      title: src.animeTitle.isEmpty ? widget.label : src.animeTitle,
+      subtitle: src.episode != null ? 'Episode ${src.episode}' : 'Playing',
       image: src.image,
-      position: position,
-      play: playing,
-      rebuild: () => PlayerScreen(
-        url: url,
+      rebuild: (live) => PlayerScreen(
+        url: widget.url,
         label: widget.label,
-        localFile: widget.localFile,
-        playlist: widget.playlist,
-        startIndex: widget.startIndex,
+        localFile: _local,
+        playlist: playlist,
+        startIndex: index,
         mirrors: widget.mirrors,
         episode: src.episode ?? widget.episode,
         fetchEpisode: widget.fetchEpisode,
-        variants: widget.variants,
+        variants: _episodeVariants,
         onOpenAnime: widget.onOpenAnime,
+        handoff: live,
       ),
     );
     if (!mounted) return;
     if (!adopted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('That episode could not continue in the background.')));
+      _video = video;
+      video.addListener(_onTick);
+      _closing = false;
+      _snack('That episode could not continue in the background.');
       return;
     }
-    unawaited(_saveProgress(force: true));
     Navigator.maybePop(context);
   }
 
@@ -658,266 +752,26 @@ class _PlayerScreenState extends State<PlayerScreen>
       try {
         await video.pause();
       } catch (_) {}
+      try {
+        await video.dispose();
+      } catch (_) {}
     }
-    try {
-      _chewie?.dispose();
-    } catch (_) {}
-    _chewie = null;
-    try {
-      await video?.dispose();
-    } catch (_) {}
   }
 
   @override
   void dispose() {
+    _closing = true;
+    _hideTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _releaseAwake();
     unawaited(_saveProgress(force: true));
     _disposePlayback();
+    // Leave the device exactly as it was found: system brightness and normal
+    // orientation are restored when the player closes.
+    _playerChannel.invokeMethod('resetBrightness');
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
-  }
-  @override
-  Widget build(BuildContext context) {
-    final urls = _urls;
-    return Scaffold(
-      backgroundColor: CamColors.bg,
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 36),
-        children: [
-          // Full-bleed cinema surface: the episode is the first thing on
-          // screen, with its own chrome instead of an app bar.
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(CamRadius.lg)),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ColoredBox(
-                    color: Colors.black,
-                    child: _buildSurface(urls),
-                  ),
-                  if (_brightness < 0.999)
-                    IgnorePointer(
-                      child: ColoredBox(
-                        color: Colors.black
-                            .withValues(alpha: (1 - _brightness) * 0.72),
-                      ),
-                    ),
-                  // Top chrome: back, title, live/offline state.
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: EdgeInsets.fromLTRB(
-                          4, MediaQuery.paddingOf(context).top + 2, 6, 26),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.black87, Colors.transparent],
-                        ),
-                      ),
-                      child: Row(children: [
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: () => Navigator.maybePop(context),
-                          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white, size: 19),
-                        ),
-                        Expanded(
-                          child: Text(
-                            playlist.isEmpty ? widget.label : current.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.only(right: 4),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _local
-                                ? CamColors.success.withValues(alpha: 0.22)
-                                : Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _local ? 'OFFLINE' : 'STREAM',
-                            style: TextStyle(
-                                color: _local
-                                    ? CamColors.success
-                                    : Colors.white70,
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.4),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Keep playing in miniplayer',
-                          onPressed: _loading ? null : _minimize,
-                          icon: const Icon(
-                              Icons.picture_in_picture_alt_rounded,
-                              color: Colors.white70,
-                              size: 20),
-                        ),
-                        IconButton(
-                          tooltip: 'Reload player',
-                          onPressed: _loading ? null : _retry,
-                          icon: const Icon(Icons.refresh_rounded,
-                              color: Colors.white70, size: 20),
-                        ),
-                      ]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          _nowPlayingBar(),
-          if (_attempt.isNotEmpty && _error == null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
-              child: Row(children: [
-                const SizedBox(
-                    width: 13,
-                    height: 13,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(_attempt,
-                      style: const TextStyle(
-                          color: CamColors.inkDim, fontSize: 11.5)),
-                ),
-              ]),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Wrap(spacing: 7, runSpacing: 7, children: [
-              MetaPill(
-                _local ? 'OFFLINE' : 'STREAM',
-                icon: _local
-                    ? Icons.offline_pin_rounded
-                    : Icons.podcasts_rounded,
-                color: _local ? CamColors.success : CamColors.info,
-              ),
-              if (urls.length > 1)
-                MetaPill('${urls.length} SERVERS',
-                    icon: Icons.dns_rounded, color: CamColors.accentAlt),
-              if (_isPartial)
-                const MetaPill('PARTIAL · PLAYING AS IT DOWNLOADS',
-                    icon: Icons.downloading_rounded, color: CamColors.accent),
-              if (!_local && _resumeEnabled)
-                const MetaPill('RESUME ON', color: CamColors.inkDim),
-              if (_autoplayNext && !_local)
-                const MetaPill('AUTO-NEXT ON',
-                    icon: Icons.skip_next_rounded, color: CamColors.success),
-            ]),
-          ),
-          if (_qualities.length > 1)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-              child: Row(children: [
-                const Icon(Icons.high_quality_rounded,
-                    size: 17, color: CamColors.inkDim),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(spacing: 7, runSpacing: 7, children: [
-                    for (final height in _qualities)
-                      ChoiceChip(
-                        label: Text('${height}p'),
-                        selected: _activeHeight == height,
-                        onSelected: (_) => _selectQuality(height),
-                      ),
-                  ]),
-                ),
-              ]),
-            ),
-          _tuningCard(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text(
-              playlist.isEmpty ? widget.label : current.label,
-              style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.2),
-            ),
-          ),
-          if (urls.length > 1) ...[
-            const CamSectionTitle('Playback source',
-                eyebrow: 'Automatic fallback',
-                padding: EdgeInsets.fromLTRB(16, 18, 16, 8)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (var i = 0; i < urls.length; i++)
-                    ChoiceChip(
-                      label:
-                          Text(i == 0 ? 'Server 1 · main' : 'Server ${i + 1}'),
-                      selected: _urlIndex == i,
-                      onSelected: (_) async {
-                        if (_urlIndex == i) return;
-                        _urlIndex = i;
-                        await _disposePlayback();
-                        await _tryUrls();
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ],
-          if (playlist.length > 1) _queueSection(),
-          _recsSection(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Row(children: [
-              Expanded(
-                child: CamGhostButton(
-                  label: 'Previous',
-                  icon: Icons.skip_previous_rounded,
-                  onPressed: index > 0 ? () => _goTo(index - 1) : null,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: CamPrimaryButton(
-                  label:
-                      index + 1 < playlist.length ? 'Next episode' : 'Replay',
-                  icon: index + 1 < playlist.length
-                      ? Icons.skip_next_rounded
-                      : Icons.replay_rounded,
-                  onPressed: () =>
-                      index + 1 < playlist.length ? _goTo(index + 1) : _retry(),
-                ),
-              ),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
-            child: Text(
-              _local
-                  ? (_isPartial
-                      ? 'Playing the downloaded part while the rest finishes. Everything already saved is watchable now.'
-                      : 'Playing the full episode stored on this device. No internet needed.')
-                  : 'Streaming from CamAnime. If a server stalls, the app switches to the next one automatically.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: CamColors.inkDim, fontSize: 11.5, height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   String _clock(int ms) {
@@ -930,133 +784,128 @@ class _PlayerScreenState extends State<PlayerScreen>
     return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
   }
 
-  Future<void> _skip(int seconds) async {
-    final v = _video;
-    if (v == null || !v.value.isInitialized) return;
-    final target = v.value.position + Duration(seconds: seconds);
-    final end = v.value.duration;
-    final clamped = target < Duration.zero
-        ? Duration.zero
-        : (end > Duration.zero && target > end ? end : target);
-    await v.seekTo(clamped);
-  }
-
-  /// Play-time strip: transport controls plus elapsed / total runtime, so the
-  /// length of the episode is visible in both streaming and offline playback.
-  Widget _nowPlayingBar() {
-    final v = _video;
-    final playing = v?.value.isPlaying ?? false;
-    final ready = v?.value.isInitialized ?? false;
-    final total = _durMs > 0 ? _durMs : (v?.value.duration.inMilliseconds ?? 0);
-    final pos = _posMs > 0 ? _posMs : (v?.value.position.inMilliseconds ?? 0);
-    final pct = total > 0 ? ((pos * 100) ~/ total).clamp(0, 100) : 0;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 16, 0),
-      child: Row(children: [
-        IconButton(
-          tooltip: 'Back 10 seconds',
-          visualDensity: VisualDensity.compact,
-          onPressed: ready ? () => _skip(-10) : null,
-          icon: const Icon(Icons.replay_10_rounded, size: 22),
+  @override
+  Widget build(BuildContext context) {
+    if (_fullscreen) {
+      // Immersive mode keeps the same player, but gives every available pixel
+      // to the video and lets the back gesture exit fullscreen first.
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _toggleFullscreen();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: _surface(fill: true),
         ),
-        IconButton(
-          tooltip: playing ? 'Pause' : 'Play',
-          visualDensity: VisualDensity.compact,
-          onPressed: ready
-              ? () async {
-                  if (playing) {
-                    await v!.pause();
-                  } else {
-                    await v!.play();
-                  }
-                  if (mounted) setState(() {});
-                }
-              : null,
-          icon: Icon(
-              playing
-                  ? Icons.pause_circle_filled_rounded
-                  : Icons.play_circle_fill_rounded,
-              size: 34,
-              color: CamColors.accent),
+      );
+    }
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _surface(),
+            if (playlist.length > 1) _episodeStrip(),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 26),
+                children: [
+                  Text(
+                    current.animeTitle.isEmpty
+                        ? widget.label
+                        : current.animeTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    current.episode != null
+                        ? 'Episode ${current.episode}'
+                        : current.label,
+                    style: const TextStyle(
+                      color: CamColors.inkDim,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    if (_canHaveNext)
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _advancing ? null : () => _goNext(),
+                          icon: _advancing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.skip_next_rounded, size: 20),
+                          label: const Text('Next episode'),
+                        ),
+                      ),
+                    if (_canHaveNext && playlist.length > 1)
+                      const SizedBox(width: 10),
+                    if (playlist.length > 1)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _openEpisodes,
+                          icon: const Icon(Icons.list_rounded, size: 20),
+                          label: Text('Episodes (${playlist.length})'),
+                        ),
+                      ),
+                  ]),
+                  if (_recommended.isNotEmpty || _recsLoading) ...[
+                    const SizedBox(height: 26),
+                    const Text('More to watch',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 10),
+                    _recsSection(),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-        IconButton(
-          tooltip: 'Forward 10 seconds',
-          visualDensity: VisualDensity.compact,
-          onPressed: ready ? () => _skip(10) : null,
-          icon: const Icon(Icons.forward_10_rounded, size: 22),
-        ),
-        const SizedBox(width: 4),
-        Text('${_clock(pos)} / ${_clock(total)}',
-            style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                fontFeatures: [FontFeature.tabularFigures()])),
-        const Spacer(),
-        Text('$pct%',
-            style: const TextStyle(color: CamColors.inkDim, fontSize: 11)),
-      ]),
+      ),
     );
   }
 
-  /// Volume and picture brightness, adjustable without leaving the episode.
-  /// Brightness is applied as a dimming overlay, so it works on every device.
-  Widget _tuningCard() => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-        child: CamCard(
-          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-          child: Column(children: [
-            Row(children: [
-              Icon(
-                _volume == 0
-                    ? Icons.volume_off_rounded
-                    : Icons.volume_up_rounded,
-                size: 18,
-                color: CamColors.inkDim,
-              ),
-              Expanded(
-                child: Slider(
-                  value: _volume,
-                  activeColor: CamColors.accent,
-                  onChanged: (v) {
-                    setState(() => _volume = v);
-                    _applyVolume();
-                  },
-                  onChangeEnd: (_) => _saveTuning(),
-                ),
-              ),
-              SizedBox(
-                width: 40,
-                child: Text('${(_volume * 100).round()}%',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        fontSize: 10.5, color: CamColors.inkDim)),
-              ),
-            ]),
-            Row(children: [
-              const Icon(Icons.brightness_6_rounded,
-                  size: 18, color: CamColors.inkDim),
-              Expanded(
-                child: Slider(
-                  value: _brightness,
-                  min: 0.2,
-                  activeColor: CamColors.accent,
-                  onChanged: (v) => setState(() => _brightness = v),
-                  onChangeEnd: (_) => _saveTuning(),
-                ),
-              ),
-              SizedBox(
-                width: 40,
-                child: Text('${(_brightness * 100).round()}%',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        fontSize: 10.5, color: CamColors.inkDim)),
-              ),
-            ]),
-          ]),
+  Widget _surface({bool fill = false}) {
+    final v = _video;
+    final ready = v != null && v.value.isInitialized;
+    final aspect = ready && v.value.aspectRatio > 0 ? v.value.aspectRatio : 16 / 9;
+    final surface = AspectRatio(
+      aspectRatio: aspect,
+      child: ColoredBox(
+        color: Colors.black,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _loading || _error != null ? null : _toggleControls,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (ready) Center(child: VideoPlayer(v)) else _buildPending(),
+              if (ready) _controlsOverlay(),
+            ],
+          ),
         ),
-      );
+      ),
+    );
+    // In fullscreen the video keeps its own aspect ratio inside every available
+    // pixel (letterboxed), instead of being locked to the inline strip height.
+    return fill ? Center(child: surface) : surface;
+  }
 
-  Widget _buildSurface(List<String> urls) {
+  Widget _buildPending() {
     if (_error != null) {
       return _PlaybackError(
         message: _error!,
@@ -1064,147 +913,597 @@ class _PlayerScreenState extends State<PlayerScreen>
         onRetry: _retry,
       );
     }
-    if (_loading || _chewie == null) {
-      return const Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircularProgressIndicator(strokeWidth: 2.4),
-          SizedBox(height: 12),
-          Text('Loading episode…',
-              style: TextStyle(color: CamColors.inkDim, fontSize: 12)),
-        ]),
-      );
-    }
-    return Chewie(controller: _chewie!);
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const SizedBox(
+          width: 26,
+          height: 26,
+          child: CircularProgressIndicator(strokeWidth: 2.4),
+        ),
+        const SizedBox(height: 12),
+        Text(_attempt.isEmpty ? 'Loading episode…' : _attempt,
+            style: const TextStyle(color: CamColors.inkDim, fontSize: 12)),
+      ]),
+    );
   }
 
-  Widget _queueSection() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      CamSectionTitle(
-        'Queue',
-        eyebrow: '${index + 1} of ${playlist.length}',
-        action: Text('${playlist.length} episodes',
-            style: const TextStyle(color: CamColors.inkDim, fontSize: 11)),
+  Widget _controlsOverlay() {
+    final total = _durMs > 0 ? _durMs : (_video?.value.duration.inMilliseconds ?? 0);
+    final pos = (_dragMs ?? _posMs).clamp(0, total == 0 ? 0 : total);
+    return AnimatedOpacity(
+      opacity: _showControls ? 1 : 0,
+      duration: const Duration(milliseconds: 180),
+      child: IgnorePointer(
+        ignoring: !_showControls,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Readability scrims, top and bottom.
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black54, Colors.transparent],
+                  stops: [0, 0.35],
+                ),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black87, Colors.transparent],
+                  stops: [0, 0.55],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Row(children: [
+                IconButton(
+                  tooltip: 'Close player',
+                  onPressed: () => Navigator.maybePop(context),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white, size: 19),
+                ),
+                Expanded(
+                  child: Text(
+                    current.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                  tooltip: _fullscreen ? 'Exit fullscreen' : 'Fullscreen',
+                  onPressed: _toggleFullscreen,
+                  icon: Icon(
+                      _fullscreen
+                          ? Icons.fullscreen_exit_rounded
+                          : Icons.fullscreen_rounded,
+                      color: Colors.white,
+                      size: 21),
+                ),
+                IconButton(
+                  tooltip: 'Play in mini-player',
+                  onPressed: _minimize,
+                  icon: const Icon(Icons.picture_in_picture_alt_rounded,
+                      color: Colors.white, size: 20),
+                ),
+              ]),
+            ),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _roundButton(
+                    icon: Icons.replay_10_rounded,
+                    label: 'Back 10 seconds',
+                    onTap: () => _skip(-10),
+                  ),
+                  const SizedBox(width: 18),
+                  _roundButton(
+                    icon: _ended
+                        ? Icons.replay_rounded
+                        : (_video?.value.isPlaying ?? false)
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                    label: _ended
+                        ? 'Replay episode'
+                        : (_video?.value.isPlaying ?? false)
+                            ? 'Pause'
+                            : 'Play',
+                    size: 58,
+                    onTap: _togglePlay,
+                  ),
+                  const SizedBox(width: 18),
+                  _roundButton(
+                    icon: Icons.forward_10_rounded,
+                    label: 'Forward 10 seconds',
+                    onTap: () => _skip(10),
+                  ),
+                  if (_canHaveNext || _advancing) ...[
+                    const SizedBox(width: 18),
+                    _roundButton(
+                      icon: Icons.skip_next_rounded,
+                      label: 'Next episode',
+                      busy: _advancing,
+                      onTap: _advancing ? null : () => _goNext(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (_ended)
+              Positioned(
+                left: 18,
+                right: 18,
+                bottom: 74,
+                child: _ended
+                    ? _endCard()
+                    : const SizedBox.shrink(),
+              ),
+            Positioned(
+              left: 8,
+              right: 8,
+              bottom: 0,
+              child: Row(children: [
+                Text(_clock(pos),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600)),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 2.5,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 16),
+                    ),
+                    child: Slider(
+                      value: pos.toDouble().clamp(0, total == 0 ? 1 : total.toDouble()),
+                      max: total == 0 ? 1 : total.toDouble(),
+                      activeColor: CamColors.accent,
+                      inactiveColor: Colors.white24,
+                      onChanged: (value) {
+                        setState(() => _dragMs = value.round());
+                        _hideTimer?.cancel();
+                      },
+                      onChangeEnd: (value) async {
+                        await _seekTo(value.round());
+                        if (mounted) setState(() => _dragMs = null);
+                        _scheduleHide();
+                      },
+                    ),
+                  ),
+                ),
+                Text(_clock(total),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 11.5)),
+                IconButton(
+                  tooltip: 'Playback settings',
+                  onPressed: _openSettings,
+                  icon: const Icon(Icons.tune_rounded,
+                      color: Colors.white, size: 20),
+                ),
+              ]),
+            ),
+          ],
+        ),
       ),
-      for (var i = 0; i < playlist.length; i++)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 7),
-          child: CamCard(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            color: i == index ? CamColors.surfaceHigh : CamColors.surface,
-            onTap: i == index ? null : () => _goTo(i),
-            child: Row(children: [
-              Container(
-                width: 30,
-                height: 30,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: i == index ? CamColors.accent : CamColors.surfaceAlt,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: i == index
-                    ? const Icon(Icons.graphic_eq_rounded,
-                        size: 16, color: Colors.black)
-                    : Text('${i + 1}',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Text(
-                  playlist[i].label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600),
-                ),
-              ),
-              if (playlist[i].mirrors.isNotEmpty)
-                MetaPill('${playlist[i].mirrors.length + 1} src',
-                    color: CamColors.inkDim),
-            ]),
+    );
+  }
+
+  Widget _endCard() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            _canHaveNext
+                ? 'Up next · Episode ${(current.episode ?? 0) + 1}'
+                : 'You finished this episode.',
+            style: const TextStyle(
+                color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
           ),
         ),
-    ]);
+        if (_canHaveNext)
+          FilledButton(
+            onPressed: _advancing ? null : () => _goNext(),
+            child: const Text('Play next'),
+          )
+        else
+          TextButton(
+            onPressed: _togglePlay,
+            child: const Text('Replay'),
+          ),
+      ]),
+    );
+  }
+
+  Widget _roundButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+    double size = 46,
+    bool busy = false,
+  }) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: InkResponse(
+          onTap: onTap,
+          radius: size * 0.7,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: 0.42),
+              border: Border.all(color: Colors.white24),
+            ),
+            alignment: Alignment.center,
+            child: busy
+                ? SizedBox(
+                    width: size * 0.4,
+                    height: size * 0.4,
+                    child: const CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : Icon(icon, color: Colors.white, size: size * 0.52),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyBrightness(double value) async {
+    try {
+      await _playerChannel.invokeMethod('brightness', {'value': value});
+    } catch (_) {
+      // Platform without the bridge (tests/desktop): in-app overlay is still
+      // usable, so this is not an error worth interrupting playback for.
+    }
+  }
+
+  Future<void> _savePlaybackPrefs() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setDouble('player_volume', _volume);
+    await p.setDouble('player_brightness', _brightness);
+  }
+
+  Future<void> _toggleFullscreen() async {
+    final next = !_fullscreen;
+    if (mounted) setState(() => _fullscreen = next);
+    try {
+      if (next) {
+        await SystemChrome.setPreferredOrientations(const [
+          DeviceOrientation.landscapeLeft,
+          DeviceOrientation.landscapeRight,
+        ]);
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    } catch (_) {}
+    _scheduleHide();
+  }
+
+  Widget _episodeStrip() {
+    return SizedBox(
+      height: 50,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(12, 7, 12, 5),
+        itemCount: playlist.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (_, i) {
+          final episode = playlist[i].episode ?? (i + 1);
+          return ChoiceChip(
+            label: Text('EP $episode'),
+            selected: i == index,
+            visualDensity: VisualDensity.compact,
+            labelStyle:
+                const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+            onSelected: (_) {
+              if (i != index) _goTo(i);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openSettings() async {
+    _hideTimer?.cancel();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+            child: SingleChildScrollView(
+              child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_qualities.length > 1 && !_local) ...[
+                  const Text('Video quality',
+                      style:
+                          TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final height in _qualities)
+                      ChoiceChip(
+                        label: Text('${height}p'),
+                        selected: _activeHeight == height,
+                        onSelected: (_) {
+                          Navigator.pop(ctx);
+                          _selectQuality(height);
+                        },
+                      ),
+                  ]),
+                  const SizedBox(height: 18),
+                ],
+                const Text('Volume',
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                Row(children: [
+                  Icon(_volume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      size: 18, color: CamColors.inkDim),
+                  Expanded(
+                    child: Slider(
+                      value: _volume,
+                      activeColor: CamColors.accent,
+                      onChanged: (value) {
+                        setSheet(() => _volume = value);
+                        setState(() => _volume = value);
+                        _video?.setVolume(value);
+                      },
+                      onChangeEnd: (_) => _savePlaybackPrefs(),
+                    ),
+                  ),
+                  Text('${(_volume * 100).round()}%',
+                      style: const TextStyle(
+                          fontSize: 11, color: CamColors.inkDim)),
+                ]),
+                const Text('Brightness',
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                Row(children: [
+                  const Icon(Icons.brightness_6_rounded,
+                      size: 18, color: CamColors.inkDim),
+                  Expanded(
+                    child: Slider(
+                      value: _brightness,
+                      min: 0.15,
+                      activeColor: CamColors.accent,
+                      onChanged: (value) {
+                        setSheet(() => _brightness = value);
+                        setState(() => _brightness = value);
+                        unawaited(_applyBrightness(value));
+                      },
+                      onChangeEnd: (_) => _savePlaybackPrefs(),
+                    ),
+                  ),
+                  Text('${(_brightness * 100).round()}%',
+                      style: const TextStyle(
+                          fontSize: 11, color: CamColors.inkDim)),
+                ]),
+                const SizedBox(height: 8),
+                const Text('Playback speed',
+                    style:
+                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final speed in const [0.75, 1.0, 1.25, 1.5, 2.0])
+                    ChoiceChip(
+                      label: Text(speed == 1.0 ? '1x' : '${speed}x'),
+                      selected: _speed == speed,
+                      onSelected: (_) async {
+                        setSheet(() => _speed = speed);
+                        _applySpeed();
+                        final p = await SharedPreferences.getInstance();
+                        await p.setDouble('player_speed', speed);
+                      },
+                    ),
+                ]),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto play next episode',
+                      style: TextStyle(fontSize: 13)),
+                  value: _autoplayNext,
+                  onChanged: (value) async {
+                    setSheet(() => _autoplayNext = value);
+                    if (mounted) setState(() => _autoplayNext = value);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('app_autoplay', value);
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto skip intro',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('Jump past the first 90 seconds',
+                      style: TextStyle(fontSize: 11)),
+                  value: _autoSkipIntro,
+                  onChanged: (value) async {
+                    setSheet(() => _autoSkipIntro = value);
+                    if (mounted) setState(() => _autoSkipIntro = value);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('player_skip_intro', value);
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auto skip outro to next episode',
+                      style: TextStyle(fontSize: 13)),
+                  subtitle: const Text('Starts the next episode near the ending',
+                      style: TextStyle(fontSize: 11)),
+                  value: _autoSkipOutro,
+                  onChanged: (value) async {
+                    setSheet(() => _autoSkipOutro = value);
+                    if (mounted) setState(() => _autoSkipOutro = value);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('player_skip_outro', value);
+                  },
+                ),
+                if (playlist.length > 1) ...[
+                  const Divider(),
+                  Text('Episodes (${playlist.length})',
+                      style: const TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 160),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: playlist.length,
+                      itemBuilder: (_, i) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          i == index
+                              ? Icons.graphic_eq_rounded
+                              : Icons.play_arrow_rounded,
+                          size: 18,
+                          color: i == index ? CamColors.accent : null,
+                        ),
+                        title: Text(playlist[i].label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          if (i != index) _goTo(i);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    _scheduleHide();
+  }
+
+  Future<void> _openEpisodes() async {
+    if (playlist.length <= 1) return;
+    _hideTimer?.cancel();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView.builder(
+          shrinkWrap: true,
+          itemCount: playlist.length,
+          itemBuilder: (_, i) => ListTile(
+            leading: Icon(
+              i == index ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded,
+              color: i == index ? CamColors.accent : null,
+            ),
+            title: Text(playlist[i].label,
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            selected: i == index,
+            onTap: () {
+              Navigator.pop(ctx);
+              if (i != index) _goTo(i);
+            },
+          ),
+        ),
+      ),
+    );
+    _scheduleHide();
   }
 
   Widget _recsSection() {
     if (_recsLoading && _recommended.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(16, 22, 16, 0),
-        child: CamSkeleton(height: 110, radius: 16),
-      );
+      return const CamSkeleton(height: 110, radius: 16);
     }
-    if (_recommended.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const CamSectionTitle('More to watch', eyebrow: 'From CamAnime'),
-      SizedBox(
-        height: 196,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: _recommended.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (_, i) {
-            final item = _recommended[i];
-            final title = (item['title'] ?? 'Anime').toString();
-            final id = (item['id'] ?? '').toString();
-            final image = (item['image'] ?? item['banner'] ?? '').toString();
-            return GestureDetector(
-              onTap: () async {
-                if (widget.onOpenAnime != null) {
-                  widget.onOpenAnime!(id, title);
-                  return;
-                }
-                await _startRecommendation(id, title, image);
-              },
-              child: SizedBox(
-                width: 104,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: AspectRatio(
-                        aspectRatio: 2 / 2.85,
-                        child: image.isEmpty
-                            ? const ColoredBox(
+    return SizedBox(
+      height: 178,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _recommended.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, i) {
+          final item = _recommended[i];
+          final title = (item['title'] ?? 'Anime').toString();
+          final id = (item['id'] ?? '').toString();
+          final image = (item['image'] ?? item['banner'] ?? '').toString();
+          return GestureDetector(
+            onTap: () async {
+              if (widget.onOpenAnime != null) {
+                widget.onOpenAnime!(id, title);
+                return;
+              }
+              await _startRecommendation(id, title);
+            },
+            child: SizedBox(
+              width: 104,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: 2 / 2.6,
+                      child: image.isEmpty
+                          ? const ColoredBox(
+                              color: CamColors.surfaceAlt,
+                              child: Icon(Icons.movie_outlined,
+                                  color: CamColors.inkDim),
+                            )
+                          : Image.network(
+                              image,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const ColoredBox(
                                 color: CamColors.surfaceAlt,
                                 child: Icon(Icons.movie_outlined,
-                                    color: CamColors.inkDim))
-                            : Image.network(
-                                image,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const ColoredBox(
-                                  color: CamColors.surfaceAlt,
-                                  child: Icon(Icons.movie_outlined,
-                                      color: CamColors.inkDim),
-                                ),
-                                loadingBuilder: (_, child, progress) =>
-                                    progress == null
-                                        ? child
-                                        : const ColoredBox(
-                                            color: CamColors.surfaceAlt),
+                                    color: CamColors.inkDim),
                               ),
-                      ),
+                            ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 11.5, fontWeight: FontWeight.w700)),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11.5, fontWeight: FontWeight.w700)),
+                ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
-    ]);
+    );
   }
 
-  Future<void> _startRecommendation(
-      String animeId, String title, String image) async {
+  Future<void> _startRecommendation(String animeId, String title) async {
     if (animeId.isEmpty) return;
     try {
       final response = await http.get(Uri.parse(
@@ -1223,8 +1522,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       }
       if (!mounted) return;
       if (urls.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('No playable server for that anime yet.')));
+        _snack('No playable server for that anime yet.');
         return;
       }
       await Navigator.push(
@@ -1239,10 +1537,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         ),
       );
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Could not reach the server for that anime.')));
-      }
+      _snack('Could not reach the server for that anime.');
     }
   }
 }

@@ -18,3 +18,17 @@ static/downloads/*.exe
 mobile/camanime_app/build_log*.txt
 mobile/apk/
 .shots/
+# Owner-only runbooks, signing material, local hosting secrets and generated
+# binaries. Hosting (Render/Cloudflare) never needs these tracked; their
+# deployment configs stay in render.yaml and cloudflare/.
+docs/private/
+*.keystore
+*.jks
+*.p12
+*.pem
+key.properties
+cloudflare/.dev.vars
+.wrangler/
+**/service-account*.json
+/downloads/
+ffmpeg-bin

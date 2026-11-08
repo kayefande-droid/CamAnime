@@ -8,7 +8,10 @@ services:
     # needed to run the website — deleting them from the build checkout keeps the
     # runtime disk slim. All site functions are served from app.py + templates + static.
     # Binaries (/download, /get/*) fall back to GitHub Releases automatically.
-    buildCommand: pip install --no-cache-dir -r requirements.txt && rm -rf mobile windows promo tools tests docs .idea __pycache__ .pytest_cache mobile/camanime_app/.pytest_cache && find . -name "__pycache__" -type d -prune -exec rm -rf {} +
+    # Static ffmpeg gives real 360p/480p/720p streaming + downloads on this host.
+    # If the download fails the build still completes; the API then reports
+    # conversion as unavailable instead of advertising a quality it cannot make.
+    buildCommand: pip install --no-cache-dir -r requirements.txt && rm -rf mobile windows promo tools tests docs .idea __pycache__ .pytest_cache mobile/camanime_app/.pytest_cache && find . -name "__pycache__" -type d -prune -exec rm -rf {} + && (curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ffmpeg.tar.xz && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp && cp /tmp/ffmpeg-*-amd64-static/ffmpeg ./ffmpeg-bin && chmod +x ./ffmpeg-bin || echo 'ffmpeg unavailable: quality conversion disabled')
     # 1 worker x 4 threads fits the 512MB free instance; max-requests recycles the
     # worker to stop slow memory growth; warning log level keeps Render logs small.
     startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --max-requests 500 --max-requests-jitter 100 --access-logfile - --log-level warning
@@ -23,6 +26,8 @@ services:
         value: "1"
       - key: LOG_LEVEL
         value: warning
+      - key: CAMANIME_FFMPEG
+        value: ffmpeg-bin
       - key: CAMANIME_SECRET
         generateValue: true
       # Set CAMANIME_ADMIN_EMAIL and CAMANIME_ADMIN_PASSWORD together in the Render dashboard.

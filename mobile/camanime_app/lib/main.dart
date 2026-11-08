@@ -26,7 +26,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.7.0';
+const String appVersion = '2.8.0';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 
@@ -170,6 +170,7 @@ class _CamAnimeAppState extends State<CamAnimeApp>
     unawaited(DownloadManager.instance.kick());
     unawaited(Api.warmup());
     unawaited(VersionGate.check());
+    unawaited(_autoCheckUpdate());
   }
 
   @override
@@ -189,9 +190,21 @@ class _CamAnimeAppState extends State<CamAnimeApp>
     }
     if (p.getBool('tutorial_done') != true) {
       if (mounted) setState(() => showTutorial = true);
-    } else {
-      _checkUpdate();
     }
+    _autoCheckUpdate();
+  }
+
+  /// Launch/resume update check, throttled to once every six hours so opening
+  /// the app repeatedly does not hammer the host. Manual checks bypass this.
+  Future<void> _autoCheckUpdate() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final last = p.getInt('update_checked_at') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - last < const Duration(hours: 6).inMilliseconds) return;
+      await p.setInt('update_checked_at', now);
+    } catch (_) {}
+    await _checkUpdate();
   }
 
   /// Checks the website on launch and, when a newer build exists, downloads and
@@ -427,9 +440,10 @@ class _MiniBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<MiniPlayback?>(
-      valueListenable: MiniPlayer.current,
-      builder: (context, live, _) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([MiniPlayer.current, MiniPlayer.tick]),
+      builder: (context, _) {
+        final live = MiniPlayer.current.value;
         if (live == null) return const SizedBox.shrink();
         final value = live.controller.value;
         final total = value.duration.inMilliseconds;
@@ -439,12 +453,14 @@ class _MiniBar extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
             onTap: () async {
-              final rebuild = live.rebuild;
-              if (rebuild == null) return;
-              await MiniPlayer.handOver();
+              // Hand the very same controller to the full player: no reload, no
+              // re-buffer, and the position is preserved exactly.
+              final detached = MiniPlayer.detach();
+              final rebuild = detached?.rebuild;
+              if (detached == null || rebuild == null) return;
               if (!context.mounted) return;
               Navigator.of(context)
-                  .push(MaterialPageRoute(builder: (_) => rebuild()));
+                  .push(MaterialPageRoute(builder: (_) => rebuild(detached)));
             },
             child: Container(
               decoration: BoxDecoration(
@@ -505,6 +521,14 @@ class _MiniBar extends StatelessWidget {
                           ]),
                     ),
                     IconButton(
+                      tooltip: 'Back 10 seconds',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => MiniPlayer.seekBy(
+                          const Duration(seconds: -10)),
+                      icon: const Icon(Icons.replay_10_rounded,
+                          size: 21, color: CamColors.inkDim),
+                    ),
+                    IconButton(
                       tooltip: value.isPlaying ? 'Pause' : 'Play',
                       onPressed: MiniPlayer.toggle,
                       icon: Icon(
@@ -515,15 +539,17 @@ class _MiniBar extends StatelessWidget {
                         color: CamColors.accent,
                       ),
                     ),
-                    if (Platform.isAndroid)
-                      IconButton(
-                        tooltip: 'Float over other apps',
-                        onPressed: () => PiP.enter(),
-                        icon: const Icon(Icons.picture_in_picture_alt_rounded,
-                            size: 19, color: CamColors.inkDim),
-                      ),
+                    IconButton(
+                      tooltip: 'Forward 10 seconds',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => MiniPlayer.seekBy(
+                          const Duration(seconds: 10)),
+                      icon: const Icon(Icons.forward_10_rounded,
+                          size: 21, color: CamColors.inkDim),
+                    ),
                     IconButton(
                       tooltip: 'Close miniplayer',
+                      visualDensity: VisualDensity.compact,
                       onPressed: MiniPlayer.close,
                       icon: const Icon(Icons.close_rounded,
                           size: 18, color: CamColors.inkDim),

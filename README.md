@@ -1,100 +1,68 @@
-# CamAnime — Free Anime Streaming Website + Native Apps
+# CamAnime 🍥
 
-© 2026 kayefande-droid. All rights reserved. See LICENSE.
+**Anime discovery, streaming and offline watching — website + native Android app.**
 
-CamAnime pairs a responsive Flask discovery website with a Flutter Android app and a shared, AniList-backed catalogue. Streaming and downloads are exposed only when configured providers are authorized to distribute the media. Made by **kayefande-droid & co.**
+[![Website](https://img.shields.io/badge/live-camanime.onrender.com-087BFF?style=flat-square)](https://camanime.onrender.com)
+[![Mirror](https://img.shields.io/badge/edge-camanjme.camanime.workers.dev-F6820A?style=flat-square)](https://camanjme.camanime.workers.dev)
+[![Android](https://img.shields.io/badge/Android-2.8.0-3DDC84?style=flat-square&logo=android&logoColor=white)](https://camanime.onrender.com/get/android)
 
-- Website: `https://camanime.onrender.com` (auto-deploys from `main` via Render + `render.yaml`); Cloudflare front door: `https://camanjme.camanime.workers.dev` (worker built directly from this repository)
-- Apps: download from the site's **/download** page or **GitHub Releases** (`v1.0.0+`)
+CamAnime pairs a fast Flask catalogue with a Flutter app that feels like a first-class streaming client: one tap to play, real quality control, downloads that survive updates, and a player built for binge-watching. Metadata comes from AniList; playback and downloads use only the providers configured by the operator.
 
-## Features
+---
 
-- **Metadata**: AniList-backed canonical catalogue, artwork, search, validated genre/format/status/year/sort filters, seasons/relations, and detail pages. Episode listing metadata is not a guarantee of playback availability.
-- **One-click app downloads**: `/get/android` and `/get/windows` start the download immediately (bundled file or GitHub Release asset)
-- **Accounts**: email/password signup with PBKDF2-hashed passwords and 90-day Bearer tokens; third-party OAuth is not configured. Admin is seeded via env.
-- **Community**: comments + replies, likes, stickers, honest anime ratings, read/unread notifications — same forum in app and website
-- **Flutter client**: cached posters/catalogue for offline discovery, refresh when returning online, debounced API search, and explicit unavailable state unless authorized playback/download sources are configured.
-- **Website**: existing AniList-backed home, search, details, and player routes remain intact; the v1 REST API shares the website normalization and canonical AniList IDs.
-- **Admin**: download counts, site clicks, plays, most-watched playlist driving Trending classification
-- **SEO**: anime-website Cameroon / free-streaming keywords, sitemap, robots, Google Search Console ready
-- **Responsive**: 2-col narrow phones / 3-col wider phones / fluid tablet-desktop, verified 0-overflow across 9 viewports × 9 pages
-- **Ad-free policy**: CamAnime does not insert ads on its own pages or through its media proxy. External providers and embeds such as YouTube may show their own ads.
-- **Browser-local release reminders**: follow upcoming releases in the same browser profile; no server storage, push service, or extra dependency is used.
+## ✨ What makes it different
 
-## App ↔ website link + database persistence
+| | |
+|---|---|
+| 🎚️ **Real quality, real pixels** | 720p / 480p / 360p are genuine ffmpeg re-encodes with bounded bitrate — for streaming *and* downloads. No relabelled 1080p file pretending to be 360p. |
+| 📱 **Player that disappears** | Immersive fullscreen that adapts to the screen, drag-free brightness and volume, playback speed, resume position, and a mini-player that keeps the episode alive while you browse. |
+| ⏭️ **Binge mode** | Episodes selectable directly under the video, a “More to watch” rail of similar anime underneath, auto-play next, and intro/outro skipping (both toggleable). |
+| 📥 **Offline that stays offline** | Partial-play while downloading, resume-safe queue, recovered library after an index failure, and updates that **never touch your downloads, watchlist or history**. |
+| 🔄 **Updates in-app** | The app checks the website for a newer build on launch/resume, downloads the APK, verifies it and hands it to Android’s installer. One confirmation, no browser hunt. |
+| 🎬 **Trailers everywhere** | Official YouTube trailers on the website and in the app whenever AniList supplies one. |
+| 🔐 **Server-side authority** | Roles (`owner` / `developer` / `support`) are enforced by the backend, never by hidden UI. Old builds are refused by both Render and the Cloudflare edge. |
 
-One **SQLite** database (`camanime.db`, or `CAMANIME_DB` env) holds users, tokens, comments, ratings, notifications, events, and cumulative counters. It survives process restarts when the database file remains on disk, but Render's free instance filesystem is ephemeral: redeploys/restarts that replace the instance can reset SQLite data. Use durable storage or a managed database when totals must persist across deployments. The website's watchlist and release follows/reminders use browser `localStorage`; they survive a website redeploy in the same browser profile but are not synced to an account or another device. Optional browser notifications are local-only and are not push notifications; they require browser permission and the site open. Browser storage cannot preserve users, server counters, or community data. The public "Player starts till now" counter counts real player-start events, not proxy chunks/retries; the admin live stream-start count is a separate rolling one-minute, in-memory metric and naturally expires.
+## 🧱 Stack
 
-Legacy JSON auto-migrates once.
+- **Backend** — Flask, SQLite, Jinja templates, gunicorn (`app.py`)
+- **Website** — responsive dark-first UI, AniList catalogue, HLS/mp4 player, downloads
+- **Android** — Flutter 3, Material 3, `video_player`, native bridges for downloads, PiP, brightness and the in-app updater
+- **Edge** — Cloudflare Worker front door (`cloudflare/`) with a hard minimum-build gate
+- **Quality pipeline** — on-demand `ffmpeg` fragmented MP4 (`transcode.py`), never stored on disk
 
-- Website: email/password session login at `/login` (no configured Google/Apple/social OAuth)
-- Native apps: `POST /api/auth/register|login` → Bearer token (`Authorization: Bearer <token>`)
-- Community/track endpoints accept **both JSON (apps) and form posts (website)**: `/api/community/comment`, `/api/community/rate`, `/api/track`
-
-## Native apps
-
-| App | Source | Build |
-|---|---|---|
-| Android APK (Flutter, Material 3, dark anime theme) | `mobile/camanime_app/` | `powershell -ExecutionPolicy Bypass -File tools/build-android.ps1` |
-| Windows (.NET 8 + WebView2, ad-block, hidden library) | `windows/CamAnime.Windows/` | `powershell -ExecutionPolicy Bypass -File tools/build-windows.ps1` |
-
-Built binaries ship via **GitHub Releases** (recommended) or `static/downloads/` — the `/download` page and `/get/*` routes pick them up automatically. See `docs/APP_RELEASES.md`.
-
-## Run the website locally
+## 🚀 Quick start
 
 ```bash
 pip install -r requirements.txt
-python app.py  # http://localhost:5000 (dev) — production: gunicorn app:app
+python app.py            # http://localhost:5000  (production: gunicorn app:app)
 ```
 
-Environment variables: `CAMANIME_SECRET` (required for stable production sessions), `CAMANIME_DB` (SQLite path), `CAMANIME_ADMIN_EMAIL` and `CAMANIME_ADMIN_PASSWORD` (set both to provision an admin; no hardcoded default admin credentials), `CAMANIME_RELEASE_TAG`. The metadata catalogue is served live/cached from AniList; it is not persisted to SQLite. Render free instances have ephemeral filesystems; attach persistent storage or move `CAMANIME_DB` to a durable database before relying on user/account data across redeploys.
+```bash
+cd mobile/camanime_app
+flutter pub get
+flutter build apk --release --dart-define=CAMANIME_API=https://your-host
+```
 
-Flutter build: `cd mobile/camanime_app && flutter pub get && flutter build apk --debug` (or `flutter build apk --release --dart-define=CAMANIME_API=https://your-host`). Android API host is configurable through `CAMANIME_API` and the app profile setting.
+## 🔌 API surface
 
-## Deploy (Render, auto-deploy on push)
+- `GET /api/v1/catalog/home` · `/api/v1/anime/<id>` · `/api/v1/anime?q=` — AniList-backed catalogue
+- `GET /api/public/anime/<id>?ep=<n>&audio=sub|dub` — playable bundle for the apps
+- `GET /api/stream/transcode?url=&height=720|480|360` — inline, genuinely re-encoded stream
+- `GET /api/download/transcode?url=&height=` — the same ladder as a saved file
+- `POST /api/auth/register|login` — PBKDF2 passwords, Bearer sessions
+- `GET /api/version` — release policy consumed by the update checker
+- `/api/admin/*` — role-guarded operations (owner, developer, support)
 
-Repo ships `render.yaml` blueprint + `Procfile` + `runtime.txt` (Python 3.11.9): build `pip install -r requirements.txt`, start `gunicorn app:app`, health check `/`. Enable **Auto-Deploy** in the Render dashboard; keep bot protection off for Googlebot so Search Console verification passes.
+## 🛡️ Operations & privacy
 
-## CamAnime brand assets
+Deployment uses **Render** for the Flask origin and **Cloudflare Workers** for the edge; both deploy from `main`. The application needs no store listing and no third-party OAuth.
 
-- `static/brand/camanime-logo.svg` is the web/vector master; `camanime-logo.png` is the 2400×540 high-resolution raster lockup.
-- `static/brand/camanime-icon.svg` is the compact square master. PWA icons, favicon, Apple touch icon, and Android density launcher PNGs are exported from it.
-- The Flutter header embeds `mobile/camanime_app/assets/brand/camanime-logo.png`; regenerate/copy it with `cd mobile/camanime_app && dart run tool/generate_brand_assets.dart`.
-- Website branding uses the CamAnime logo; the creator mark remains attribution rather than replacing the app/product identity.
+Owner-only runbooks, release-signing procedures, provider notes and incident steps live in `docs/private/` and are intentionally **git-ignored**. Do not commit signing keys, `.env` files, service-account JSON, or admin credentials — `.gitignore` already blocks the usual suspects.
 
-## Versioned catalogue API (for app and website)
+Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_DB` (optional SQLite path), `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), and `CAMANIME_FFMPEG` (optional binary path). Render’s build downloads a static `ffmpeg`; if that download fails the API reports conversion as unavailable rather than promising a quality it cannot produce.
 
-All catalogue endpoints use AniList IDs as canonical IDs and normalize fields through `format_anime_card`, the same formatter used by website routes. Success JSON uses `status: success`; validation/provider failures use `status: error` and `error.message`.
+## ⚖️ License & disclaimer
 
-- `GET /api/v1/health`
-- `GET /api/v1/catalog/home` — `catalog.featured`, `trending`, `popular`, `top_rated`, `recently_added`, `movies`, `series`
-- `GET /api/v1/schedule` — current AniList season airing metadata and next-episode timestamps (outbound provider metadata only; not CamAnime playback availability)
-- `GET /api/v1/anime?q=&genre=&format=&sort=&page=&limit=` — paginated; `limit` 1–50
-- `GET /api/v1/search?q=<query>`
-- `GET /api/v1/genres`
-- `GET /api/v1/genres/<slug>/anime`
-- `GET /api/v1/anime/<anilist-id>` — metadata, alternate titles and AniList episode preview metadata
-- `GET /api/v1/anime/<anilist-id>/episodes?page=&limit=` — metadata only; explicitly `playable:false` and `download_allowed:false`
+© 2026 kayefande-droid. All rights reserved — see `LICENSE`.
 
-The legacy endpoints below remain separate and are not mapped from AniList IDs unless a valid provider mapping exists. The homepage and `/schedule` countdowns refresh locally every second, without a request, and fetch new schedule metadata at most once every 15 minutes. Server-side, each worker caches its own compact schedule snapshot for 15 minutes and fetches at most two AniList pages (50 entries each) on a cache miss; concurrent misses are coalesced, provider failures cool down for five minutes, and HTTP responses are cacheable for 15 minutes. Timer rollover shows an aired/checking-provider state without claiming or creating playback access. A GitHub Actions workflow samples compressed schedule-endpoint response sizes and worker request/cache-miss counters every six hours, retaining 90 days of JSON artifacts. Its estimated monthly bytes cover only `/api/v1/schedule` response bodies; use the Render dashboard for authoritative whole-service monthly bandwidth.
-
-- `GET /api/public/anime/<id>?ep=<n>&audio=<sub|dub>` — provider bundle for the native apps; `audio=dub` puts provider-listed dub servers first and lists dub downloads (factual bundle only, no playback guarantee)
-- `POST /api/auth/register|login|logout`, `GET /api/auth/me` — token auth
-- `GET/POST /api/community/*` — comments, likes, ratings, notifications
-- `GET /api/heaven/*` — AnimeHeaven search/catalog/resolve/season-pack
-- `GET /api/download/video` — forced MP4 episode download (login required)
-
-## Provider / deployment status
-
-### Deploying on both Render and Cloudflare
-
-- **Render (origin, unchanged):** Flask backend, SQLite, accounts, streaming proxies and downloads. Blueprint `render.yaml` + `Procfile`; auto-deploy from `main` stays enabled. Render must remain online — the Cloudflare worker is a proxy, not a copy of the backend.
-- **Cloudflare (front door):** `cloudflare-worker/` contains `index.js` (edge proxy that streams every response to/from the Render origin, keeps redirects on the Cloudflare hostname, retries while the free-tier origin wakes up and serves a branded "waking up" page instead of challenge/downtime screens, and edge-caches `/static` for 24h), `wrangler.jsonc` and `package.json`. The worker is named **camanjme** — a Cloudflare-only label that produces `https://camanjme.camanime.workers.dev`; it must not be confused with the Render origin or affect search, which still references `camanime.onrender.com`. Workers Builds deploys this folder straight from the GitHub repository (root directory `/cloudflare-worker`, build `npm install`, deploy `npm run deploy`, output directory blank, production branch `main`) — no manual `wrangler publish` is needed and no build input comes from Render. Manual deploys: `cd cloudflare-worker && npx wrangler deploy`.
-
-The existing source includes legacy AnimeHeaven and Anikoto scrapers plus generated VidSrc/VidLink embed URLs. Their presence in source is **not proof of permission, reliability, or a licensed integration**; do not enable them for publication until rights and provider terms are verified. AniList is currently a metadata provider only. No approved playback or offline-download provider is configured in this release.
-
-The Render site was returning HTTP 503 during this audit, so live end-to-end web/API checks were unavailable. Local API contract tests mock the AniList response and do not validate its live upstream availability. SQLite user records persist only when Render is configured with durable storage; the committed free plan has no disk declaration.
-
-## Disclaimer
-
-Metadata and artwork are provided for discovery. Only distribute or play media from providers that explicitly authorize CamAnime to do so; comply with provider terms and local copyright law.
+Metadata and artwork are provided for discovery. CamAnime does not bundle or claim rights to any anime. Stream or download only media that the configured providers are authorized to distribute, and follow provider terms and local copyright law.

@@ -659,7 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Version ${widget.version.isEmpty ? '2.7.0' : widget.version}',
+              Text('Version ${widget.version.isEmpty ? '2.8.0' : widget.version}',
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               const Text(

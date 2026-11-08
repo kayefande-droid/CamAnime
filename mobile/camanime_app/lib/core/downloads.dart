@@ -251,6 +251,7 @@ class DownloadManager extends ChangeNotifier {
   bool get ready => _ready;
 
   Timer? _retryTimer;
+  Future<void>? _persistInFlight;
 
   /// Grows while a server keeps failing, so a dead provider is not hammered
   /// every few seconds on a metered connection.
@@ -276,6 +277,12 @@ class DownloadManager extends ChangeNotifier {
 
   @visibleForTesting
   Future<void> resetForTests() async {
+    // A completion write may still be running; let it land before the root is
+    // cleared so a restart immediately afterwards still sees the episode.
+    try {
+      await _persistInFlight;
+    } catch (_) {}
+    _persistInFlight = null;
     _retryTimer?.cancel();
     _tasks.clear();
     _running.clear();
@@ -365,7 +372,12 @@ class DownloadManager extends ChangeNotifier {
   File? completedFile(DownloadTask task) {
     final name = task.localName;
     if (name == null || _media == null) return null;
-    final file = File('${_media!.path}/$name');
+    // Legacy imports and recovered files record an absolute path; newer tasks
+    // record just the file name inside the media folder. Prefixing an absolute
+    // path used to make those files look missing, which hid them from the
+    // Library after an update.
+    final path = File(name).isAbsolute ? name : '${_media!.path}/$name';
+    final file = File(path);
     return file.existsSync() ? file : null;
   }
 
@@ -405,6 +417,7 @@ class DownloadManager extends ChangeNotifier {
       }
       await _loadQueue();
       await _importLegacyLibrary(support);
+      await _adoptOrphanMedia();
       await refresh();
       _ready = true;
       notifyListeners();
@@ -417,8 +430,15 @@ class DownloadManager extends ChangeNotifier {
   }
 
   Future<void> _loadQueue() async {
-    final file = File('${_root!.path}/queue.json');
-    if (!await file.exists()) return;
+    var file = File('${_root!.path}/queue.json');
+    if (!await file.exists()) {
+      // _persist() writes queue.json.tmp and renames it over queue.json. A
+      // reload that lands in that window (quick restart, parallel work) must
+      // read the finished temp file instead of concluding the library is empty.
+      final pending = File('${_root!.path}/queue.json.tmp');
+      if (!await pending.exists()) return;
+      file = pending;
+    }
     try {
       final rows = json.decode(await file.readAsString());
       if (rows is! List) return;
@@ -502,6 +522,52 @@ class DownloadManager extends ChangeNotifier {
             (await entity.lastModified()).millisecondsSinceEpoch,
       );
     }
+  }
+
+  /// Adopts finished media files that the queue does not reference.
+  ///
+  /// An app update replaces the APK and leaves the files in app storage alone,
+  /// but if `queue.json` is ever missing or damaged those files used to be
+  /// invisible in the Library. Re-adopting them as completed downloads means an
+  /// update (or a corrupted index) can never look like it wiped the user's
+  /// offline library — the bytes were never deleted, so they stay playable.
+  Future<void> _adoptOrphanMedia() async {
+    if (_media == null) return;
+    final known = <String>{};
+    for (final task in _tasks.values) {
+      known.add(task.fileName);
+      final local = task.localName;
+      if (local != null) known.add(local.split(Platform.pathSeparator).last);
+    }
+    var added = false;
+    await for (final entity in _media!.list()) {
+      if (entity is! File) continue;
+      final name = entity.uri.pathSegments.last;
+      final lower = name.toLowerCase();
+      if (!lower.endsWith('.mp4') && !lower.endsWith('.m4v')) continue;
+      if (known.contains(name)) continue;
+      final size = await entity.length();
+      if (size < 1024) continue;
+      final id = 'recovered-${sha256.convert(utf8.encode(entity.path)).toString().substring(0, 16)}';
+      if (_tasks.containsKey(id)) continue;
+      _tasks[id] = DownloadTask(
+        id: id,
+        animeId: 0,
+        animeTitle: name.replaceAll(
+            RegExp(r'\.(mp4|m4v)$', caseSensitive: false), ''),
+        episode: 0,
+        audio: 'sub',
+        sourceUrl: '',
+        fileName: name,
+        localName: entity.path,
+        received: size,
+        total: size,
+        stage: DownloadStage.completed,
+        updatedAt: (await entity.lastModified()).millisecondsSinceEpoch,
+      );
+      added = true;
+    }
+    if (added) await _persist();
   }
 
   Future<void> refresh() async {
@@ -964,6 +1030,9 @@ class DownloadManager extends ChangeNotifier {
       ..error = ''
       ..completedAt = DateTime.now().millisecondsSinceEpoch
       ..updatedAt = DateTime.now().millisecondsSinceEpoch;
+    // Write the completed record before announcing it, so a restart right after
+    // "completed" cannot lose the queue entry for an episode already on disk.
+    await _persist();
     // Heads-up alert the moment the episode is watchable offline.
     unawaited(AppNotifications.downloadComplete(
       animeTitle: task.animeTitle,
@@ -1024,12 +1093,23 @@ class DownloadManager extends ChangeNotifier {
 
   Future<void> _persist() async {
     if (_root == null) return;
+    final root = _root!;
+    final payload =
+        json.encode(_tasks.values.map((t) => t.toJson()).toList());
+    final future = _writeQueue(root, payload);
+    _persistInFlight = future;
     try {
-      final temp = File('${_root!.path}/queue.json.tmp');
-      await temp.writeAsString(
-          json.encode(_tasks.values.map((t) => t.toJson()).toList()),
-          flush: true);
-      final target = File('${_root!.path}/queue.json');
+      await future;
+    } finally {
+      if (identical(_persistInFlight, future)) _persistInFlight = null;
+    }
+  }
+
+  Future<void> _writeQueue(Directory root, String payload) async {
+    try {
+      final temp = File('${root.path}/queue.json.tmp');
+      await temp.writeAsString(payload, flush: true);
+      final target = File('${root.path}/queue.json');
       if (await target.exists()) await target.delete();
       await temp.rename(target.path);
     } catch (_) {

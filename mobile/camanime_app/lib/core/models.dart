@@ -100,6 +100,46 @@ List<EpisodeSource> episodeSourcesFromBundle(
       height: height,
     ));
   }
+  // Hidden quality safety net: some newer seasons (and older cached bundles)
+  // list only one full-size file. When the host can convert, add real 720p /
+  // 480p / 360p streams for the chosen audio so the quality picker always
+  // changes pixels and download size instead of showing a dead label.
+  final hasLadder =
+      sources.any((s) => s.height == 360 || s.height == 480 || s.height == 720);
+  if (bundle['transcode_available'] == true && !hasLadder && seen.isNotEmpty) {
+    final raws = <String, Map>{};
+    for (final raw in servers) {
+      if (raw is! Map) continue;
+      final mode = (raw['playback_mode'] ?? '').toString();
+      if (mode != 'mp4' && mode != 'hls') continue;
+      if ((raw['audio'] ?? 'sub').toString() != preferredAudio) continue;
+      final upstream = (raw['raw_url'] ?? '').toString();
+      if (!upstream.startsWith('http')) continue;
+      raws.putIfAbsent(upstream, () => raw);
+    }
+    for (final entry in raws.entries) {
+      final ref = (entry.value['referer'] ?? '').toString();
+      for (final height in const [720, 480, 360]) {
+        final path = '/api/stream/transcode'
+            '?url=${Uri.encodeComponent(entry.key)}'
+            '&height=$height'
+            '&title=${Uri.encodeComponent(animeTitle)}'
+            '${ref.isEmpty ? '' : '&ref=${Uri.encodeComponent(ref)}'}';
+        final url = absolute(path);
+        if (!seen.add(url)) continue;
+        sources.add(EpisodeSource(
+          url: url,
+          label: 'CamAnime ${height}p',
+          animeId: animeId,
+          episode: episode,
+          animeTitle: animeTitle,
+          image: image,
+          height: height,
+        ));
+      }
+    }
+  }
+
   final cap = int.tryParse(qualityPreference) ?? 0;
   int audioRank(EpisodeSource s) =>
       ((bundle['servers'] as List?) ?? const []).any((raw) =>
@@ -163,7 +203,9 @@ bool isPlaylistUrl(String url) {
   if (uri == null) return false;
   final path = uri.path.toLowerCase();
   // The stitcher returns one media file, so its embedded playlist is fine.
-  if (path.endsWith('/download/hls')) return false;
+  if (path.endsWith('/download/hls') || path.endsWith('/download/transcode')) {
+    return false;
+  }
   if (path.endsWith('.m3u8') || path.endsWith('.m3u') || path.contains('mpegurl')) {
     return true;
   }

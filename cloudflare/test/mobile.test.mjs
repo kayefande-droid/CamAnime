@@ -27,7 +27,7 @@ test("version endpoint is served locally, with no upstream request", async () =>
   assert.ok(res, "version must be handled by this worker");
   const body = await res.json();
   assert.equal(body.architecture, "workers+d1+r2");
-  assert.equal(body.download_url, "/static/downloads/CamAnime.apk");
+  assert.equal(body.download_url, "/get/android");
   assert.ok(body.app_version);
 });
 

@@ -1414,6 +1414,21 @@ class StreamingManager:
 
         servers.sort(key=server_priority)
 
+        # Real quality switching for playback: the same source is re-encoded
+        # into 720p/480p/360p on demand, so choosing a lower quality changes
+        # actual pixels and bandwidth instead of only the label.
+        transcode_available = False
+        try:
+            import transcode as _transcode
+            transcode_available = _transcode.available()
+            servers = _transcode.add_stream_options(
+                servers,
+                (titles[0] if titles else f"Anime {anilist_id}"),
+                episode=ep_num,
+            )
+        except Exception:
+            logger.warning("converted stream options failed", exc_info=True)
+
         # Download manager promise: EVERY episode must offer at least one
         # direct-file download path. When no scraper resolved a file, hand the
         # watcher a one-click resolver that scrapes AnimeHeaven for this exact
@@ -1429,6 +1444,19 @@ class StreamingManager:
                 "provider": "AnimeHeaven resolver",
             })
 
+        # Resolution-reduced downloads: every downloadable MP4/HLS source also
+        # offers 720p/480p/360p converted files, so a 1080p episode can be saved
+        # at phone-friendly size without hunting for a different mirror.
+        try:
+            import transcode as _transcode
+            _transcode.add_download_options(
+                downloads, servers,
+                (titles[0] if titles else f"Anime {anilist_id}"),
+                episode=ep_num,
+            )
+        except Exception:
+            logger.warning("converted download options failed", exc_info=True)
+
         bundle = {
             "anilist_id": anilist_id,
             "mal_id": mal_id,
@@ -1438,6 +1466,7 @@ class StreamingManager:
             "anikoto_slug": anikoto_slug,
             "servers": servers,
             "downloads": downloads,
+            "transcode_available": transcode_available,
             "audio_availability": audio_availability,
             "requested_audio": preferred_audio,
             "audio_fallback": preferred_audio == "dub" and not audio_availability["dub"],

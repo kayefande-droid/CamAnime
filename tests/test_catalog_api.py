@@ -17,8 +17,11 @@ def api(tmp_path, monkeypatch):
     monkeypatch.delenv("CAMANIME_ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("CAMANIME_ADMIN_PASSWORD", raising=False)
     sys.path.insert(0, str(ROOT))
-    sys.modules.pop("app", None)
-    sys.modules.pop("camanime_platform", None)
+    # app_version holds its own platform reference (and therefore a DB path),
+    # so it must be reloaded with the fresh platform module or the version
+    # policy from an earlier test's database leaks into this one.
+    for name in ("app", "camanime_platform", "app_version", "mfa", "push"):
+        sys.modules.pop(name, None)
     module = importlib.import_module("app")
     module.app.config.update(TESTING=True)
     # streaming_providers stays imported across tests, so its bundle/mapping
@@ -28,8 +31,8 @@ def api(tmp_path, monkeypatch):
     # caching would hand the second call the first call's servers.
     module.streaming_manager.bundle_cache_ttl = 0
     yield module
-    sys.modules.pop("app", None)
-    sys.modules.pop("camanime_platform", None)
+    for name in ("app", "camanime_platform", "app_version", "mfa", "push"):
+        sys.modules.pop(name, None)
     if str(ROOT) in sys.path:
         sys.path.remove(str(ROOT))
 
@@ -70,7 +73,7 @@ def test_download_page_exposes_copyable_android_url_and_direct_download(api):
 
     version = client.get("/api/version")
     assert version.status_code == 200
-    assert version.json["app_version"] == "2.7.0"
+    assert version.json["app_version"] == "2.8.0"
     assert version.json["apk_url"] == "/get/android"
 
 

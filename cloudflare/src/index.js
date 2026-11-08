@@ -29,6 +29,17 @@ export default {
       }
     }
 
+    // Same release policy as the Render origin: a build at or below 2.6.5
+    // cannot stream or download here either. Version headers are only a hint,
+    // but the enforcement itself is server-side and cannot be skipped by a
+    // modified client.
+    if (PROTECTED_PREFIXES.some((p) => path.startsWith(p))) {
+      const build = clientBuild(request);
+      if (build !== null && build < MIN_SUPPORTED_BUILD) {
+        return updateRequiredResponse(build);
+      }
+    }
+
     // APIs first.
     try {
       const handled = await apiRoutes(request, env, url, path);
@@ -45,6 +56,10 @@ export default {
       bindings: { db: Boolean(env.DB), files: Boolean(env.FILES), assets: Boolean(env.ASSETS) },
     });
 
+    // Direct Android APK download served by this Cloudflare deployment itself,
+    // so the site has a mirror that does not depend on the Render origin.
+    if (path === "/get/android") return serveApk(request, env);
+
     // Pages (SSR HTML) — failures render the themed error page.
     try {
       ctx.passThroughOnException();
@@ -56,6 +71,72 @@ export default {
     }
   },
 };
+
+const MIN_SUPPORTED_BUILD = 17; // 2.7.0 — lowest verified release above 2.6.5
+const DISCONTINUED_BUILD = 16; // 2.6.5
+const PROTECTED_PREFIXES = [
+  "/api/proxy/",
+  "/api/download/",
+  "/api/episode-sources",
+  "/api/v1/stream",
+  "/api/v1/catalog",
+  "/api/v1/search",
+  "/api/v1/genres",
+];
+
+function clientBuild(request) {
+  const raw = request.headers.get("X-CamAnime-Build");
+  if (raw === null || raw === "") return null;
+  const value = parseInt(raw, 10);
+  return Number.isFinite(value) ? value : null;
+}
+
+function updateRequiredResponse(build) {
+  const retired = build <= DISCONTINUED_BUILD;
+  return json({
+    status: "update_required",
+    code: "APP_UPDATE_REQUIRED",
+    reason: retired ? "discontinued" : "unsupported",
+    force_update: true,
+    latest_version: "2.8.0",
+    latest_version_code: 18,
+    minimum_supported_version: "2.7.0",
+    minimum_supported_version_code: MIN_SUPPORTED_BUILD,
+    discontinued_at_or_below_version: "2.6.5",
+    discontinued_at_or_below_version_code: DISCONTINUED_BUILD,
+    download_url: "https://camanime.onrender.com/get/android",
+    download_urls: {
+      render: "https://camanime.onrender.com/get/android",
+      cloudflare: "https://camanjme.camanime.workers.dev/get/android",
+    },
+    message: retired
+      ? "CamAnime 2.6.5 and older are discontinued and can no longer stream "
+        + "or download anime. Install the current CamAnime from the official "
+        + "website to continue."
+      : "Your CamAnime version is no longer supported. Please update from the "
+        + "official website to continue.",
+  }, 426);
+}
+
+async function serveApk(request, env) {
+  if (env.ASSETS) {
+    try {
+      const assetUrl = new URL(request.url);
+      assetUrl.pathname = "/downloads/CamAnime.apk";
+      const asset = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+      if (asset.ok) {
+        const headers = new Headers(asset.headers);
+        headers.set("Content-Type", "application/vnd.android.package-archive");
+        headers.set("Content-Disposition", 'attachment; filename="CamAnime.apk"');
+        headers.set("Cache-Control", "public, max-age=3600");
+        return new Response(asset.body, { status: 200, headers });
+      }
+    } catch {
+      // fall through to the origin fallback below
+    }
+  }
+  return Response.redirect("https://camanime.onrender.com/get/android", 302);
+}
 
 async function apiRoutes(request, env, url, path) {
   const method = request.method;

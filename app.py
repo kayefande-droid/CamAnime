@@ -32,6 +32,8 @@ import os
 from flask import session
 
 import camanime_platform as platform
+import mfa
+import push
 
 
 def _utc_now_timestamp() -> int:
@@ -108,6 +110,9 @@ _RATE_RULES = (
     # backed by the same user store — brute-forcing it must cost exactly the same.
     ("/login", 10, 300),
     ("/api/download/video", 30, 600),
+    # Re-encoding is CPU-bound, so it is allowed less often than a plain copy.
+    ("/api/download/transcode", 6, 600),
+    ("/api/stream/transcode", 6, 600),
     ("/api/proxy/", 300, 600),
     ("/api/community/comment", 20, 600),
     ("/api/community/like", 60, 600),
@@ -2668,6 +2673,126 @@ def download_probe():
         return jsonify({"error": str(e)}), 502
 
 
+@app.route("/api/download/transcode")
+def download_transcode():
+    """Download the *same* episode at a smaller resolution.
+
+    ffmpeg re-encodes the resolved source on the fly (fragmented MP4, streamed)
+    at 720p/480p/360p with a bounded bitrate, so a 1080p file that would cost
+    365 MB can be saved at roughly 130 MB. The output is never upscaled and
+    never stored on the server.
+    """
+    import transcode
+
+    url = _safe_upstream_url(request.args.get("url", ""))
+    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
+    ref = (request.args.get("ref", "") or "").strip()
+    height = request.args.get("height", "360")
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        return jsonify({"error": "Blocked: ad network URL."}), 403
+    prof = transcode.profile(height)
+    if not prof:
+        return jsonify({"error": "Supported heights are 720, 480 and 360.",
+                        "heights": list(transcode.SAFE_HEIGHTS)}), 400
+    if not transcode.available():
+        return jsonify({
+            "error": ("Download conversion is not enabled on this server "
+                      "(ffmpeg is missing). Pick a direct file instead."),
+            "transcode_available": False,
+        }), 503
+
+    safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
+    safe_filename = re.sub(r"\.(mp4|m3u8|ts)$", "", safe_filename, flags=re.I)
+    safe_filename = f"{safe_filename}_{prof['height']}p.mp4"
+    _record_activity("download", anime=title[:80],
+                     detail=f"converted {prof['height']}p · {urlparse(url).netloc}")
+    try:
+        platform.bump_counter("downloads")
+    except Exception:
+        pass
+
+    generator = transcode.stream(url, prof["height"], referer=ref,
+                                 user_agent=DEFAULT_UA)
+    try:
+        # Prime the first chunk so a broken source fails with a real error
+        # instead of an empty 200 response.
+        first = next(generator)
+    except StopIteration:
+        return jsonify({"error": "The source produced no video."}), 502
+    except Exception as exc:
+        logger.error(f"Transcode start failed ({url}): {exc}")
+        return jsonify({"error": "Could not convert this episode."}), 502
+
+    def body():
+        yield first
+        yield from generator
+
+    response = Response(stream_with_context(body()), content_type="video/mp4")
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    response.headers["X-Transcoded-Height"] = str(prof["height"])
+    response.headers["X-Transcoded-Bitrate-Kbps"] = str(
+        prof["video_kbps"] + prof["audio_kbps"])
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/api/stream/transcode")
+def stream_transcode():
+    """Play the episode at a genuinely smaller resolution.
+
+    The quality chips used to point at whatever height a provider advertised.
+    This route re-encodes the resolved source with ffmpeg at 720p/480p/360p
+    using the same bounded-bitrate profiles as converted downloads, and serves
+    the fragmented MP4 inline so playback starts without saving a file.
+    """
+    import transcode
+
+    url = _safe_upstream_url(request.args.get("url", ""))
+    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
+    ref = (request.args.get("ref", "") or "").strip()
+    height = request.args.get("height", "360")
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        return jsonify({"error": "Blocked: ad network URL."}), 403
+    prof = transcode.profile(height)
+    if not prof:
+        return jsonify({"error": "Supported heights are 720, 480 and 360.",
+                        "heights": list(transcode.SAFE_HEIGHTS)}), 400
+    if not transcode.available():
+        return jsonify({
+            "error": ("Stream conversion is not enabled on this server "
+                      "(ffmpeg is missing). Pick a direct server instead."),
+            "transcode_available": False,
+        }), 503
+
+    _record_activity("play", anime=title[:80],
+                     detail=f"{prof['height']}p stream · {urlparse(url).netloc}")
+    generator = transcode.stream(url, prof["height"], referer=ref,
+                                 user_agent=DEFAULT_UA)
+    try:
+        first = next(generator)
+    except StopIteration:
+        return jsonify({"error": "The source produced no video."}), 502
+    except Exception as exc:
+        logger.error(f"Stream transcode start failed ({url}): {exc}")
+        return jsonify({"error": "Could not convert this episode."}), 502
+
+    def body():
+        yield first
+        yield from generator
+
+    response = Response(stream_with_context(body()), content_type="video/mp4")
+    response.headers["Content-Disposition"] = "inline"
+    response.headers["X-Transcoded-Height"] = str(prof["height"])
+    response.headers["X-Transcoded-Bitrate-Kbps"] = str(
+        prof["video_kbps"] + prof["audio_kbps"])
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/api/download/hls")
 def download_hls():
     """Stitches an HLS episode into ONE downloadable file.
@@ -2988,10 +3113,28 @@ def api_auth_register():
 @app.route("/api/auth/login", methods=["POST"])
 def api_auth_login():
     email, password, _name = _auth_payload()
+    body = request.get_json(silent=True) or {}
+    code = (body.get("code") if isinstance(body, dict) else "") or \
+        request.form.get("code", "")
     try:
         user = platform.verify_user(None, email, password)
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 401
+    if _is_privileged(user):
+        if mfa.is_enabled(user["email"]):
+            # Password alone is not a session for an MFA-protected admin.
+            if not mfa.verify_login(user["email"], code):
+                return jsonify({
+                    "status": "error", "mfa_required": True,
+                    "error": ("Enter the current 6-digit code from your "
+                              "authenticator app (or a recovery code)."),
+                }), 401
+        elif mfa.required():
+            return jsonify({
+                "status": "error", "mfa_required": True,
+                "error": ("Two-factor authentication is required for admins. "
+                          "Enrol it from the dashboard, then sign in again."),
+            }), 401
     tok = platform.issue_token(user["email"])
     return jsonify({"status": "success", "token": tok["token"],
                     "expires": tok["expires"], "user": platform.public_user(user)})
@@ -3022,6 +3165,7 @@ def login_page():
     from flask import session as _s
     error = ""
     mode = request.args.get("mode", "signin")
+    mfa_required = False
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
@@ -3032,12 +3176,25 @@ def login_page():
                 user = platform.register_user(None, email, name or email.split("@")[0], password)
             else:
                 user = platform.verify_user(None, email, password)
+                if _is_privileged(user) and mfa.is_enabled(user["email"]):
+                    mfa_required = True
+                    if not mfa.verify_login(user["email"], request.form.get("code", "")):
+                        raise ValueError(
+                            "Enter the current 6-digit code from your authenticator app.")
+                elif _is_privileged(user) and mfa.required():
+                    raise ValueError(
+                        "Two-factor authentication is required for admin accounts. "
+                        "Enrol it from /admin while signed in, then sign in again.")
+            # A fresh session id after a successful password (and second factor)
+            # stops a pre-set session from being reused after login.
+            _s.clear()
             _s["user_email"] = user["email"]
             nxt = _safe_next_url(request.args.get("next", "/"))
             return redirect(nxt)
         except Exception as e:
             error = str(e)
-    return render_template("login.html", error=error, mode=mode, user=_current_user())
+    return render_template("login.html", error=error, mode=mode,
+                           user=_current_user(), mfa_required=mfa_required)
 
 
 @app.route("/logout")
@@ -3049,7 +3206,7 @@ def logout_page():
 @app.route("/admin")
 def admin_page():
     u = _current_user()
-    if not u or u.get("role") != "admin":
+    if not _is_privileged(u):
         return redirect(url_for("login_page", mode="admin", next="/admin"))
     stats = platform.admin_stats()
     return render_template("admin.html", user=u, stats=stats, schedule=platform.CLASSICS_SCHEDULE)
@@ -3094,14 +3251,19 @@ def download_page():
     apk = _app_file_info("CamAnime.apk")
     winapp = _app_file_info("CamAnime-Windows.zip") or _app_file_info("CamAnime.exe")
     return render_template("download.html", user=_current_user(), apk=apk,
-                           winapp=winapp, app_version=APP_VERSION)
+                           winapp=winapp, app_version=APP_VERSION,
+                           cloudflare_url=CLOUDFLARE_SITE)
 
 
 RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.2.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
-APP_VERSION = "2.7.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 17
+# Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
+CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
+                                   "https://camanjme.camanime.workers.dev").rstrip("/")
+APP_VERSION = "2.8.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 18
 import app_version  # noqa: E402 — version policy store, declared after routes
+import releases  # noqa: E402 — verified release inventory + blocked telemetry
 
 
 def _serve_app_file(local_names, release_name, download_name):
@@ -3709,7 +3871,7 @@ def api_public_most_viewed():
 @app.route("/api/admin/announce", methods=["POST"])
 def api_admin_announce():
     u = _current_user()
-    if not u or u.get("role") != "admin":
+    if not _is_privileged(u):
         return jsonify({"status": "error", "error": "Admin only."}), 403
     d = _post_data()
     try:
@@ -3719,12 +3881,38 @@ def api_admin_announce():
         return jsonify({"status": "error", "error": str(e)}), 400
 
 
-def _require_admin():
-    """Admin-only guard shared by web + native app (session or Bearer token)."""
+_PRIVILEGED_ROLES = ("owner", "developer", "support")
+
+
+def _role_of(user) -> str:
+    """Normalized role. Legacy 'admin' rows remain the project owner."""
+    role = ((user or {}).get("role") or "user").strip().lower()
+    return "owner" if role == "admin" else role
+
+
+def _is_privileged(user) -> bool:
+    """Owner, developer or support. Legacy 'admin' counts as owner."""
+    return _role_of(user) in ("owner", "developer", "support")
+
+
+def _require_role(*roles):
+    """Session/Bearer guard for one or more privileged roles.
+
+    Roles are never trusted from the client: they are read from the stored
+    account on every request, and 'owner' implicitly satisfies every check.
+    """
     u = _current_user()
-    if not u or u.get("role") != "admin":
+    if not u:
         return None
-    return u
+    role = _role_of(u)
+    if role == "owner" or role in roles:
+        return u
+    return None
+
+
+def _require_admin():
+    """Any privileged account, for read-mostly admin surfaces."""
+    return _require_role("developer", "support")
 
 
 @app.route("/api/admin/password", methods=["POST"])
@@ -3767,10 +3955,10 @@ def api_admin_live_activity():
 
 @app.route("/api/admin/create-admin", methods=["POST"])
 def api_admin_create():
-    """Create an extra admin. Admin only."""
-    u = _require_admin()
+    """Create an extra privileged account. Owner only."""
+    u = _require_role("owner")
     if not u:
-        return jsonify({"status": "error", "error": "Admin only."}), 403
+        return jsonify({"status": "error", "error": "Owner only."}), 403
     d = _post_data()
     try:
         created = platform.create_admin_user(d.get("email", ""), d.get("name", ""), d.get("password", ""))
@@ -3790,7 +3978,7 @@ _APP_HEADER_PLATFORM = "X-CamAnime-Platform"
 _APP_HEADER_INSTALL = "X-CamAnime-Install"
 
 _VERSION_EXEMPT_PREFIXES = (
-    "/api/version", "/api/app/version", "/api/app/ping",
+    "/api/version", "/api/app/version", "/api/app/ping", "/api/app/push-token",
     "/api/announcements", "/api/public/counters", "/healthz",
     "/static/", "/get/", "/admin", "/login", "/logout", "/settings",
     "/api/admin/", "/api/auth/", "/api/public/anime", "/api/v1/health",
@@ -3830,8 +4018,11 @@ def _update_required(policy, build_code):
     return app_version.update_required(policy, build_code)
 
 
-def _update_payload(policy):
+def _update_payload(policy, build_code=None):
     """The structured 426 body shared by the gate and the status endpoints."""
+    retired = app_version.discontinued(build_code)
+    outdated = app_version.update_required(policy, build_code)
+    reason = "discontinued" if retired else ("unsupported" if outdated else "")
     return {
         "code": "APP_UPDATE_REQUIRED",
         "force_update": bool(policy["force_update"]),
@@ -3839,8 +4030,20 @@ def _update_payload(policy):
         "latest_version_code": policy["latest_version_code"],
         "minimum_supported_version": policy["minimum_supported_version"],
         "minimum_supported_version_code": policy["minimum_supported_version_code"],
+        "discontinued": retired,
+        "discontinued_at_or_below_version": app_version.DISCONTINUED_AT_OR_BELOW_VERSION,
+        "discontinued_at_or_below_version": app_version.DISCONTINUED_AT_OR_BELOW_VERSION,
+        "discontinued_at_or_below_version_code": app_version.DISCONTINUED_AT_OR_BELOW_VERSION_CODE,
+        "status": "update_required" if reason else "ok",
+        "reason": reason,
         "download_url": policy["download_url"],
-        "message": policy["update_message"],
+        # Both official hosts, so an outdated device always has a working link.
+        "download_urls": {
+            "render": policy["download_url"],
+            "cloudflare": f"{CLOUDFLARE_SITE}/get/android",
+        },
+        "message": (app_version.DISCONTINUED_MESSAGE if retired
+                    else policy["update_message"]),
         "release_notes": policy["release_notes"],
     }
 
@@ -3871,7 +4074,12 @@ def _enforce_app_version():
         return None
     if not _update_required(policy, client["build"]):
         return None
-    body = _update_payload(policy)
+    body = _update_payload(policy, client["build"])
+    try:
+        releases.record_blocked(client["install_id"], client["version"],
+                                client["build"] or 0, path, body["reason"])
+    except Exception:
+        logger.debug("blocked-request log failed", exc_info=True)
     resp = jsonify(body)
     resp.status_code = 426
     resp.headers["X-CamAnime-Min-Build"] = str(policy["minimum_supported_version_code"])
@@ -3896,8 +4104,9 @@ def api_app_version():
         "status": "success",
         "app_version": policy["latest_version"],
         "version_code": policy["latest_version_code"],
-        "required": _update_required(policy, client["build"]),
-        "policy": _update_payload(policy),
+        "required": (_update_required(policy, client["build"])
+                       or app_version.discontinued(client["build"])),
+        "policy": _update_payload(policy, client["build"]),
         "server_time": int(time.time()),
     })
 
@@ -3918,13 +4127,14 @@ def api_app_ping():
                 client["build"], _client_email_for_install())
         except Exception:
             logger.debug("install record failed", exc_info=True)
-    required = _update_required(policy, client["build"])
+    required = (_update_required(policy, client["build"])
+                or app_version.discontinued(client["build"]))
     return jsonify({
         "status": "success",
         "required": required,
         "app_version": policy["latest_version"],
         "version_code": policy["latest_version_code"],
-        "policy": _update_payload(policy),
+        "policy": _update_payload(policy, client["build"]),
         "server_time": int(time.time()),
     })
 
@@ -3942,7 +4152,13 @@ def api_admin_version_policy():
     if request.method == "GET":
         return jsonify({"status": "success",
                         "policy": app_version.get_policy(),
-                        "stats": app_version.stats()})
+                        "stats": app_version.stats(),
+                        "campaigns": push.list_campaigns(10),
+                        "role": _role_of(u)})
+    if _role_of(u) != "owner":
+        return jsonify({"status": "error",
+                        "error": "Owner approval is required to change the "
+                                 "release policy."}), 403
     d = _post_data()
     if str(d.get("force_update", "")).strip().lower() in ("1", "true", "yes", "on"):
         # Activating a forced update locks every older build out, so it needs an
@@ -3975,12 +4191,31 @@ def api_admin_version_notify():
     fresh = [r for r in rows if r.get("update_notified_for") != policy["latest_version"]]
     for row in fresh:
         app_version.mark_notified(row["install_id"], policy["latest_version"])
+    mirror = f"{CLOUDFLARE_SITE}/get/android"
+    notice = push.send_update_alert(
+        [r["install_id"] for r in rows],
+        "CamAnime Update Required",
+        (policy["update_message"]
+         or f"CamAnime {policy['latest_version']} is available.")
+        + f" Download: {policy['download_url']} (mirror: {mirror})",
+        {"type": "app_update",
+         "version": policy["latest_version"],
+         "build": str(policy["latest_version_code"]),
+         "url": policy["download_url"],
+         "mirror_url": mirror},
+    )
+    push.record_campaign(u["email"], "CamAnime Update Required",
+                         policy["update_message"], notice)
     payload = {
         "latest_version": policy["latest_version"],
         "targets": len(rows),
         "newly_flagged": len(fresh),
-        "push_available": False,
-        "push_delivered": 0,
+        "push_available": bool(notice["available"]),
+        "push_delivered": int(notice["delivered"]),
+        "push_failed": int(notice["failed"]),
+        "push_pruned": int(notice["pruned"]),
+        "push_registered_devices": int(notice["targets"]),
+        "push_errors": notice["errors"][:3],
     }
     app_version.audit(u["email"], "version_policy.notify",
                       json.dumps(payload, sort_keys=True))
@@ -3988,8 +4223,12 @@ def api_admin_version_notify():
         "status": "success",
         **payload,
         "note": ("Outdated devices are flagged and will see the update screen on "
-                 "their next request. No push transport is configured, so no "
-                 "notification was delivered."),
+                 "their next request. "
+                 + (f"Push delivered to {payload['push_delivered']} of "
+                    f"{payload['push_registered_devices']} registered devices."
+                    if payload["push_available"] else
+                    "No push credentials are configured, so no remote "
+                    "notification was sent.")),
     })
 
 
@@ -4006,15 +4245,171 @@ def api_admin_version_rollback():
                     "stats": app_version.stats()})
 
 
+@app.route("/api/admin/releases")
+def api_admin_releases():
+    """Verified release inventory, blocked-request telemetry, campaigns."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    return jsonify({"status": "success", "releases": releases.list_releases(),
+                    "blocked": releases.blocked_stats(),
+                    "campaigns": push.list_campaigns(10),
+                    "role": _role_of(u),
+                    "policy": app_version.get_policy()})
+
+
+@app.route("/api/admin/releases", methods=["POST"])
+def api_admin_release_status():
+    """Owner-only status change. Blocking a newer release needs confirmation."""
+    u = _require_role("owner")
+    if not u:
+        return jsonify({"status": "error",
+                        "error": "Owner approval is required to change release "
+                                 "status."}), 403
+    d = _post_data()
+    try:
+        code = int(d.get("version_code"))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "error": "version_code is required."}), 400
+    status = str(d.get("status", "")).upper().strip()
+    newest_protected = app_version.DISCONTINUED_AT_OR_BELOW_VERSION_CODE
+    if status == "BLOCKED" and code > newest_protected and not _is_truthy(d.get("confirm_block")):
+        return jsonify({"status": "error",
+                        "error": "Blocking a release newer than "
+                                 f"{app_version.DISCONTINUED_AT_OR_BELOW_VERSION} "
+                                 "needs confirm_block=true."}), 400
+    try:
+        row = releases.set_status(code, status, u["email"],
+                                  str(d.get("notes", "")))
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    app_version.audit(u["email"], "release.status",
+                      json.dumps({"version_code": code, "status": status,
+                                  "notes": row.get("notes", "")}, sort_keys=True))
+    return jsonify({"status": "success", "release": row})
+
+
+@app.route("/api/admin/users")
+def api_admin_users():
+    """Account list without hashes or tokens."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    return jsonify({"status": "success", "users": platform.list_users(300),
+                    "role": _role_of(u)})
+
+
+@app.route("/api/admin/users/role", methods=["POST"])
+def api_admin_user_role():
+    """Owner-only role change (including suspend/reactivate via 'suspended')."""
+    u = _require_role("owner")
+    if not u:
+        return jsonify({"status": "error", "error": "Owner only."}), 403
+    d = _post_data()
+    try:
+        result = platform.set_user_role(str(d.get("email", "")),
+                                        str(d.get("role", "user")), u["email"])
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    app_version.audit(u["email"], "user.role", json.dumps(result, sort_keys=True))
+    return jsonify({"status": "success", **result})
+
+
 @app.route("/api/admin/security-log")
 def api_admin_security_log():
     """Recent administrative actions (policy changes, notifications, rollbacks)."""
-    u = _require_admin()
+    u = _require_role("developer")
     if not u:
         return _admin_denied()
     return jsonify({"status": "success",
                     "entries": app_version.list_audit(
                         request.args.get("limit", 50))})
+
+
+@app.route("/api/admin/mfa", methods=["GET"])
+def api_admin_mfa_status():
+    """Whether TOTP is active for the signed-in admin, plus fleet totals."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    return jsonify({"status": "success", "mfa": mfa.status(u["email"]),
+                    "totals": mfa.snapshot()})
+
+
+@app.route("/api/admin/mfa/enroll", methods=["POST"])
+def api_admin_mfa_enroll():
+    """Create a pending TOTP secret. Nothing is enforced until it is confirmed."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    try:
+        data = mfa.begin_enrollment(u["email"])
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    app_version.audit(u["email"], "mfa.enroll_started", "")
+    return jsonify({"status": "success", **data})
+
+
+@app.route("/api/admin/mfa/confirm", methods=["POST"])
+def api_admin_mfa_confirm():
+    """Activate TOTP after a correct code, returning one-time recovery codes."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    d = _post_data()
+    try:
+        codes = mfa.confirm_enrollment(u["email"], str(d.get("code", "")))
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    app_version.audit(u["email"], "mfa.enabled",
+                      json.dumps({"recovery_codes": len(codes)}))
+    return jsonify({"status": "success", "recovery_codes": codes,
+                    "mfa": mfa.status(u["email"])})
+
+
+@app.route("/api/admin/mfa/disable", methods=["POST"])
+def api_admin_mfa_disable():
+    """Turn TOTP off; requires a current code so a stolen session cannot."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    d = _post_data()
+    try:
+        mfa.disable(u["email"], str(d.get("code", "")))
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    app_version.audit(u["email"], "mfa.disabled", "")
+    return jsonify({"status": "success", "mfa": mfa.status(u["email"])})
+
+
+@app.route("/api/app/push-token", methods=["POST", "DELETE"])
+def api_app_push_token():
+    """Register or remove this install's FCM token for update notices.
+
+    The token is only a delivery address: nothing here grants access, and the
+    server still refuses protected calls from a build below the minimum.
+    """
+    client = _app_client_meta()
+    if request.method == "DELETE":
+        if client["install_id"]:
+            push.unregister(client["install_id"])
+        return jsonify({"status": "success", "registered": False})
+    if not client["install_id"]:
+        return jsonify({"status": "error",
+                        "error": "An install id is required."}), 400
+    d = _post_data()
+    token = str(d.get("token", "")).strip()
+    if len(token) < 20 or len(token) > 4096:
+        return jsonify({"status": "error",
+                        "error": "A valid FCM registration token is required."}), 400
+    try:
+        push.register(client["install_id"], token, client["platform"],
+                      _client_email_for_install())
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    return jsonify({"status": "success", "registered": True,
+                    "push_available": push.available(),
+                    "devices": push.token_count()})
 
 
 def _is_truthy(value):

@@ -92,6 +92,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
       <a class="tool-card" href="#annPanel"><i class="fas fa-bullhorn"></i><b>CEO announcements</b><span>Push website banner + app feed messages</span><span class="tag">PUBLISH</span></a>
       <a class="tool-card" href="#pwForm"><i class="fas fa-key"></i><b>Password vault</b><span>Change own password, reset users, create admins</span><span class="tag">SECURITY</span></a>
       <a class="tool-card" href="#syncPanel"><i class="fas fa-cloud-arrow-up"></i><b>Version policy</b><span>Release gate, adoption and audit</span><span class="tag">HEALTH</span></a>
+      <a class="tool-card" href="#releasePanel"><i class="fas fa-box-archive"></i><b>Release inventory</b><span>Verified builds, blocked versions and refused traffic</span><span class="tag">AUDIT</span></a>
       <a class="tool-card" href="/api/admin/live-activity"><i class="fas fa-download"></i><b>Live feed JSON</b><span>Raw live activity endpoint for the apps</span><span class="tag">API</span></a>
     </div>
   </div>
@@ -154,6 +155,57 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
     <div class="stat" id="syncPanel" style="margin-top:.4rem"><b style="font-size:.95rem">Sync status</b><span id="syncStatus">Version policy + audit trail live above</span></div>
   </div>
 
+  <!-- ── two-factor authentication ── -->
+  <div class="panel" id="releasePanel">
+    <h2><i class="fas fa-box-archive" style="color:var(--accent)"></i> Release inventory &amp; blocked builds</h2>
+    <p class="note">Every build below was verified from the actual APK with <code>aapt</code> and a native-string scan. Versions at or below <strong>2.6.5</strong> are blocked server-side; blocking anything newer needs an explicit owner confirmation.</p>
+    <div class="stats" style="margin:.8rem 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem">
+      <div class="stat"><b id="relMin">-</b><span>Minimum supported</span></div>
+      <div class="stat"><b id="relLatest">-</b><span>Latest release</span></div>
+      <div class="stat"><b id="relBlockedBuilds">-</b><span>Blocked builds</span></div>
+      <div class="stat"><b id="relBlockedReq">-</b><span>Refused requests</span></div>
+    </div>
+    <div class="table-scroll" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Release</th><th>Code</th><th>Inspected</th><th>Status</th><th>Evidence</th><th>Action</th></tr></thead>
+        <tbody id="releaseRows"><tr><td colspan="6" class="muted">Loading verified releases…</td></tr></tbody>
+      </table>
+    </div>
+    <h2 style="font-size:1rem;margin-top:1.4rem"><i class="fas fa-ban" style="color:var(--crimson)"></i> Refused requests (last 25)</h2>
+    <div class="table-scroll">
+      <table><thead><tr><th>When</th><th>Version</th><th>Code</th><th>Path</th><th>Reason</th></tr></thead>
+      <tbody id="blockedRows"><tr><td colspan="5" class="muted">No refused requests recorded yet.</td></tr></tbody></table>
+    </div>
+    <h2 style="font-size:1rem;margin-top:1.4rem"><i class="fas fa-paper-plane" style="color:var(--blue)"></i> Update campaigns</h2>
+    <div class="table-scroll">
+      <table><thead><tr><th>When</th><th>Actor</th><th>Targets</th><th>Delivered</th><th>Failed</th><th>Provider</th></tr></thead>
+      <tbody id="campaignRows"><tr><td colspan="6" class="muted">No campaigns recorded.</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <div class="panel" id="mfaPanel">
+    <h2><i class="fas fa-shield-halved" style="color:var(--accent)"></i> Two-factor authentication</h2>
+    <p class="note">TOTP codes from Google Authenticator, Authy, 1Password or any RFC 6238 app. Once enabled, this account cannot sign in with a password alone — the six-digit code (or a one-time recovery code) is required. Codes are accepted once only, so a captured code cannot be replayed.</p>
+    <div class="live-grid">
+      <div class="stat"><b id="mfaState">-</b><span>Status for this account</span></div>
+      <div class="stat"><b id="mfaRecovery">-</b><span>Recovery codes left</span></div>
+      <div class="stat"><b id="mfaEnrolled">-</b><span>Admins enrolled</span></div>
+    </div>
+    <div id="mfaSetup" style="display:none">
+      <p class="note">Add this key to your authenticator app (time-based, 6 digits, 30 seconds), then confirm with the code it shows.</p>
+      <div class="row">
+        <input id="mfaSecret" readonly style="font-family:'JetBrains Mono',monospace">
+        <input id="mfaCode" inputmode="numeric" maxlength="6" placeholder="6-digit code" autocomplete="one-time-code">
+        <button class="btn green" type="button" id="mfaConfirm">Confirm &amp; enable</button>
+      </div>
+      <p id="mfaRecoveryOut" class="muted" style="font-size:.8rem"></p>
+    </div>
+    <div class="row">
+      <button class="btn gold" type="button" id="mfaStart">Enable 2FA</button>
+      <button class="btn ghost" type="button" id="mfaOff">Disable 2FA</button>
+    </div>
+  </div>
+
   <!-- ── application version policy ── -->
   <div class="panel" id="versionPanel">
     <h2><i class="fas fa-code-branch" style="color:var(--accent)"></i> Application version policy</h2>
@@ -167,12 +219,12 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
     </div>
     <form id="verForm" class="form">
       <div class="row">
-        <input id="vLatest" placeholder="Latest version (2.7.0)">
-        <input id="vLatestCode" type="number" placeholder="Latest build code (17)">
+        <input id="vLatest" placeholder="Latest version (2.8.0)">
+        <input id="vLatestCode" type="number" placeholder="Latest build code (18)">
       </div>
       <div class="row">
         <input id="vMin" placeholder="Minimum supported version">
-        <input id="vMinCode" type="number" placeholder="Minimum supported build code">
+        <input id="vMinCode" type="number" placeholder="Minimum supported build code (17)">
       </div>
       <input id="vUrl" placeholder="Official download URL (https://…)">
       <textarea id="vMsg" rows="2" placeholder="Update message shown in the app"></textarea>
@@ -343,7 +395,11 @@ document.getElementById('vNotify').onclick = async () => {
   const d = await postAdmin('/api/admin/version-policy/notify', {});
   alert(d.status === 'success'
     ? ('Flagged ' + d.newly_flagged + ' new of ' + d.targets + ' outdated devices. ' +
-       (d.push_available ? ('Push delivered: ' + d.push_delivered) : 'No push transport configured; devices see the update screen on next launch.'))
+       (d.push_available
+          ? ('Push delivered: ' + d.push_delivered + ' · failed: ' + (d.push_failed || 0) +
+             ' · dead tokens removed: ' + (d.push_pruned || 0) +
+             (d.push_errors && d.push_errors.length ? ('\nLast error: ' + d.push_errors[0]) : ''))
+          : 'No push credentials configured; devices see the update screen on next launch.'))
     : ('Failed: ' + (d.error || 'unknown')));
   if (d.status === 'success') loadVersionPolicy();
 };
@@ -361,7 +417,134 @@ document.getElementById('adminForm').onsubmit = async (e) => {
   const d = await postAdmin('/api/admin/create-admin', {email: document.getElementById('newAdminEmail').value, name: document.getElementById('newAdminName').value, password: document.getElementById('newAdminPw').value});
   alert(d.status === 'success' ? ('Admin created: ' + d.admin.email) : ('Failed: ' + (d.error || 'unknown')));
 };
+async function loadMfa() {
+  try {
+    const r = await fetch('/api/admin/mfa', {credentials:'same-origin'});
+    const d = await r.json();
+    const m = d.mfa || {};
+    document.getElementById('mfaState').textContent = m.enabled ? 'On' : 'Off';
+    document.getElementById('mfaRecovery').textContent = m.recovery_codes_remaining || 0;
+    document.getElementById('mfaEnrolled').textContent = (d.totals || {}).enrolled_admins || 0;
+  } catch (e) {}
+}
+// ── release inventory ────────────────────────────────────────────────────
+const relStatusColors = {SUPPORTED: '#34d399', BLOCKED: '#FF5E62', UNSUPPORTED: '#FFB347', DEPRECATED: '#94a3b8', UNKNOWN: '#94a3b8'};
+function relCell(row, text) { const td = document.createElement('td'); td.textContent = text; row.appendChild(td); return td; }
+
+async function loadReleases() {
+  const r = await fetch('/api/admin/releases', {credentials: 'same-origin'});
+  if (!r.ok) { document.getElementById('releaseRows').innerHTML = '<tr><td colspan="6" class="muted">Sign in as an administrator to view releases.</td></tr>'; return; }
+  const data = await r.json();
+  const role = data.role || 'support';
+  const policy = data.policy || {};
+  document.getElementById('relMin').textContent = policy.minimum_supported_version || '-';
+  document.getElementById('relLatest').textContent = policy.latest_version || '-';
+  const releases = data.releases || [];
+  document.getElementById('relBlockedBuilds').textContent = releases.filter((x) => x.status === 'BLOCKED').length;
+  document.getElementById('relBlockedReq').textContent = (data.blocked || {}).total || 0;
+
+  const body = document.getElementById('releaseRows');
+  body.innerHTML = '';
+  releases.forEach((rel) => {
+    const tr = document.createElement('tr');
+    relCell(tr, rel.version_name);
+    relCell(tr, String(rel.version_code));
+    relCell(tr, rel.inspection);
+    const status = document.createElement('td');
+    const chip = document.createElement('strong');
+    chip.textContent = rel.status;
+    chip.style.color = relStatusColors[rel.status] || '#94a3b8';
+    status.appendChild(chip);
+    tr.appendChild(status);
+    const evidence = relCell(tr, rel.security || '');
+    evidence.style.maxWidth = '360px';
+    evidence.style.whiteSpace = 'normal';
+    const action = document.createElement('td');
+    if (role === 'owner') {
+      const btn = document.createElement('button');
+      btn.className = 'btn ghost';
+      btn.type = 'button';
+      btn.textContent = rel.status === 'BLOCKED' ? 'Restore' : 'Block';
+      btn.onclick = async () => {
+        const blocking = rel.status !== 'BLOCKED';
+        if (blocking && !confirm(`Block CamAnime ${rel.version_name}? Devices on it will lose streaming and downloads.`)) return;
+        const res = await fetch('/api/admin/releases', {
+          method: 'POST', credentials: 'same-origin',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({version_code: rel.version_code, status: blocking ? 'BLOCKED' : 'SUPPORTED', confirm_block: true}),
+        });
+        const out = await res.json();
+        if (!res.ok) alert(out.error || 'Change refused.');
+        loadReleases();
+      };
+      action.appendChild(btn);
+    } else {
+      action.textContent = 'Owner only';
+      action.className = 'muted';
+    }
+    tr.appendChild(action);
+    body.appendChild(tr);
+  });
+
+  const blockedBody = document.getElementById('blockedRows');
+  blockedBody.innerHTML = '';
+  const recent = ((data.blocked || {}).recent) || [];
+  if (!recent.length) { blockedBody.innerHTML = '<tr><td colspan="5" class="muted">No refused requests recorded yet.</td></tr>'; }
+  recent.forEach((row) => {
+    const tr = document.createElement('tr');
+    relCell(tr, new Date((row.t || 0) * 1000).toLocaleString());
+    relCell(tr, row.version_name || 'unknown');
+    relCell(tr, String(row.version_code || 0));
+    relCell(tr, row.path || '');
+    relCell(tr, row.reason || '');
+    blockedBody.appendChild(tr);
+  });
+
+  const campBody = document.getElementById('campaignRows');
+  campBody.innerHTML = '';
+  const campaigns = data.campaigns || [];
+  if (!campaigns.length) { campBody.innerHTML = '<tr><td colspan="6" class="muted">No campaigns recorded.</td></tr>'; }
+  campaigns.forEach((c) => {
+    const tr = document.createElement('tr');
+    relCell(tr, new Date((c.t || 0) * 1000).toLocaleString());
+    relCell(tr, c.actor || '');
+    relCell(tr, String(c.targets || 0));
+    relCell(tr, String(c.delivered || 0));
+    relCell(tr, String(c.failed || 0));
+    relCell(tr, c.available ? 'FCM configured' : 'No credentials');
+    campBody.appendChild(tr);
+  });
+}
+loadReleases();
+
+// ── two-factor authentication ─────────────────────────────────────────────
+document.getElementById('mfaStart').onclick = async () => {
+  const d = await postAdmin('/api/admin/mfa/enroll', {});
+  if (d.status !== 'success') { alert('Failed: ' + (d.error || 'unknown')); return; }
+  document.getElementById('mfaSetup').style.display = 'block';
+  document.getElementById('mfaSecret').value = d.secret;
+  document.getElementById('mfaRecoveryOut').textContent = 'Manual key: ' + d.secret +
+    ' — or open ' + d.otpauth_url + ' in your authenticator.';
+  document.getElementById('mfaCode').focus();
+};
+document.getElementById('mfaConfirm').onclick = async () => {
+  const d = await postAdmin('/api/admin/mfa/confirm', {code: document.getElementById('mfaCode').value.trim()});
+  if (d.status !== 'success') { alert('Failed: ' + (d.error || 'unknown')); return; }
+  document.getElementById('mfaSetup').style.display = 'none';
+  alert('Two-factor authentication is on.\n\nSave these recovery codes somewhere safe — each works once:\n\n' +
+        (d.recovery_codes || []).join('  '));
+  loadMfa();
+};
+document.getElementById('mfaOff').onclick = async () => {
+  const code = prompt('Enter the current 6-digit code (or a recovery code) to turn 2FA off:');
+  if (!code) return;
+  const d = await postAdmin('/api/admin/mfa/disable', {code: code.trim()});
+  alert(d.status === 'success' ? 'Two-factor authentication disabled.' : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') loadMfa();
+};
+
 loadVersionPolicy();
+loadMfa();
 </script>
 </body>
 </html>

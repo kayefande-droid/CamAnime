@@ -23,15 +23,15 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.7.0",
-    "latest_version_code": 17,
+    "latest_version": "2.8.0",
+    "latest_version_code": 18,
     "minimum_supported_version": "2.7.0",
     "minimum_supported_version_code": 17,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Administration removed from the app, server-enforced version policy, "
-        "hardened and obfuscated release build."
+        "Minimal player with next-episode autoplay, real mini-player controls, "
+        "TOTP two-factor protection for the dashboard and push update notices."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "
@@ -39,6 +39,28 @@ DEFAULT_POLICY = {
     ),
     "release_enabled": 1,
 }
+
+# Releases at or below this build are discontinued outright: they lose stream
+# and download access for good, even if an operator later lowers the general
+# minimum. 2.6.5 was versionCode 16, so 16 and anything below it is refused.
+DISCONTINUED_AT_OR_BELOW_VERSION = "2.6.5"
+DISCONTINUED_AT_OR_BELOW_VERSION_CODE = 16
+
+DISCONTINUED_MESSAGE = (
+    "CamAnime 2.6.5 and older are discontinued and can no longer stream or "
+    "download anime. Install the current CamAnime from the official website to "
+    "continue."
+)
+
+
+def discontinued(build_code) -> bool:
+    """True for builds the project has retired (ignores the editable minimum)."""
+    try:
+        return (build_code is not None
+                and int(build_code) <= DISCONTINUED_AT_OR_BELOW_VERSION_CODE)
+    except (TypeError, ValueError):
+        return False
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS version_policy (

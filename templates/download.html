@@ -60,6 +60,10 @@ a{color:var(--accent, #FFB347)}
     <label class="meta" for="android-download-url">Copyable download URL</label>
     <div class="copy-row"><input id="android-download-url" type="text" readonly value="{{ request.url_root.rstrip('/') }}/get/android" aria-label="Direct CamAnime Android APK URL"><button type="button" id="copy-android-url" aria-describedby="copy-android-status">Copy link</button></div>
     <div id="copy-android-status" class="copy-status" role="status" aria-live="polite"></div>
+    <a class="direct" href="{{ cloudflare_url }}/get/android" download="CamAnime.apk"><i class="fas fa-cloud"></i> Cloudflare mirror: direct APK from {{ cloudflare_url | replace('https://', '') }}</a>
+    <label class="meta" for="cloudflare-download-url">Cloudflare-hosted APK URL</label>
+    <div class="copy-row"><input id="cloudflare-download-url" type="text" readonly value="{{ cloudflare_url }}/get/android" aria-label="Cloudflare-hosted CamAnime Android APK URL"><button type="button" id="copy-cloudflare-url" aria-describedby="copy-cloudflare-status">Copy link</button></div>
+    <div id="copy-cloudflare-status" class="copy-status" role="status" aria-live="polite"></div>
     
   </div>
   <div class="card">
@@ -84,24 +88,29 @@ a{color:var(--accent, #FFB347)}
 <p style="margin-top:1.5rem;color:var(--text-muted, #64708a);font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
 <script>
 (() => {
-  const field = document.getElementById('android-download-url');
-  const button = document.getElementById('copy-android-url');
-  const status = document.getElementById('copy-android-status');
-  if (!field || !button || !status) return;
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(field.value);
-      status.textContent = 'Download link copied.';
-    } catch (_) {
-      field.focus();
-      field.select();
-      field.setSelectionRange(0, field.value.length);
-      const copied = document.execCommand('copy');
-      status.textContent = copied
-        ? 'Download link copied.'
-        : 'Select and copy the link above.';
-    }
-  });
+  // Same behaviour for the Render URL and the Cloudflare mirror URL.
+  [['android-download-url', 'copy-android-url', 'copy-android-status'],
+   ['cloudflare-download-url', 'copy-cloudflare-url', 'copy-cloudflare-status']]
+    .forEach(([fieldId, buttonId, statusId]) => {
+      const field = document.getElementById(fieldId);
+      const button = document.getElementById(buttonId);
+      const status = document.getElementById(statusId);
+      if (!field || !button || !status) return;
+      button.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(field.value);
+          status.textContent = 'Download link copied.';
+        } catch (_) {
+          field.focus();
+          field.select();
+          field.setSelectionRange(0, field.value.length);
+          const copied = document.execCommand('copy');
+          status.textContent = copied
+            ? 'Download link copied.'
+            : 'Select and copy the link above.';
+        }
+      });
+    });
 })();
 </script>
 </body>

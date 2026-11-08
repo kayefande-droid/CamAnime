@@ -18,6 +18,7 @@ class MainActivity : FlutterActivity() {
     private val navigationChannel = "camanime/navigation"
     private val notificationsChannel = "camanime/notifications"
     private val pipChannel = "camanime/pip"
+    private val playerChannel = "camanime/player"
 
     private var navigation: MethodChannel? = null
     private var pip: MethodChannel? = null
@@ -126,6 +127,29 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // Player brightness: Android cannot set system brightness from an app,
+        // but it can dim its own window, which is exactly what a video player
+        // needs. -1 restores the system setting on exit.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, playerChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "brightness" -> {
+                        val value = call.argument<Double>("value") ?: 1.0
+                        val attrs = window.attributes
+                        attrs.screenBrightness = value.coerceIn(0.02, 1.0).toFloat()
+                        window.attributes = attrs
+                        result.success(true)
+                    }
+                    "resetBrightness" -> {
+                        val attrs = window.attributes
+                        attrs.screenBrightness = -1f
+                        window.attributes = attrs
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
 
         StorageBridge.attach(this)
         StorageBridge.register(this, flutterEngine.dartExecutor.binaryMessenger)

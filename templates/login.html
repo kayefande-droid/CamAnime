@@ -33,7 +33,7 @@ a{color:var(--accent, #FFB347)}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs 
 <body>
 <div class="card">
 <div style="font-family:'Syne';font-weight:800;font-size:1.3rem">Cam<span style="color:var(--accent, #FFB347)">Anime</span></div>
-<h1>{{ 'Admin sign in' if mode=='admin' else ('Create account' if mode=='signup' else 'Welcome back') }}</h1>
+<h1>{{ 'Admin sign in' if mode=='admin' else ('Two-step verification' if mfa_required else ('Create account' if mode=='signup' else 'Welcome back')) }}</h1>
 <p class="sub">Sign in with your CamAnime email and password. Browser watchlists stay on this device; account data may reset when the free Render instance is replaced.</p>
 <div class="tabs">
 <a href="/login?mode=signin" class="{{ 'active' if mode!='signup' else '' }}" {{ 'aria-current="page"' if mode!='signup' else '' }}>Sign in</a>
@@ -44,6 +44,7 @@ a{color:var(--accent, #FFB347)}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs 
 {% if mode=='signup' %}<label for="signupName">Username</label><input id="signupName" name="name" autocomplete="username" placeholder="e.g. AnimeFan_CM">{% endif %}
 <label for="accountEmail">Email</label><input id="accountEmail" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
 <label for="accountPassword">Password</label><input id="accountPassword" name="password" type="password" autocomplete="{{ 'new-password' if mode=='signup' else 'current-password' }}" required minlength="6">
+{% if mfa_required %}<label for="accountCode">Authenticator code</label><input id="accountCode" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" required><p class="sub" style="margin-top:.5rem">Open Google Authenticator, Authy or 1Password and enter the current code. A saved recovery code also works here.</p>{% endif %}
 <input type="hidden" name="action" value="{{ 'signup' if mode=='signup' else 'signin' }}">
 <button class="primary" type="submit">{{ 'Create free account' if mode=='signup' else 'Sign in securely' }}</button>
 </form>

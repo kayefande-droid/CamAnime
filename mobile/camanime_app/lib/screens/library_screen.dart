@@ -268,13 +268,20 @@ class _LibraryTabState extends State<LibraryTab> {
                               ? CamColors.accent
                               : CamColors.inkDim),
                       const SizedBox(width: 5),
-                      Text(labels[i],
-                          style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                              color: _view == i
-                                  ? CamColors.ink
-                                  : CamColors.inkDim)),
+                      // Flexible + ellipsis: the three tabs must never overflow
+                      // on the narrowest phones (the 430dp test caught 0.4px).
+                      Flexible(
+                        child: Text(labels[i],
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: _view == i
+                                    ? CamColors.ink
+                                    : CamColors.inkDim)),
+                      ),
                     ]),
               ),
             ),
