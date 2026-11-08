@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -69,6 +70,11 @@ class AppUpdater {
   }
 
   /// Downloads the new APK into app storage, reporting 0..1 progress.
+  ///
+  /// The downloaded file is only returned when its SHA-256 matches
+  /// [info.sha256]. A mismatch (corrupt or tampered download) is treated as a
+  /// failed download: the partial file is deleted and null is returned, so the
+  /// installer never receives a bad or unauthorized APK.
   static Future<File?> download(
     UpdateInfo info, {
     void Function(double progress)? onProgress,
@@ -104,11 +110,41 @@ class AppUpdater {
         } catch (_) {}
         return null;
       }
+      // Integrity check before the installer ever sees the file.
+      if (info.sha256.isNotEmpty) {
+        try {
+          final digest = await compute(_sha256File, target.path);
+          if (digest.isEmpty || digest.toUpperCase() != info.sha256.toUpperCase()) {
+            debugPrint(
+                'AppUpdater: APK sha256 mismatch (expected ${info.sha256}, got $digest). Deleting.');
+            try {
+              await target.delete();
+            } catch (_) {}
+            return null;
+          }
+        } catch (_) {
+          // Hashing can only fail on a broken path; treat it as unsafe.
+          try {
+            await target.delete();
+          } catch (_) {}
+          return null;
+        }
+      }
       onProgress?.call(1);
       return target;
     } catch (_) {
       return null;
     }
+  }
+
+  /// SHA-256 of a file, returned as an uppercase hex string.
+  ///
+  /// Runs on the background isolate so hashing a ~53 MB APK does not freeze the
+  /// UI.
+  static Future<String> _sha256File(String path) async {
+    final bytes = await File(path).readAsBytes();
+    final hash = sha256.convert(bytes);
+    return hash.toString().toUpperCase();
   }
 
   /// True when Android will show the installer without an extra permission trip.

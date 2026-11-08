@@ -137,6 +137,9 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
   int tab = 0;
   bool showTutorial = false;
   String themeName = 'midnight';
+  /// Set when an update check finds a newer build, so the app can show an
+  /// in-app update-available notice without waiting for the download dialog.
+  String? updateAvailable;
 
   static const _tabs = [
     ('Home', Icons.home_outlined, Icons.home),
@@ -207,6 +210,11 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
 
   /// Checks the website on launch and, when a newer build exists, downloads and
   /// installs it without the user going to a browser.
+  ///
+  /// When a newer build is found the app posts a "Live update going on"
+  /// heads-up notification (via the existing announcement channel) so the user sees
+  /// the update even when the download dialog is behind another app, and shows an
+  /// in-app update-available notice for manual checks.
   Future<void> _checkUpdate({bool manual = false}) async {
     final installed = await AppUpdater.installedVersion();
     final info = await AppUpdater.check(current: installed);
@@ -217,6 +225,15 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
             content: Text('You are on the latest version ($installed)')));
       }
       return;
+    }
+    // Alert the user that an update is happening / available.
+    if (mounted) {
+      unawaited(AppNotifications.updateInProgress(info.version));
+    }
+    if (manual) {
+      if (mounted) {
+        setState(() => updateAvailable = info.version);
+      }
     }
     await _installUpdate(info);
   }
@@ -414,6 +431,45 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
                   setState(() => showTutorial = false);
                   _checkUpdate();
                 }),
+              if (updateAvailable != null)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 88,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        setState(() => updateAvailable = null);
+                        await _checkUpdate(manual: true);
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: amber,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.system_update, size: 20,
+                                color: Colors.black),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Update available: $updateAvailable — tap to update now.',
+                                style: const TextStyle(
+                                    color: Colors.black, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            const Icon(Icons.arrow_forward, size: 20,
+                                color: Colors.black),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },

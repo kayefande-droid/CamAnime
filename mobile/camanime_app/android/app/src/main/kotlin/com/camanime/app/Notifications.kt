@@ -259,6 +259,55 @@ object Notifications {
     }
 
     /** Placeholder kept for callers that only need a valid bitmap. */
+    /**
+     * "Live update going on" heads-up: the app found a newer build and is
+     * downloading it. Posted once per check so the user sees the update even when
+     * the download dialog is behind another app.
+     */
+    fun updateInProgress(
+        context: Context,
+        version: String,
+        notificationKey: String
+    ) {
+        ensureAnnouncementChannel(context)
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(context, MainActivity::class.java)
+        launch.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context,
+            notificationKey.hashCode(),
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, ANNOUNCE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_rotate)
+            .setContentTitle("Live update going on")
+            .setContentText("CamAnime $version is being downloaded in the background.")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(
+                        "CamAnime $version is being downloaded in the background. "
+                            + "Tap to open the app.")
+            )
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+        try {
+            manager.notify(notificationKey.hashCode() and 0x7fffffff, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked: the in-app update dialog still appears.
+        }
+    }
+
     private fun blankPoster(): Bitmap =
         Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 

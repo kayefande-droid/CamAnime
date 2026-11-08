@@ -21,6 +21,10 @@ mobile/apk/
 # Owner-only runbooks, signing material, local hosting secrets and generated
 # binaries. Hosting (Render/Cloudflare) never needs these tracked; their
 # deployment configs stay in render.yaml and cloudflare/.
+# Ephemeral Render API artifacts (do not track).
+deploy_id.txt
+render_latest.json
+render_one.json
 docs/private/
 *.keystore
 *.jks

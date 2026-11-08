@@ -91,6 +91,8 @@ function clientBuild(request) {
   return Number.isFinite(value) ? value : null;
 }
 
+const APK_SHA256 = "2FE16785184AE1C7B6BA0060E60A60A268F5E8D43F7A32C09CC5BB54E2B8B9D3";
+
 function updateRequiredResponse(build) {
   const retired = build <= DISCONTINUED_BUILD;
   return json({
@@ -109,6 +111,7 @@ function updateRequiredResponse(build) {
       render: "https://camanime.onrender.com/get/android",
       cloudflare: "https://camanjme.camanime.workers.dev/get/android",
     },
+    sha256: APK_SHA256,
     message: retired
       ? "CamAnime 2.6.5 and older are discontinued and can no longer stream "
         + "or download anime. Install the current CamAnime from the official "

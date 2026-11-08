@@ -113,6 +113,14 @@ class MainActivity : FlutterActivity() {
                         )
                         result.success(true)
                     }
+                    "updateInProgress" -> {
+                        Notifications.updateInProgress(
+                            this,
+                            call.argument<String>("version") ?: "2.9.0",
+                            call.argument<String>("id") ?: "camanime-update"
+                        )
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }

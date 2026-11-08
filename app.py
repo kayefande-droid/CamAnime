@@ -4013,6 +4013,30 @@ def _update_required(policy, build_code):
     return app_version.update_required(policy, build_code)
 
 
+def _apk_sha256():
+    """SHA-256 of the current release APK, cached per process.
+
+    Computed once per worker from static/downloads/CamAnime.apk so every
+    version/ping response and download page can publish the real artifact
+    hash without reading a multi-MB file on every call. A missing or
+    unreadable artifact yields '', never an exception, so a deploy that has
+    not yet copied the APK in cannot silently ship a wrong hash.
+    """
+    global _APK_SHA256_CACHE
+    if _APK_SHA256_CACHE is not None:
+        return _APK_SHA256_CACHE
+    try:
+        apk_path = os.path.join(app.static_folder or "static", "downloads", "CamAnime.apk")
+        if os.path.isfile(apk_path):
+            with open(apk_path, "rb") as _f:
+                _APK_SHA256_CACHE = hashlib.sha256(_f.read()).hexdigest()
+    except Exception:
+        logger.warning("APK sha256 computation failed", exc_info=True)
+        _APK_SHA256_CACHE = ""
+    return _APK_SHA256_CACHE
+
+_APK_SHA256_CACHE = None
+
 def _update_payload(policy, build_code=None):
     """The structured 426 body shared by the gate and the status endpoints."""
     retired = app_version.discontinued(build_code)
@@ -4037,6 +4061,11 @@ def _update_payload(policy, build_code=None):
             "render": policy["download_url"],
             "cloudflare": f"{CLOUDFLARE_SITE}/get/android",
         },
+        # Real artifact hash, computed from the APK on disk once per worker.
+        # The app verifies the downloaded APK against this before handing it to
+        # the Android installer, so a corrupt or tampered download is never
+        # installed (fail closed on mismatch).
+        "sha256": _apk_sha256(),
         "message": (app_version.DISCONTINUED_MESSAGE if retired
                     else policy["update_message"]),
         "release_notes": policy["release_notes"],

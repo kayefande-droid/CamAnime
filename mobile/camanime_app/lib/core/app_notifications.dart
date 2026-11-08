@@ -102,4 +102,19 @@ class AppNotifications {
       });
     } catch (_) {}
   }
+
+  /// Heads-up for a in-app update being downloaded.
+  ///
+  /// Posted once per update check, before the download dialog, so the user sees
+  /// the update even when the dialog is behind another app. The key is the
+  /// version string, so repeated checks for the same version reuse the same
+  /// notification.
+  static Future<void> updateInProgress(String version) async {
+    if (!Platform.isAndroid || !_enabled) return;
+    try {
+      await _channel.invokeMethod<void>('updateInProgress', {
+        'version': version,
+      });
+    } catch (_) {}
+  }
 }
