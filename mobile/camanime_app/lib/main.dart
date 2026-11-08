@@ -1552,6 +1552,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       try {
         final announcements = await Api.announcements();
         ann = (announcements['announcements'] as List?) ?? [];
+        unawaited(AppNotifications.announcements(ann));
       } catch (_) {
         // Catalogue availability does not depend on the announcements service.
       }

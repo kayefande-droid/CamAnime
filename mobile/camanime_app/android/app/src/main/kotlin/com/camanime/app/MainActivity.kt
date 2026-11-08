@@ -90,6 +90,15 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "disable" -> result.success(true)
+                    "announcement" -> {
+                        Notifications.announcement(
+                            this,
+                            call.argument<String>("title") ?: "CamAnime",
+                            call.argument<String>("body") ?: "",
+                            call.argument<String>("id") ?: "camanime-announcement"
+                        )
+                        result.success(true)
+                    }
                     "downloadComplete" -> {
                         val notificationsEnabled =
                             call.argument<Boolean>("notificationsEnabled") ?: true

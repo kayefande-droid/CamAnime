@@ -36,6 +36,7 @@ private const val POSTER_MAX_PX = 512
 
 object Notifications {
     const val COMPLETE_CHANNEL_ID = "camanime_downloads_complete"
+    const val ANNOUNCE_CHANNEL_ID = "camanime_announcements"
 
     private val posterExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -57,6 +58,65 @@ object Notifications {
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         manager.createNotificationChannel(channel)
+    }
+
+    fun ensureAnnouncementChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager =
+            context.getSystemService(NotificationManager::class.java) ?: return
+        val channel = NotificationChannel(
+            ANNOUNCE_CHANNEL_ID,
+            "CamAnime announcements",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "News and notices published by the CamAnime team."
+            enableVibration(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    /** Admin announcement pushed through the app feed (no Firebase needed). */
+    fun announcement(
+        context: Context,
+        title: String,
+        body: String,
+        notificationKey: String
+    ) {
+        if (body.isBlank()) return
+        ensureAnnouncementChannel(context)
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(context, MainActivity::class.java)
+        launch.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_announcements", true)
+        }
+        val pending = PendingIntent.getActivity(
+            context,
+            notificationKey.hashCode(),
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, ANNOUNCE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title.ifBlank { "CamAnime" })
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .build()
+        try {
+            manager.notify(notificationKey.hashCode() and 0x7fffffff, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked: the announcement is still in the app feed.
+        }
     }
 
     /**

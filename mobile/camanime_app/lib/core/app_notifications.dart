@@ -44,6 +44,48 @@ class AppNotifications {
 
   /// Called by the download manager the moment a file is complete and renamed.
   /// Never throws: a missing notification must not affect the download itself.
+  static const String _seenAnnouncementsKey = 'seen_announcement_ids';
+
+  /// Shows the newest admin announcement once, as a heads-up notification.
+  ///
+  /// This is the no-Firebase delivery path: the app reads the same
+  /// `/api/announcements` feed the website banner uses, so an announcement
+  /// published from /admin still reaches installs that have no push token.
+  /// Announcements are marked seen as soon as they are fetched, so a user gets
+  /// one alert per message, never a backlog on every launch.
+  static Future<void> announcements(List<dynamic> items) async {
+    if (!Platform.isAndroid || !_enabled || items.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final seen = (prefs.getStringList(_seenAnnouncementsKey) ?? <String>[])
+          .toSet();
+      Map<String, dynamic>? newest;
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      for (final item in items) {
+        if (item is! Map) continue;
+        final id = (item['id'] ?? '').toString();
+        if (id.isEmpty) continue;
+        final ts = (item['t'] as num?)?.toInt() ?? 0;
+        if (!seen.contains(id) &&
+            newest == null &&
+            (ts == 0 || now - ts < 60 * 60 * 24 * 30)) {
+          newest = item.cast<String, dynamic>();
+        }
+        seen.add(id);
+      }
+      if (newest == null) return;
+      await _channel.invokeMethod<void>('announcement', {
+        'id': newest['id'].toString(),
+        'title': (newest['title'] ?? 'CamAnime').toString(),
+        'body': (newest['body'] ?? '').toString(),
+      });
+      await prefs.setStringList(
+          _seenAnnouncementsKey, seen.take(80).toList(growable: false));
+    } catch (_) {
+      // Announcements are optional chrome: never break the catalogue load.
+    }
+  }
+
   static Future<void> downloadComplete({
     required String animeTitle,
     required int episode,

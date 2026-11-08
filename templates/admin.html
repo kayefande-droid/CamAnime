@@ -118,7 +118,8 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
 
   <!-- ── announcements ── -->
   <div class="panel" id="annPanel">
-    <h2><i class="fas fa-bullhorn" style="color:var(--accent)"></i> CEO announcements (website banner + app feed)</h2>
+    <h2><i class="fas fa-bullhorn" style="color:var(--accent)"></i> CEO announcements (website + app notifications)</h2>
+    <p class="note">One publish sends the website banner, the app feed and an OS notification to every registered app install. Delivery counts below are measured, never assumed: with no FCM credentials the message still reaches the site and app feed, and the result says no push was sent.</p>
     <form id="annForm" class="form">
       <input id="annTitle" placeholder="Announcement title" maxlength="120">
       <textarea id="annBody" placeholder="Message to all users…" maxlength="2000" rows="3"></textarea>
@@ -305,8 +306,8 @@ async function postAdmin(url, body) {
 }
 document.getElementById('annForm').onsubmit = async (e) => {
   e.preventDefault();
-  const d = await postAdmin('/api/admin/announce', {title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value});
-  alert(d.status === 'success' ? 'Published to website + apps.' : ('Failed: ' + (d.error || 'unknown')));
+  const d = await postAdmin('/api/admin/announce', {title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value, notify_apps: true});
+  alert(d.status === 'success' ? (d.note || 'Published.') : ('Failed: ' + (d.error || 'unknown')));
   if (d.status === 'success') location.reload();
 };
 document.getElementById('ownPwForm').onsubmit = async (e) => {

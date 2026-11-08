@@ -158,6 +158,38 @@ def test_app_endpoint_rejects_a_bogus_token(api, fcm):
     assert res.status_code == 400
 
 
+def test_admin_announcement_broadcasts_to_every_registered_install(api, fcm):
+    client = api.app.test_client()
+    api.push.register("install-a", "announce-token-" + "f" * 30)
+    api.push.register("install-b", "announce-token-" + "g" * 30)
+
+    res = client.post("/api/admin/announce",
+                      json={"title": "New season live",
+                            "body": "Black Clover S2 is streaming now.",
+                            "notify_apps": True},
+                      headers=admin_headers(api))
+    assert res.status_code == 200, res.get_json()
+    body = res.get_json()
+    assert body["status"] == "success"
+    assert body["announcement"]["title"] == "New season live"
+    assert body["push"]["targets"] == 2
+    assert body["push"]["delivered"] == 2
+    assert body["push"]["failed"] == 0
+    assert "2 of 2" in body["note"]
+
+
+def test_admin_announcement_without_push_still_publishes(api):
+    client = api.app.test_client()
+    res = client.post("/api/admin/announce",
+                      json={"title": "Maintenance", "body": "Back at 22:00.",
+                            "notify_apps": False},
+                      headers=admin_headers(api))
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["push"]["targets"] == 0
+    assert "FCM is not configured" in body["note"]
+
+
 def test_admin_notify_actually_delivers_to_outdated_devices(api, fcm):
     client = api.app.test_client()
     outdated = app_headers(build=16, version="2.6.5", install="install-old-77")

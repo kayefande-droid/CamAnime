@@ -3876,7 +3876,28 @@ def api_admin_announce():
     d = _post_data()
     try:
         a = platform.post_announcement(d.get("title", ""), d.get("body", ""), u.get("name") or u.get("email"))
-        return jsonify({"status": "success", "announcement": a})
+        # One publish action covers every surface: website banner, app feed and
+        # an OS notification on registered app installs when FCM is configured.
+        notice = {"available": False, "targets": 0, "delivered": 0,
+                  "failed": 0, "pruned": 0, "errors": []}
+        if _is_truthy(d.get("notify_apps", True)):
+            notice = push.send_broadcast(
+                a["title"], a["body"],
+                {"type": "announcement", "id": a["id"]})
+            push.record_campaign(u.get("email") or "", a["title"],
+                                 a["body"], notice)
+        if not notice["available"]:
+            note = ("Published to the website and app feed. FCM is not "
+                    "configured, so no remote notification was sent.")
+        elif notice["targets"] == 0:
+            note = ("Published to the website and app feed. No app install has "
+                    "registered for push yet.")
+        else:
+            note = (f"Published to the website and app feed. Push delivered to "
+                    f"{notice['delivered']} of {notice['targets']} registered "
+                    f"app installs.")
+        return jsonify({"status": "success", "announcement": a,
+                        "push": notice, "note": note})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
 

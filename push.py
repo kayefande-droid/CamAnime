@@ -327,16 +327,18 @@ def _error_text(payload: Dict) -> str:
         return ""
 
 
-def send_update_alert(install_ids: List[str], title: str, body: str,
-                      data: Optional[Dict] = None) -> Dict:
-    """Deliver one notification per registered device.
+def all_tokens(limit: int = 5000) -> List[sqlite3.Row]:
+    """Every install that registered a push address, newest first."""
+    ensure_schema()
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM push_tokens ORDER BY updated DESC LIMIT ?",
+            (max(1, min(int(limit or 5000), 10000)),)).fetchall()
 
-    The returned counts are measured, never assumed: ``delivered`` only counts
-    accepted FCM responses, dead tokens are pruned, and every other failure is
-    reported back with its reason.
-    """
-    account = _service_account()
-    targets = tokens_for(install_ids)
+
+def _deliver(account: Optional[Dict], targets: List[sqlite3.Row], title: str,
+             body: str, data: Dict) -> Dict:
+    """Deliver one notification per target, counting only real acceptances."""
     result = {
         "available": account is not None,
         "targets": len(targets),
@@ -368,3 +370,21 @@ def send_update_alert(install_ids: List[str], title: str, body: str,
         if error and error not in result["errors"]:
             result["errors"].append(error)
     return result
+
+
+def send_update_alert(install_ids: List[str], title: str, body: str,
+                      data: Optional[Dict] = None) -> Dict:
+    """Deliver one notification per registered device.
+
+    The returned counts are measured, never assumed: ``delivered`` only counts
+    accepted FCM responses, dead tokens are pruned, and every other failure is
+    reported back with its reason.
+    """
+    return _deliver(_service_account(), tokens_for(install_ids),
+                    title, body, data or {})
+
+
+def send_broadcast(title: str, body: str,
+                   data: Optional[Dict] = None) -> Dict:
+    """Admin announcement to every registered app install (not just old builds)."""
+    return _deliver(_service_account(), all_tokens(), title, body, data or {})
