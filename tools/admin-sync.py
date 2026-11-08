@@ -4,7 +4,7 @@
 Checks that website and native app share the same admin and secret:
   1. CAMANIME_SECRET is set (stable sessions across restarts/workers)
   2. Default or env admin exists and can sign in
-  3. /api/admin/sync is reachable as admin (Bearer token works for apps)
+  3. /api/app/version is reachable (public release policy)
 
 Usage:
   python tools/admin-sync.py --base https://camanime.onrender.com \\
@@ -56,11 +56,11 @@ def main():
     role = data.get("user", {}).get("role")
     print(f"Login OK as {args.email} (role={role})")
 
-    s = requests.get(base + "/api/admin/sync", headers={"Authorization": f"Bearer {token}"}, timeout=20)
+    s = requests.get(base + "/api/app/version", headers={"Authorization": f"Bearer {token}"}, timeout=20)
     try:
         sync = s.json()
     except Exception:
-        print(f"/api/admin/sync failed: HTTP {s.status_code}")
+        print(f"/api/app/version failed: HTTP {s.status_code}")
         return 1
     if sync.get("status") != "success":
         print(f"Sync check failed (admin only): {sync.get('error')}")

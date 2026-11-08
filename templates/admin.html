@@ -91,7 +91,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
       <a class="tool-card" href="/api/public/counters"><i class="fas fa-chart-line"></i><b>Counter API</b><span>Factual JSON counters used by the homepage</span><span class="tag">API</span></a>
       <a class="tool-card" href="#annPanel"><i class="fas fa-bullhorn"></i><b>CEO announcements</b><span>Push website banner + app feed messages</span><span class="tag">PUBLISH</span></a>
       <a class="tool-card" href="#pwForm"><i class="fas fa-key"></i><b>Password vault</b><span>Change own password, reset users, create admins</span><span class="tag">SECURITY</span></a>
-      <a class="tool-card" href="#syncPanel"><i class="fas fa-cloud-arrow-up"></i><b>Sync status</b><span>Secret + admin DB health check</span><span class="tag">HEALTH</span></a>
+      <a class="tool-card" href="#syncPanel"><i class="fas fa-cloud-arrow-up"></i><b>Version policy</b><span>Release gate, adoption and audit</span><span class="tag">HEALTH</span></a>
       <a class="tool-card" href="/api/admin/live-activity"><i class="fas fa-download"></i><b>Live feed JSON</b><span>Raw live activity endpoint for the apps</span><span class="tag">API</span></a>
     </div>
   </div>
@@ -151,7 +151,45 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
       </div>
       <button class="btn blue">Create admin</button>
     </form>
-    <div class="stat" id="syncPanel" style="margin-top:.4rem"><b style="font-size:.95rem">Sync status</b><span id="syncStatus">Checking secret + admin sync…</span></div>
+    <div class="stat" id="syncPanel" style="margin-top:.4rem"><b style="font-size:.95rem">Sync status</b><span id="syncStatus">Version policy + audit trail live above</span></div>
+  </div>
+
+  <!-- ── application version policy ── -->
+  <div class="panel" id="versionPanel">
+    <h2><i class="fas fa-code-branch" style="color:var(--accent)"></i> Application version policy</h2>
+    <p class="note">Server-enforced. Any app build below the minimum supported build receives HTTP 426 on streaming, downloads and community calls, so hiding the update screen inside a rebuilt APK restores nothing. Build codes are the only comparison used.</p>
+    <div class="live-grid">
+      <div class="stat"><b id="vDevices">-</b><span>Known devices</span></div>
+      <div class="stat"><b id="vActive">-</b><span>Active (30 days)</span></div>
+      <div class="stat"><b id="vOutdated">-</b><span>Outdated devices</span></div>
+      <div class="stat"><b id="vAdoption">-</b><span>Adoption</span></div>
+      <div class="stat"><b id="vFlagged">-</b><span>Flagged for update</span></div>
+    </div>
+    <form id="verForm" class="form">
+      <div class="row">
+        <input id="vLatest" placeholder="Latest version (2.7.0)">
+        <input id="vLatestCode" type="number" placeholder="Latest build code (17)">
+      </div>
+      <div class="row">
+        <input id="vMin" placeholder="Minimum supported version">
+        <input id="vMinCode" type="number" placeholder="Minimum supported build code">
+      </div>
+      <input id="vUrl" placeholder="Official download URL (https://…)">
+      <textarea id="vMsg" rows="2" placeholder="Update message shown in the app"></textarea>
+      <textarea id="vNotes" rows="2" placeholder="Release notes"></textarea>
+      <label class="muted" style="font-size:.8rem"><input type="checkbox" id="vForce"> Force update (reject older builds)</label>
+      <label class="muted" style="font-size:.8rem"><input type="checkbox" id="vEnabled"> Release enabled</label>
+      <div class="row">
+        <button class="btn gold" type="submit">Save policy</button>
+        <button class="btn blue" type="button" id="vNotify">Flag outdated devices</button>
+        <button class="btn ghost" type="button" id="vRollback">Roll back</button>
+      </div>
+      <p id="verNote" class="muted" style="font-size:.78rem"></p>
+    </form>
+    <div class="table-scroll">
+      <table><thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody id="vAuditRows"><tr><td colspan="4" class="muted">Loading audit history…</td></tr></tbody></table>
+    </div>
   </div>
 
   <!-- ── most watched + schedule ── -->
@@ -230,16 +268,100 @@ document.getElementById('resetForm').onsubmit = async (e) => {
   const d = await postAdmin('/api/admin/password', {target_email: document.getElementById('resetEmail').value, new_password: document.getElementById('resetPw').value});
   alert(d.status === 'success' ? ('Reset for ' + d.reset_for) : ('Failed: ' + (d.error || 'unknown')));
 };
+// ── application version policy (server-enforced) ──
+let versionLoaded = false;
+async function loadVersionPolicy() {
+  try {
+    const r = await fetch('/api/admin/version-policy', {credentials:'same-origin'});
+    const d = await r.json();
+    if (d.status !== 'success') {
+      document.getElementById('verNote').textContent = 'Version policy: ' + (d.error || 'not authorized');
+      return;
+    }
+    const p = d.policy, st = d.stats;
+    document.getElementById('vLatest').value = p.latest_version;
+    document.getElementById('vLatestCode').value = p.latest_version_code;
+    document.getElementById('vMin').value = p.minimum_supported_version;
+    document.getElementById('vMinCode').value = p.minimum_supported_version_code;
+    document.getElementById('vUrl').value = p.download_url;
+    document.getElementById('vMsg').value = p.update_message;
+    document.getElementById('vNotes').value = p.release_notes;
+    document.getElementById('vForce').checked = !!p.force_update;
+    document.getElementById('vEnabled').checked = !!p.release_enabled;
+    document.getElementById('vDevices').textContent = st.devices;
+    document.getElementById('vActive').textContent = st.active_devices;
+    document.getElementById('vOutdated').textContent = st.outdated_devices;
+    document.getElementById('vAdoption').textContent = st.adoption_percent + '%';
+    document.getElementById('vFlagged').textContent = st.flagged_devices;
+    document.getElementById('verNote').textContent = 'Last change ' +
+      new Date((p.updated || 0) * 1000).toLocaleString() + ' by ' + (p.updated_by || 'system');
+    versionLoaded = true;
+    loadVersionAudit();
+  } catch (e) {
+    document.getElementById('verNote').textContent = 'Could not reach the version policy endpoint.';
+  }
+}
+async function loadVersionAudit() {
+  try {
+    const r = await fetch('/api/admin/security-log?limit=30', {credentials:'same-origin'});
+    const d = await r.json();
+    const rows = (d.entries || []).map(e => {
+      let detail = e.detail || '';
+      try { const j = JSON.parse(detail); detail = j.after ? ('→ ' + j.after.latest_version + ' (build ' + j.after.latest_version_code + ')') : detail; } catch (_) {}
+      return '<tr><td>' + new Date(e.t * 1000).toLocaleString() + '</td><td>' +
+        escapeHtml(e.email) + '</td><td>' + escapeHtml(e.action) + '</td><td>' +
+        escapeHtml(String(detail).slice(0, 120)) + '</td></tr>';
+    });
+    document.getElementById('vAuditRows').innerHTML = rows.length ? rows.join('')
+      : '<tr><td colspan="4" class="muted">No administrative actions recorded yet.</td></tr>';
+  } catch (e) {}
+}
+document.getElementById('verForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const force = document.getElementById('vForce').checked;
+  if (force && !confirm('Force update? Every build below the minimum will be rejected until it updates.')) return;
+  const body = {
+    latest_version: document.getElementById('vLatest').value.trim(),
+    latest_version_code: document.getElementById('vLatestCode').value,
+    minimum_supported_version: document.getElementById('vMin').value.trim(),
+    minimum_supported_version_code: document.getElementById('vMinCode').value,
+    download_url: document.getElementById('vUrl').value.trim(),
+    update_message: document.getElementById('vMsg').value,
+    release_notes: document.getElementById('vNotes').value,
+    force_update: force,
+    release_enabled: document.getElementById('vEnabled').checked,
+    confirm_force_update: force,
+  };
+  const d = await postAdmin('/api/admin/version-policy', body);
+  alert(d.status === 'success'
+    ? ('Policy saved: latest ' + d.policy.latest_version + ' (build ' + d.policy.latest_version_code + ')')
+    : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') loadVersionPolicy();
+};
+document.getElementById('vNotify').onclick = async () => {
+  if (!confirm('Flag every outdated device for an update notice?')) return;
+  const d = await postAdmin('/api/admin/version-policy/notify', {});
+  alert(d.status === 'success'
+    ? ('Flagged ' + d.newly_flagged + ' new of ' + d.targets + ' outdated devices. ' +
+       (d.push_available ? ('Push delivered: ' + d.push_delivered) : 'No push transport configured; devices see the update screen on next launch.'))
+    : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') loadVersionPolicy();
+};
+document.getElementById('vRollback').onclick = async () => {
+  if (!confirm('Roll back to the previous version policy?')) return;
+  const d = await postAdmin('/api/admin/version-policy/rollback', {});
+  alert(d.status === 'success'
+    ? ('Rolled back to ' + d.policy.latest_version + ' (build ' + d.policy.latest_version_code + ')')
+    : ('Failed: ' + (d.error || 'unknown')));
+  if (d.status === 'success') loadVersionPolicy();
+};
+
 document.getElementById('adminForm').onsubmit = async (e) => {
   e.preventDefault();
   const d = await postAdmin('/api/admin/create-admin', {email: document.getElementById('newAdminEmail').value, name: document.getElementById('newAdminName').value, password: document.getElementById('newAdminPw').value});
   alert(d.status === 'success' ? ('Admin created: ' + d.admin.email) : ('Failed: ' + (d.error || 'unknown')));
 };
-fetch('/api/admin/sync').then(r=>r.json()).then(d=>{
-  document.getElementById('syncStatus').textContent = d.status === 'success'
-    ? (d.admin_email + ' · secret ' + (d.secret_configured ? 'OK' : 'MISSING - set CAMANIME_SECRET') + ' · db ' + d.db_path)
-    : ('Failed: ' + (d.error || 'unknown'));
-}).catch(()=>{ document.getElementById('syncStatus').textContent = 'Could not reach sync endpoint.'; });
+loadVersionPolicy();
 </script>
 </body>
 </html>

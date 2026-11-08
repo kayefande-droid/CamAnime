@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/ad_notifications.dart';
 import 'core/app_updater.dart';
+import 'core/version_gate.dart';
 import 'core/app_notifications.dart';
 import 'core/cam_ui.dart';
 import 'core/downloads.dart';
@@ -25,7 +26,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.6.5';
+const String appVersion = '2.7.0';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 
@@ -123,6 +124,8 @@ Future<void> main() async {
   // Wake the API host early so the first catalogue request is not the one
   // paying for a cold start.
   unawaited(Api.warmup());
+  // Ask the server whether this build may still use protected services.
+  unawaited(VersionGate.check());
 }
 
 class CamAnimeApp extends StatefulWidget {
@@ -166,6 +169,7 @@ class _CamAnimeAppState extends State<CamAnimeApp>
     // API host can be retried, on WiFi or mobile data alike.
     unawaited(DownloadManager.instance.kick());
     unawaited(Api.warmup());
+    unawaited(VersionGate.check());
   }
 
   @override
@@ -349,7 +353,17 @@ class _CamAnimeAppState extends State<CamAnimeApp>
       debugShowCheckedModeBanner: false,
       navigatorKey: appNavigatorKey,
       theme: camTheme(seed: seed, background: scaffold),
-      home: Stack(
+      home: ValueListenableBuilder<VersionPolicy?>(
+        valueListenable: VersionGate.required,
+        builder: (_, requiredPolicy, __) {
+          // A server-flagged build gets no tabs, no routes and no dismiss: the
+          // backend refuses protected calls anyway, and a half-working app
+          // would only look broken.
+          if (requiredPolicy != null) {
+            return UpdateRequiredScreen(
+                policy: requiredPolicy, currentVersion: appVersion);
+          }
+          return Stack(
         children: [
           Scaffold(
             body: [
@@ -389,6 +403,8 @@ class _CamAnimeAppState extends State<CamAnimeApp>
               _checkUpdate();
             }),
         ],
+          );
+        },
       ),
     );
   }
@@ -659,7 +675,13 @@ class Api {
 
   static Future<Map<String, String>> headers() async {
     final t = await token();
-    return {if (t != null) 'Authorization': 'Bearer $t'};
+    return {
+      if (t != null) 'Authorization': 'Bearer $t',
+      // Version identity on every API call: the server enforces the minimum
+      // build itself, so hiding the update screen in a rebuilt app changes
+      // nothing about what the backend allows.
+      ...await VersionGate.headers(),
+    };
   }
 
   static Future<String> guestName() async {
@@ -898,34 +920,6 @@ class Api {
     final r = await _get(Uri.parse('${base()}/api/auth/me'),
         timeout: const Duration(seconds: 12));
     return json.decode(r.body) as Map<String, dynamic>;
-  }
-
-  /// Synced admin/secret status — admin only, same backend the website uses.
-  static Future<Map<String, dynamic>> adminSync() async {
-    final r = await http
-        .get(Uri.parse('${base()}/api/admin/sync'), headers: await headers())
-        .timeout(const Duration(seconds: 12));
-    final d = json.decode(r.body) as Map<String, dynamic>;
-    if (d['status'] != 'success') {
-      throw Exception(d['error'] ?? 'Admin sync failed');
-    }
-    return d;
-  }
-
-  /// Change own admin password (admin only). Clears server tokens on success.
-  static Future<void> changeAdminPassword(
-      String currentPassword, String newPassword) async {
-    final r = await http.post(Uri.parse('${base()}/api/admin/password'),
-        headers: {...await headers(), 'Content-Type': 'application/json'},
-        body: json.encode({
-          'current_password': currentPassword,
-          'new_password': newPassword,
-        }));
-    final d = json.decode(r.body) as Map<String, dynamic>;
-    if (d['status'] != 'success') {
-      throw Exception(d['error'] ?? 'Password change failed');
-    }
-    await signOut();
   }
 
   /// Direct MP4 download from the website's own download manager.
@@ -4331,7 +4325,6 @@ class _AuthCardState extends State<_AuthCard> {
   final password = TextEditingController();
   bool busy = false;
   String? who;
-  bool isAdmin = false;
 
   @override
   void initState() {
@@ -4339,26 +4332,12 @@ class _AuthCardState extends State<_AuthCard> {
     _who();
   }
 
-  // The website identifies the signed-in user via /api/auth/me + stored token.
-  // Offline, the last known role is reused so admin tools do not flash.
+  // The website identifies the signed-in user; the app only needs the email.
+  // Administrative roles are intentionally not read here: the APK has no admin
+  // surface, so it never needs to know or display one.
   Future<void> _who() async {
     final p = await SharedPreferences.getInstance();
-    var role = 'user';
-    if (p.getString('api_token') != null) {
-      try {
-        final me = await Api.me();
-        role = ((me['user'] as Map?)?['role'] ?? role).toString();
-      } catch (_) {
-        role = p.getString('user_role') ?? role;
-      }
-    }
-    await p.setString('user_role', role);
-    if (mounted) {
-      setState(() {
-        who = p.getString('user_email');
-        isAdmin = role == 'admin';
-      });
-    }
+    if (mounted) setState(() => who = p.getString('user_email'));
   }
 
   Future<void> _go(bool register) async {
@@ -4406,10 +4385,6 @@ class _AuthCardState extends State<_AuthCard> {
               },
               child: const Text('Sign out')),
         )),
-        if (isAdmin) ...[
-          const SizedBox(height: 10),
-          const AdminPanel(),
-        ],
       ]);
     }
     return Card(
@@ -4450,190 +4425,6 @@ class _AuthCardState extends State<_AuthCard> {
       ]),
     ));
   }
-}
-
-// ── Admin tools (in-app, only for signed-in admins) ─────
-class AdminPanel extends StatefulWidget {
-  const AdminPanel({super.key});
-  @override
-  State<AdminPanel> createState() => _AdminPanelState();
-}
-
-class _AdminPanelState extends State<AdminPanel> {
-  final annTitle = TextEditingController();
-  final annBody = TextEditingController();
-  final curPw = TextEditingController();
-  final newPw = TextEditingController();
-  Map live = {};
-  bool busyAnn = false, busyPw = false, liveBusy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLive();
-  }
-
-  /// Same live feed the website admin page shows — read-only, token protected.
-  Future<void> _loadLive() async {
-    if (!mounted) return;
-    setState(() => liveBusy = true);
-    try {
-      final r = await http
-          .get(Uri.parse('${Api.base()}/api/admin/live-activity'),
-              headers: await Api.headers())
-          .timeout(const Duration(seconds: 12));
-      final d = json.decode(r.body) as Map<String, dynamic>;
-      if (mounted) {
-        setState(() {
-          live = d;
-          liveBusy = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => liveBusy = false);
-    }
-  }
-
-  /// Pushes through the exact same endpoint as the website admin, so the
-  /// message lands on the site banner and the app home feed at once.
-  Future<void> _publish() async {
-    if (annTitle.text.trim().isEmpty || annBody.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Title and message are both required.')));
-      return;
-    }
-    setState(() => busyAnn = true);
-    try {
-      final r = await http
-          .post(Uri.parse('${Api.base()}/api/admin/announce'),
-              headers: {
-                ...await Api.headers(),
-                'Content-Type': 'application/json'
-              },
-              body: json.encode({
-                'title': annTitle.text.trim(),
-                'body': annBody.text.trim(),
-              }))
-          .timeout(const Duration(seconds: 15));
-      final d = json.decode(r.body) as Map<String, dynamic>;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(d['status'] == 'success'
-                ? 'Pushed to the website banner and app home feed.'
-                : (d['error'] ?? 'Publish failed'))));
-        if (d['status'] == 'success') {
-          annTitle.clear();
-          annBody.clear();
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not reach the website.')));
-      }
-    }
-    if (mounted) setState(() => busyAnn = false);
-  }
-
-  Future<void> _changePw() async {
-    if (newPw.text.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('New password must be at least 8 characters.')));
-      return;
-    }
-    setState(() => busyPw = true);
-    try {
-      await Api.changeAdminPassword(curPw.text, newPw.text);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text(
-                'Password changed — you are signed out everywhere. Sign in again with the new password.')));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
-    if (mounted) setState(() => busyPw = false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: purple.withValues(alpha: 0.10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.shield, color: mint),
-            const SizedBox(width: 8),
-            const Text('Admin tools',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            const Spacer(),
-            TextButton(onPressed: _loadLive, child: const Text('Refresh')),
-          ]),
-          if (liveBusy)
-            const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: LinearProgressIndicator(color: mint)),
-          Wrap(spacing: 10, runSpacing: 6, children: [
-            _pill('Online: ${live['online_now'] ?? '—'}'),
-            _pill('Live streams: ${live['active_streams_60s'] ?? '—'}'),
-            _pill(
-                'Downloads: ${live['downloads_60s'] ?? '—'} (1h ${live['downloads_1h'] ?? '—'})'),
-          ]),
-          const SizedBox(height: 10),
-          TextField(
-              controller: annTitle,
-              decoration:
-                  const InputDecoration(hintText: 'Announcement title')),
-          const SizedBox(height: 8),
-          TextField(
-              controller: annBody,
-              maxLines: 3,
-              decoration:
-                  const InputDecoration(hintText: 'Message to all users…')),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-                style: FilledButton.styleFrom(
-                    backgroundColor: amber, foregroundColor: Colors.black),
-                onPressed: busyAnn ? null : _publish,
-                child: Text(
-                    busyAnn ? 'Publishing…' : 'Publish push notification')),
-          ),
-          const Divider(height: 26),
-          TextField(
-              controller: curPw,
-              obscureText: true,
-              decoration:
-                  const InputDecoration(hintText: 'Current admin password')),
-          const SizedBox(height: 8),
-          TextField(
-              controller: newPw,
-              obscureText: true,
-              decoration: const InputDecoration(
-                  hintText: 'New password (min 8 chars)')),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-                onPressed: busyPw ? null : _changePw,
-                child: Text(busyPw ? 'Changing…' : 'Change admin password')),
-          ),
-        ]),
-      ),
-    );
-  }
-
-  Widget _pill(String label) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-            color: card2, borderRadius: BorderRadius.circular(999)),
-        child: Text(label, style: const TextStyle(fontSize: 12)),
-      );
 }
 
 /// Pill under the action buttons showing the download quality in force.

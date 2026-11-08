@@ -26,6 +26,7 @@ from flask import (
 from streaming_providers import DEFAULT_UA, streaming_manager
 
 import hashlib
+import json
 import os
 
 from flask import session
@@ -3098,7 +3099,9 @@ def download_page():
 
 RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.2.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
-APP_VERSION = "2.6.5"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.7.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 17
+import app_version  # noqa: E402 — version policy store, declared after routes
 
 
 def _serve_app_file(local_names, release_name, download_name):
@@ -3665,13 +3668,18 @@ def api_public_stream_or_download():
 
 @app.route("/api/version")
 def api_version():
-    """Update-check endpoint for native apps: current release + direct links."""
-    return jsonify({"status": "success", "app_version": APP_VERSION,
-                    "version_code": 14,
+    """Release metadata for native apps, read from the server-side policy."""
+    policy = app_version.get_policy()
+    return jsonify({"status": "success",
+                    "app_version": policy["latest_version"],
+                    "version_code": policy["latest_version_code"],
+                    "minimum_supported_version": policy["minimum_supported_version"],
+                    "minimum_supported_version_code": policy["minimum_supported_version_code"],
+                    "force_update": policy["force_update"],
                     "apk": "CamAnime.apk", "windows": "CamAnime-Windows.zip",
                     "apk_url": "/get/android", "windows_url": "/get/windows",
-                    "notes": "Self-updating app, continue watching, miniplayer, "
-                             "search filters, offline auto-next."})
+                    "download_url": policy["download_url"],
+                    "notes": policy["release_notes"]})
 
 
 @app.route("/api/announcements")
@@ -3717,28 +3725,6 @@ def _require_admin():
     if not u or u.get("role") != "admin":
         return None
     return u
-
-
-@app.route("/api/admin/sync")
-def api_admin_sync():
-    """Synced admin/secret status for apps + tools. Admin only."""
-    u = _require_admin()
-    if not u:
-        return jsonify({"status": "error", "error": "Admin only. Sign in as admin."}), 403
-    import os as _os
-    secret_set = bool(_os.environ.get("CAMANIME_SECRET"))
-    return jsonify({
-        "status": "success",
-        "admin_email": u["email"],
-        "default_admin_email": platform.DEFAULT_ADMIN_EMAIL,
-        "env_admin_email": _os.environ.get("CAMANIME_ADMIN_EMAIL") or "",
-        "secret_configured": secret_set,
-        "db_path": platform.DB_PATH,
-        "app_version": APP_VERSION,
-        "apk_url": "/get/android",
-        "windows_url": "/get/windows",
-        "message": "OK - app and website share this admin + secret." if secret_set else "CAMANIME_SECRET is not set; sessions reset on restart.",
-    })
 
 
 @app.route("/api/admin/password", methods=["POST"])
@@ -3791,6 +3777,250 @@ def api_admin_create():
         return jsonify({"status": "success", "admin": platform.public_user(created)})
     except Exception as e:
         return jsonify({"status": "error", "error": str(e)}), 400
+
+
+# ── Application version policy: one server-side authority ───────────────────
+# The app reports its build in request headers. It is never trusted beyond that
+# number: every decision below compares it against the SQLite policy row, so a
+# patched or rebuilt client cannot talk its way past the gate.
+
+_APP_HEADER_VERSION = "X-CamAnime-Version"
+_APP_HEADER_BUILD = "X-CamAnime-Build"
+_APP_HEADER_PLATFORM = "X-CamAnime-Platform"
+_APP_HEADER_INSTALL = "X-CamAnime-Install"
+
+_VERSION_EXEMPT_PREFIXES = (
+    "/api/version", "/api/app/version", "/api/app/ping",
+    "/api/announcements", "/api/public/counters", "/healthz",
+    "/static/", "/get/", "/admin", "/login", "/logout", "/settings",
+    "/api/admin/", "/api/auth/", "/api/public/anime", "/api/v1/health",
+)
+
+_VERSION_PROTECTED_PREFIXES = (
+    "/api/proxy/", "/api/download/", "/api/heaven/", "/api/episode-sources",
+    "/api/community/", "/api/history", "/api/public/stream/download",
+    "/api/v1/", "/api/app/",
+)
+
+
+def _app_client_meta():
+    """Version identity reported by the app. Website requests carry none."""
+    version_name = (request.headers.get(_APP_HEADER_VERSION)
+                    or request.args.get("app_version") or "").strip()
+    raw_build = (request.headers.get(_APP_HEADER_BUILD)
+                 or request.args.get("app_build") or "").strip()
+    platform_name = (request.headers.get(_APP_HEADER_PLATFORM)
+                     or request.args.get("platform") or "android").strip().lower()
+    install_id = (request.headers.get(_APP_HEADER_INSTALL)
+                  or request.args.get("install_id") or "").strip()
+    try:
+        build_code = int(raw_build)
+    except (TypeError, ValueError):
+        build_code = None
+    return {
+        "version": version_name[:24],
+        "build": build_code,
+        "platform": platform_name[:16] or "android",
+        "install_id": install_id[:64],
+        "identified": bool(version_name or raw_build),
+    }
+
+
+def _update_required(policy, build_code):
+    return app_version.update_required(policy, build_code)
+
+
+def _update_payload(policy):
+    """The structured 426 body shared by the gate and the status endpoints."""
+    return {
+        "code": "APP_UPDATE_REQUIRED",
+        "force_update": bool(policy["force_update"]),
+        "latest_version": policy["latest_version"],
+        "latest_version_code": policy["latest_version_code"],
+        "minimum_supported_version": policy["minimum_supported_version"],
+        "minimum_supported_version_code": policy["minimum_supported_version_code"],
+        "download_url": policy["download_url"],
+        "message": policy["update_message"],
+        "release_notes": policy["release_notes"],
+    }
+
+
+@app.before_request
+def _enforce_app_version():
+    """Reject protected calls from builds below the minimum, with HTTP 426.
+
+    Only requests that identify themselves as the app are gated. A browser has
+    no build number and keeps working against the website; an app always sends
+    one. Enforcement lives here so hiding the update screen in the client gains
+    nothing.
+    """
+    path = request.path or ""
+    if not path.startswith(_VERSION_PROTECTED_PREFIXES):
+        return None
+    if path.startswith(_VERSION_EXEMPT_PREFIXES):
+        return None
+    client = _app_client_meta()
+    if not client["identified"]:
+        return None
+    try:
+        policy = app_version.get_policy()
+    except Exception:
+        # A policy read failure must not take streaming down; the client still
+        # checks /api/app/version and the dashboard still shows the outage.
+        logger.warning("version policy read failed", exc_info=True)
+        return None
+    if not _update_required(policy, client["build"]):
+        return None
+    body = _update_payload(policy)
+    resp = jsonify(body)
+    resp.status_code = 426
+    resp.headers["X-CamAnime-Min-Build"] = str(policy["minimum_supported_version_code"])
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+def _client_email_for_install():
+    try:
+        u = _current_user()
+        return (u or {}).get("email", "") or ""
+    except Exception:
+        return ""
+
+
+@app.route("/api/app/version")
+def api_app_version():
+    """Public release policy. Must stay reachable by an outdated build."""
+    policy = app_version.get_policy()
+    client = _app_client_meta()
+    return jsonify({
+        "status": "success",
+        "app_version": policy["latest_version"],
+        "version_code": policy["latest_version_code"],
+        "required": _update_required(policy, client["build"]),
+        "policy": _update_payload(policy),
+        "server_time": int(time.time()),
+    })
+
+
+@app.route("/api/app/ping", methods=["GET", "POST"])
+def api_app_ping():
+    """Records the reported build for this install and returns the policy.
+
+    This is how the dashboard knows how many devices are out of date. It never
+    grants access: the 426 gate above already ran for protected paths.
+    """
+    client = _app_client_meta()
+    policy = app_version.get_policy()
+    if client["install_id"] and client["build"] is not None:
+        try:
+            app_version.record_install(
+                client["install_id"], client["platform"], client["version"],
+                client["build"], _client_email_for_install())
+        except Exception:
+            logger.debug("install record failed", exc_info=True)
+    required = _update_required(policy, client["build"])
+    return jsonify({
+        "status": "success",
+        "required": required,
+        "app_version": policy["latest_version"],
+        "version_code": policy["latest_version_code"],
+        "policy": _update_payload(policy),
+        "server_time": int(time.time()),
+    })
+
+
+def _admin_denied():
+    return jsonify({"status": "error", "error": "Admin only. Sign in as admin."}), 403
+
+
+@app.route("/api/admin/version-policy", methods=["GET", "POST"])
+def api_admin_version_policy():
+    """Version policy + adoption stats. GET reads, POST publishes a change."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    if request.method == "GET":
+        return jsonify({"status": "success",
+                        "policy": app_version.get_policy(),
+                        "stats": app_version.stats()})
+    d = _post_data()
+    if str(d.get("force_update", "")).strip().lower() in ("1", "true", "yes", "on"):
+        # Activating a forced update locks every older build out, so it needs an
+        # explicit second signal from the dashboard rather than a stray click.
+        if not _is_truthy(d.pop("confirm_force_update", False)):
+            return jsonify({"status": "error",
+                            "error": "Forced updates need confirm_force_update=true."}), 400
+    try:
+        policy = app_version.set_policy(d, u["email"])
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    return jsonify({"status": "success", "policy": policy,
+                    "stats": app_version.stats()})
+
+
+@app.route("/api/admin/version-policy/notify", methods=["POST"])
+def api_admin_version_notify():
+    """Flag outdated installs for an update notice.
+
+    No push transport is configured for this project (there is no Firebase
+    project or device token store), so this records the target set and reports
+    delivery honestly as zero. Outdated devices still get the blocking update
+    screen on their next request, enforced by the server.
+    """
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    policy = app_version.get_policy()
+    rows = app_version.outdated_installs(policy["minimum_supported_version_code"])
+    fresh = [r for r in rows if r.get("update_notified_for") != policy["latest_version"]]
+    for row in fresh:
+        app_version.mark_notified(row["install_id"], policy["latest_version"])
+    payload = {
+        "latest_version": policy["latest_version"],
+        "targets": len(rows),
+        "newly_flagged": len(fresh),
+        "push_available": False,
+        "push_delivered": 0,
+    }
+    app_version.audit(u["email"], "version_policy.notify",
+                      json.dumps(payload, sort_keys=True))
+    return jsonify({
+        "status": "success",
+        **payload,
+        "note": ("Outdated devices are flagged and will see the update screen on "
+                 "their next request. No push transport is configured, so no "
+                 "notification was delivered."),
+    })
+
+
+@app.route("/api/admin/version-policy/rollback", methods=["POST"])
+def api_admin_version_rollback():
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    try:
+        policy = app_version.rollback(u["email"])
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 400
+    return jsonify({"status": "success", "policy": policy,
+                    "stats": app_version.stats()})
+
+
+@app.route("/api/admin/security-log")
+def api_admin_security_log():
+    """Recent administrative actions (policy changes, notifications, rollbacks)."""
+    u = _require_admin()
+    if not u:
+        return _admin_denied()
+    return jsonify({"status": "success",
+                    "entries": app_version.list_audit(
+                        request.args.get("limit", 50))})
+
+
+def _is_truthy(value):
+    if isinstance(value, str):
+        return value.strip().lower() not in ("", "0", "false", "no", "off")
+    return bool(value)
 
 
 @app.route("/sitemap.xml")

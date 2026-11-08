@@ -27,7 +27,10 @@ if os.environ.get("CAMANIME_ADMIN_EMAIL") and not ADMIN_PASSWORD:
 # Env always wins when set; otherwise the first boot with an empty user table
 # creates this account so the owner is never locked out. Change it immediately.
 DEFAULT_ADMIN_EMAIL = "admin@camanime.local"
-DEFAULT_ADMIN_PASSWORD = os.environ.get("CAMANIME_DEFAULT_ADMIN_PASSWORD", "CamAnime123!")
+# No shipped default: a known password in source is a public credential.
+# When the owner has not supplied one, first-run bootstrap generates a
+# random password and writes it to admin_bootstrap.txt next to the DB.
+DEFAULT_ADMIN_PASSWORD = os.environ.get("CAMANIME_DEFAULT_ADMIN_PASSWORD")
 TOKEN_TTL = 60 * 60 * 24 * 90  # 90 days
 
 SEO_KEYWORDS = (
@@ -380,13 +383,36 @@ def ensure_default_admin() -> Optional[Dict]:
         if has_admin:
             row = conn.execute("SELECT * FROM users WHERE email=?", (DEFAULT_ADMIN_EMAIL.lower(),)).fetchone()
             return _row_user(row) if row else None
+        password = DEFAULT_ADMIN_PASSWORD
+        generated = None
+        if not password:
+            generated = secrets.token_urlsafe(12)
+            password = generated
         conn.execute(
             "INSERT OR IGNORE INTO users(email,name,pw,role,avatar,created) VALUES (?,?,?,?,?,?)",
             (DEFAULT_ADMIN_EMAIL.lower(), "CamAnime Admin",
-             generate_password_hash(DEFAULT_ADMIN_PASSWORD), "admin", "", int(time.time())),
+             generate_password_hash(password), "admin", "", int(time.time())),
         )
         row = conn.execute("SELECT * FROM users WHERE email=?", (DEFAULT_ADMIN_EMAIL.lower(),)).fetchone()
+        if generated:
+            _write_bootstrap_credentials(generated)
         return _row_user(row) if row else None
+
+
+def _write_bootstrap_credentials(password: str) -> None:
+    """Write the generated first-run password to a private file, not the logs."""
+    folder = os.path.dirname(os.path.abspath(DB_PATH)) or "."
+    path = os.path.join(folder, "admin_bootstrap.txt")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(f"CamAnime first-run admin\nemail: {DEFAULT_ADMIN_EMAIL}\n"
+                     f"password: {password}\n"
+                     "Change this after signing in, then delete this file.\n")
+        print(f"[camanime] First-run admin credentials written to {path}", flush=True)
+    except Exception:
+        print("[camanime] Could not write admin bootstrap file; set "
+              "CAMANIME_DEFAULT_ADMIN_PASSWORD instead.", flush=True)
 
 
 def create_admin_user(email: str, name: str, password: str) -> Dict:
