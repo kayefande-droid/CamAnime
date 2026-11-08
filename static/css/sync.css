@@ -268,6 +268,9 @@ body .sg-item:hover { background: rgba(var(--accent-rgb,255,179,71),.1); }
 body .sg-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body .sg-title mark { background: transparent; color: var(--accent, #FFB347); font-weight: 800; }
 body .sg-sub { font-size: .7rem; color: var(--text-muted, #64708a); flex-shrink: 0; }
+body .sg-brand { padding: .7rem .9rem; border-bottom: 1px solid rgba(var(--accent-rgb,255,179,71),.25); }
+body .sg-brand .sg-title { font-weight: 700; color: var(--accent, #FFB347); }
+body .sg-brand .sg-sub a { color: var(--accent, #FFB347); text-decoration: underline; }
 
 /* ── CEO announcement banner ── */
 body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; background: linear-gradient(135deg, rgba(var(--accent-rgb,255,179,71),.12), rgba(var(--accent-crimson-rgb,255,94,98),.08)); border: 1px solid rgba(var(--accent-rgb,255,179,71),.35); border-radius: 14px; padding: .9rem 1.1rem; margin-bottom: 1.4rem; font-size: .9rem; }

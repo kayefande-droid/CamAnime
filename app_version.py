@@ -23,8 +23,8 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.9.0",
-    "latest_version_code": 19,
+    "latest_version": "2.9.1",
+    "latest_version_code": 20,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
@@ -43,9 +43,9 @@ DEFAULT_POLICY = {
 
 # Releases at or below this build are discontinued outright: they lose stream
 # and download access for good, even if an operator later lowers the general
-# minimum. 2.6.5 was versionCode 16, so 16 and anything below it is refused.
-DISCONTINUED_AT_OR_BELOW_VERSION = "2.6.5"
-DISCONTINUED_AT_OR_BELOW_VERSION_CODE = 16
+# minimum. 2.7.0 was versionCode 17, so 17 and anything below it is refused.
+DISCONTINUED_AT_OR_BELOW_VERSION = "2.7.0"
+DISCONTINUED_AT_OR_BELOW_VERSION_CODE = 17
 
 # 2.9.0 is the mandatory release for the genuine-provider-quality update. This
 # floor upgrades policy rows created by older deployments (which still said
@@ -55,7 +55,7 @@ MANDATORY_MINIMUM_VERSION = "2.9.0"
 MANDATORY_MINIMUM_VERSION_CODE = 19
 
 DISCONTINUED_MESSAGE = (
-    "CamAnime 2.6.5 and older are discontinued and can no longer stream or "
+    "CamAnime 2.7.0 and older are discontinued and can no longer stream or "
     "download anime. Install the current CamAnime from the official website to "
     "continue."
 )

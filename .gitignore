@@ -36,3 +36,4 @@ cloudflare/.dev.vars
 **/service-account*.json
 /downloads/
 ffmpeg-bin
+render_env.json

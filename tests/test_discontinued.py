@@ -38,10 +38,10 @@ def headers(build, version):
     }
 
 
-def test_2_6_5_is_discontinued(api):
+def test_2_7_0_is_discontinued(api):
+    assert api.app_version.discontinued(17) is True
     assert api.app_version.discontinued(16) is True
-    assert api.app_version.discontinued(15) is True
-    assert api.app_version.discontinued(17) is False
+    assert api.app_version.discontinued(18) is False
     assert api.app_version.discontinued(None) is False
 
 
@@ -50,18 +50,18 @@ def test_2_6_5_is_discontinued(api):
     "/api/download/video?url=https%3A%2F%2Fcdn.example%2Fv.mp4",
     "/api/episode-sources/16498/1",
 ])
-def test_streams_and_downloads_are_blocked_for_2_6_5(api, path):
-    res = api.app.test_client().get(path, headers=headers(16, "2.6.5"))
+def test_streams_and_downloads_are_blocked_for_2_7_0(api, path):
+    res = api.app.test_client().get(path, headers=headers(17, "2.7.0"))
     assert res.status_code == 426
     body = res.get_json()
     assert body["discontinued"] is True
-    assert body["discontinued_at_or_below_version"] == "2.6.5"
-    assert body["discontinued_at_or_below_version_code"] == 16
-    assert body["message"].startswith("CamAnime 2.6.5 and older are discontinued")
+    assert body["discontinued_at_or_below_version"] == "2.7.0"
+    assert body["discontinued_at_or_below_version_code"] == 17
+    assert body["message"].startswith("CamAnime 2.7.0 and older are discontinued")
 
 
 def test_version_endpoint_flags_old_builds_without_blocking_the_check(api):
-    res = api.app.test_client().get("/api/app/version", headers=headers(15, "2.6.4"))
+    res = api.app.test_client().get("/api/app/version", headers=headers(16, "2.6.5"))
     assert res.status_code == 200
     body = res.get_json()
     assert body["required"] is True

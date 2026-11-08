@@ -24,7 +24,7 @@ def api(tmp_path, monkeypatch):
         sys.path.remove(str(ROOT))
 
 
-def app_headers(build, version="2.9.0", install="install-test-0001"):
+def app_headers(build, version="2.9.1", install="install-test-0001"):
     return {
         "X-CamAnime-Version": version,
         "X-CamAnime-Build": str(build),
@@ -44,7 +44,7 @@ def test_version_endpoint_is_reachable_from_an_outdated_build(api):
     res = client.get("/api/app/version", headers=app_headers(16, "2.6.5"))
     assert res.status_code == 200
     body = res.get_json()
-    assert body["policy"]["latest_version"] == "2.9.0"
+    assert body["policy"]["latest_version"] == "2.9.1"
     assert body["policy"]["minimum_supported_version_code"] == 19
     assert body["required"] is True
 
@@ -57,7 +57,7 @@ def test_outdated_build_gets_structured_426_on_protected_api(api):
     body = res.get_json()
     assert body["code"] == "APP_UPDATE_REQUIRED"
     assert body["force_update"] is True
-    assert body["latest_version"] == "2.9.0"
+    assert body["latest_version"] == "2.9.1"
     assert body["download_url"].startswith("https://camanime.onrender.com")
     # Build 16 is 2.6.5, which is discontinued: the message says that instead
     # of the generic "outdated" wording.

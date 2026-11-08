@@ -73,7 +73,7 @@ export default {
 };
 
 const MIN_SUPPORTED_BUILD = 19; // 2.9.0 — mandatory genuine-quality release
-const DISCONTINUED_BUILD = 16; // 2.6.5
+const DISCONTINUED_BUILD = 17; // 2.7.0
 const PROTECTED_PREFIXES = [
   "/api/proxy/",
   "/api/download/",
@@ -91,7 +91,7 @@ function clientBuild(request) {
   return Number.isFinite(value) ? value : null;
 }
 
-const APK_SHA256 = "2FE16785184AE1C7B6BA0060E60A60A268F5E8D43F7A32C09CC5BB54E2B8B9D3";
+const APK_SHA256 = "09D22D735FB278C77424509055DAB9293599834B4F08E81B44D57725C064FE6D";
 
 function updateRequiredResponse(build) {
   const retired = build <= DISCONTINUED_BUILD;
@@ -100,11 +100,11 @@ function updateRequiredResponse(build) {
     code: "APP_UPDATE_REQUIRED",
     reason: retired ? "discontinued" : "unsupported",
     force_update: true,
-    latest_version: "2.9.0",
-    latest_version_code: 19,
+    latest_version: "2.9.1",
+    latest_version_code: 20,
     minimum_supported_version: "2.9.0",
     minimum_supported_version_code: MIN_SUPPORTED_BUILD,
-    discontinued_at_or_below_version: "2.6.5",
+    discontinued_at_or_below_version: "2.7.0",
     discontinued_at_or_below_version_code: DISCONTINUED_BUILD,
     download_url: "https://camanime.onrender.com/get/android",
     download_urls: {
@@ -113,7 +113,7 @@ function updateRequiredResponse(build) {
     },
     sha256: APK_SHA256,
     message: retired
-      ? "CamAnime 2.6.5 and older are discontinued and can no longer stream "
+      ? "CamAnime 2.7.0 and older are discontinued and can no longer stream "
         + "or download anime. Install the current CamAnime from the official "
         + "website to continue."
       : "Your CamAnime version is no longer supported. Please update from the "

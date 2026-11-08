@@ -26,7 +26,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.9.0';
+const String appVersion = '2.9.1';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 // ── Website-mirrored palette ───────────────────────────
@@ -2772,7 +2772,10 @@ class _DetailScreenState extends State<DetailScreen> {
                 url: sources.first.url,
                 label: sources.first.label,
                 playlist: sources,
-                onOpenAnime: _openAnime)));
+                onOpenAnime: _openAnime,
+                animeId: widget.animeId,
+                audio: audio,
+                onAudioSwitch: _audioSwitchInPlayer)));
     _loadViewingState();
   }
 
@@ -3240,6 +3243,9 @@ class _DetailScreenState extends State<DetailScreen> {
                     startIndex: start,
                     fetchEpisode: _sourceForEpisode,
                     onOpenAnime: _openAnime,
+                    animeId: widget.animeId,
+                    audio: audio,
+                    onAudioSwitch: _audioSwitchInPlayer,
                   )));
       return;
     }
@@ -3282,6 +3288,9 @@ class _DetailScreenState extends State<DetailScreen> {
                   label:
                       '$title — Ep $ep (${_sourceAudio(bundle).toUpperCase()})',
                   onOpenAnime: _openAnime,
+                  animeId: widget.animeId,
+                  audio: audio,
+                  onAudioSwitch: _audioSwitchInPlayer,
                 )));
   }
 
@@ -3645,6 +3654,39 @@ class _DetailScreenState extends State<DetailScreen> {
     setState(() => audio = value);
     SharedPreferences.getInstance()
         .then((p) => p.setString('app_audio', value));
+  }
+
+  /// Re-fetches the current episode's sources with a new audio and returns the
+  /// best URL for the player. Used by the in-player audio switch.
+  Future<String?> _audioSwitchInPlayer(String newAudio) async {
+    if (widget.animeId.isEmpty) return null;
+    final ep = currentEpisode ?? 1;
+    try {
+      final bundle = await Api.episodeSources(widget.animeId, ep, newAudio);
+      _applyAudioAvailability(bundle);
+      final list = await _streamSourcesForBundle(bundle, ep);
+      if (list.isEmpty) return null;
+      return list.first.url;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<EpisodeSource>> _streamSourcesForBundle(
+      Map<String, dynamic> bundle, int ep) async {
+    final p = await SharedPreferences.getInstance();
+    final saved = p.getString('stream_quality') ?? 'auto';
+    final pref = (p.getBool('app_data_saver') ?? false) ? '480' : saved;
+    return episodeSourcesFromBundle(
+      bundle,
+      animeId: widget.animeId,
+      episode: ep,
+      animeTitle: (info['title'] ?? widget.title).toString(),
+      image: (info['image'] ?? '').toString(),
+      preferredAudio: audio,
+      absolute: Api.abs,
+      qualityPreference: pref,
+    );
   }
 
   void _openSeason(String id, String title) {

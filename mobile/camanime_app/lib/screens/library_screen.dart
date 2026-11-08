@@ -822,6 +822,9 @@ class _LibraryTabState extends State<LibraryTab> {
             MaterialPageRoute(
                 builder: (_) => _AnimeOpener(animeId: id, title: title)),
           ),
+          animeId: task.animeId.toString(),
+          audio: task.audio,
+          onAudioSwitch: null,
         ),
       ),
     );

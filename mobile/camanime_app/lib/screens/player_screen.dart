@@ -54,7 +54,14 @@ class PlayerScreen extends StatefulWidget {
     this.fetchEpisode,
     this.variants = const [],
     this.handoff,
+    this.animeId,
+    this.audio,
+    this.onAudioSwitch,
   });
+
+  final String? animeId;
+  final String? audio;
+  final Future<String?> Function(String newAudio)? onAudioSwitch;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -90,6 +97,60 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _autoSkipOutro = true;
   bool _introSkipped = false;
   bool _outroHandled = false;
+  String _currentAudio = 'sub';
+
+  void _switchAudio(String newAudio) async {
+    if (newAudio == _currentAudio || widget.onAudioSwitch == null) return;
+    setState(() {
+      _switching = true;
+      _currentAudio = newAudio;
+    });
+    try {
+      final newUrl = await widget.onAudioSwitch!(newAudio);
+      if (!mounted) return;
+      if (newUrl != null) {
+        await _disposePlayback();
+        final controller = widget.localFile
+            ? VideoPlayerController.file(File(newUrl))
+            : VideoPlayerController.networkUrl(Uri.parse(newUrl));
+        await controller.initialize().timeout(const Duration(seconds: 15));
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _video = controller;
+        _video!.addListener(_onTick);
+        if (widget.resume &&
+            _progressId.isNotEmpty &&
+            current.episode != null) {
+          final at =
+              await WatchProgress.position(_progressId, current.episode!);
+          if (at != null && at > 0) {
+            await _video!.seekTo(Duration(seconds: at));
+          }
+        }
+        await _video!.play();
+        setState(() {
+          _loading = false;
+          _error = null;
+          _switching = false;
+          _attempt = '';
+        });
+      } else if (mounted) {
+        setState(() {
+          _switching = false;
+          _error = 'Could not switch audio.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _switching = false;
+          _error = 'Could not switch audio.';
+        });
+      }
+    }
+  }
   static const MethodChannel _playerChannel = MethodChannel('camanime/player');
 
   int _posMs = 0;
@@ -162,6 +223,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _local = widget.localFile;
+    _currentAudio = widget.audio ?? 'sub';
     playlist = widget.playlist.isEmpty
         ? [
             EpisodeSource(
@@ -747,20 +809,22 @@ class _PlayerScreenState extends State<PlayerScreen>
       controller: video,
       title: src.animeTitle.isEmpty ? widget.label : src.animeTitle,
       subtitle: src.episode != null ? 'Episode ${src.episode}' : 'Playing',
-      image: src.image,
-      rebuild: (live) => PlayerScreen(
-        url: widget.url,
-        label: widget.label,
-        localFile: _local,
-        playlist: playlist,
-        startIndex: index,
-        mirrors: widget.mirrors,
-        episode: src.episode ?? widget.episode,
-        fetchEpisode: widget.fetchEpisode,
-        variants: _episodeVariants,
-        onOpenAnime: widget.onOpenAnime,
-        handoff: live,
-      ),
+      image: src.image,        rebuild: (live) => PlayerScreen(
+          url: widget.url,
+          label: widget.label,
+          localFile: _local,
+          playlist: playlist,
+          startIndex: index,
+          mirrors: widget.mirrors,
+          episode: src.episode ?? widget.episode,
+          fetchEpisode: widget.fetchEpisode,
+          variants: _episodeVariants,
+          onOpenAnime: widget.onOpenAnime,
+          handoff: live,
+          animeId: widget.animeId,
+          audio: widget.audio,
+          onAudioSwitch: widget.onAudioSwitch,
+        ),
     );
     if (!mounted) return;
     if (!adopted) {
@@ -1002,14 +1066,27 @@ class _PlayerScreenState extends State<PlayerScreen>
                       color: Colors.white, size: 19),
                 ),
                 Expanded(
-                  child: Text(
-                    current.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        current.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      if (widget.audio != null) ...[
+                        const SizedBox(width: 8),
+                        _AudioSwitchButton(
+                          currentAudio: _currentAudio,
+                          onSwitch: _switchAudio,
+                          enabled: !_switching,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 IconButton(
@@ -1576,12 +1653,94 @@ class _PlayerScreenState extends State<PlayerScreen>
             mirrors: urls.skip(1).toList(),
             label: '$title — Ep 1 (SUB)',
             onOpenAnime: widget.onOpenAnime,
+            animeId: widget.animeId,
+            audio: widget.audio,
+            onAudioSwitch: widget.onAudioSwitch,
           ),
         ),
       );
     } catch (_) {
       _snack('Could not reach the server for that anime.');
     }
+  }
+}
+
+class _AudioSwitchButton extends StatelessWidget {
+  final String currentAudio;
+  final void Function(String) onSwitch;
+  final bool enabled;
+  const _AudioSwitchButton({
+    required this.currentAudio,
+    required this.onSwitch,
+    required this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final other = currentAudio == 'sub' ? 'dub' : 'sub';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? () => onSwitch(other) : null,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: enabled
+                ? (currentAudio == 'dub'
+                    ? const Color(0xFFFF5E62)
+                    : const Color(0xFF34d399).withAlpha(170))
+                : const Color(0xFF444854),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: enabled
+                  ? (currentAudio == 'dub'
+                      ? const Color(0xFFFF5E62)
+                      : const Color(0xFF34d399))
+                  : const Color(0xFF3a3e47),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                currentAudio == 'sub'
+                    ? Icons.closed_caption_rounded
+                    : Icons.headphones_rounded,
+                size: 13,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                currentAudio.toUpperCase(),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800),
+              ),
+              if (enabled) ...
+                [
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.west_rounded,
+                    size: 12,
+                    color: Colors.white70,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    other.toUpperCase(),
+                    style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700),
+                  ),
+                ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

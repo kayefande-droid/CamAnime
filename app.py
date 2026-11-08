@@ -1677,6 +1677,26 @@ def home():
             pass
 
     hero_slides = [a for a in trending if a.get("banner")][:6] or trending[:5]
+
+    # Brand spotlight: the first hero slide on the homepage is always the CamAnime
+    # brand card so the official brand name, logo and tagline are what search engines
+    # and first-time visitors see. Real anime still rotate through the rest of the carousel.
+    if hero_slides:
+        hero_slides.insert(0, {
+            "id": 0,
+            "title": "Watch Anime Online Free on CamAnime",
+            "description": "Discover CamAnime, stream your favourite anime online, explore subbed and dubbed episodes, and enjoy your anime collection.",
+            "banner": None,
+            "image": "/static/brand/camanime-icon.svg",
+            "rating": "HD FREE",
+            "format": "STREAMING",
+            "episode": "SUB & DUB",
+            "genres": ["Action", "Anime"],
+            "status": "FREE",
+            "latest_ep": False,
+            "trailer_id": "",
+        })
+
     featured = hero_slides[0] if hero_slides else None
 
     # Anime Classics: real AniList cards (covers auto-refresh hourly via the
@@ -1767,6 +1787,13 @@ def home():
 def search():
     query = (request.args.get("q") or "").strip()
     if not query:
+        return redirect(url_for("home"))
+
+    # Brand search lands on the homepage, not an empty results page. This covers
+    # the official brand spelling and the common misspelling / search variation
+    # "camanjme" without creating a duplicate page for the typo.
+    brand_norm = re.sub(r"[^A-Za-z]", "", query or "").lower()
+    if brand_norm in ("camanime", "camanime", "cam-anime", "camanime"):
         return redirect(url_for("home"))
 
     filters = _web_catalog_filters(query)
@@ -3212,17 +3239,21 @@ def _app_file_info(filename: str):
     st = os.stat(path)
     size_mb = st.st_size / (1024 * 1024)
     size = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{st.st_size // 1024} KB"
+    updated = datetime.datetime.fromtimestamp(st.st_mtime)
     return {"url": f"/static/downloads/{filename}",
             "name": filename, "size": size,
-            "updated": datetime.datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d")}
+            "updated": updated.strftime("%Y-%m-%d %H:%M")}
 
 
 @app.route("/download")
 def download_page():
+    from app_version import get_policy
     apk = _app_file_info("CamAnime.apk")
     winapp = _app_file_info("CamAnime-Windows.zip") or _app_file_info("CamAnime.exe")
+    policy = get_policy()
     return render_template("download.html", user=_current_user(), apk=apk,
-                           winapp=winapp, app_version=APP_VERSION,
+                           winapp=winapp,
+                           app_version=policy["latest_version"],
                            cloudflare_url=CLOUDFLARE_SITE)
 
 
@@ -3231,8 +3262,8 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.9.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 18
+APP_VERSION = "2.9.1"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 20
 import app_version  # noqa: E402 — version policy store, declared after routes
 import releases  # noqa: E402 — verified release inventory + blocked telemetry
 
@@ -3805,7 +3836,14 @@ def api_public_stream_or_download():
 @app.route("/api/version")
 def api_version():
     """Release metadata for native apps, read from the server-side policy."""
+    import datetime as _dt
     policy = app_version.get_policy()
+    updated_at = ""
+    if policy.get("updated"):
+        try:
+            updated_at = _dt.datetime.fromtimestamp(int(policy["updated"])).strftime("%Y-%m-%d %H:%M")
+        except Exception:
+            updated_at = ""
     return jsonify({"status": "success",
                     "app_version": policy["latest_version"],
                     "version_code": policy["latest_version_code"],
@@ -3816,7 +3854,8 @@ def api_version():
                     "apk_url": "/get/android", "windows_url": "/get/windows",
                     "download_url": policy["download_url"],
                     "notes": policy["release_notes"],
-                    "sha256": _apk_sha256()})
+                    "sha256": _apk_sha256(),
+                    "updated_at": updated_at})
 
 
 @app.route("/api/announcements")
@@ -4297,9 +4336,9 @@ def api_admin_release_status():
         return jsonify({"status": "error", "error": "version_code is required."}), 400
     status = str(d.get("status", "")).upper().strip()
     newest_protected = app_version.DISCONTINUED_AT_OR_BELOW_VERSION_CODE
-    if status == "BLOCKED" and code > newest_protected and not _is_truthy(d.get("confirm_block")):
+    if status == "BLOCKED" and code >= newest_protected and not _is_truthy(d.get("confirm_block")):
         return jsonify({"status": "error",
-                        "error": "Blocking a release newer than "
+                        "error": "Blocking a release at or above "
                                  f"{app_version.DISCONTINUED_AT_OR_BELOW_VERSION} "
                                  "needs confirm_block=true."}), 400
     try:
