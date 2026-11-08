@@ -945,14 +945,14 @@ export async function episodeBundle({
             title: `${list[0] || "Anime"} - Ep ${episode}`,
             ref: referer,
           }),
-          quality: "1080p MP4",
+          quality: "Source MP4",
           subtitles: [],
           badge: "DIRECT MP4",
         });
         if (idx === 0) {
           downloads.push({
             label: `Episode ${episode} Direct MP4 (AnimeHeaven High-Speed)`,
-            quality: "1080p / 720p MP4",
+            quality: "Source MP4",
             audio: "SUB",
             url: proxy("/api/download/video", {
               url: src.url,
@@ -998,18 +998,17 @@ export async function episodeBundle({
               url: stream.m3u8,
               title: `${list[0] || "Anime"} - Ep ${episode} ${audio.toUpperCase()}`,
               ref: stream.referer,
-              height: 1080,
             }),
             embed_url: stream.embed_url,
-            quality: "1080p HLS",
+            quality: "HLS source",
             subtitles: subs,
             intro: stream.intro,
             outro: stream.outro,
-            badge: `1080p ${audio.toUpperCase()}`,
+            badge: `HLS ${audio.toUpperCase()}`,
           });
           downloads.push({
             label: `Episode ${episode} ${audio.toUpperCase()} (single file)`,
-            quality: "1080p TS",
+            quality: "HLS source (TS)",
             audio: audio.toUpperCase(),
             url: proxy("/api/download/hls", {
               url: stream.m3u8,
@@ -1069,7 +1068,7 @@ export async function episodeBundle({
       audio: "sub",
       playback_mode: "iframe",
       stream_url: `https://vidlink.pro/anime/${malEmbedId}/${episode}/sub`,
-      quality: "1080p Embed",
+      quality: "Provider embed",
       subtitles: [],
       badge: "BACKUP SUB",
       fallback: true,
@@ -1083,7 +1082,7 @@ export async function episodeBundle({
       audio: "sub",
       playback_mode: "iframe",
       stream_url: `https://vidsrc.cc/v2/embed/anime/ani${anilistId}/${episode}/sub`,
-      quality: "1080p Embed",
+      quality: "Provider embed",
       subtitles: [],
       badge: "MIRROR SUB",
       fallback: true,
@@ -1120,6 +1119,9 @@ export async function episodeBundle({
     audio_availability: audioAvailability,
     requested_audio: audioPref,
     audio_fallback: audioPref === "dub" && !audioAvailability.dub,
+    quality_note:
+      "Only qualities and audio tracks published by the source are listed. " +
+      "CamAnime does not re-encode video or invent dubs.",
     active_server:
       servers.find((s) => s.audio === audioPref) || servers[0] || null,
   };

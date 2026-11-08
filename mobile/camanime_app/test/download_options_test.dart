@@ -113,7 +113,7 @@ void main() {
     expect(pickDownloadOption(options, '1080')?.height, 1080);
     // Nothing at or below 360p exists, so the smallest real file is used.
     expect(pickDownloadOption(options, '360')?.height, 720);
-    expect(downloadQualityLabel('720'), '720p or lower');
+    expect(downloadQualityLabel('720'), 'Up to 720p (published files)');
   });
 
   test('downloadHeight reads provider labels', () {

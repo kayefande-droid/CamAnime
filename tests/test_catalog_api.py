@@ -73,7 +73,7 @@ def test_download_page_exposes_copyable_android_url_and_direct_download(api):
 
     version = client.get("/api/version")
     assert version.status_code == 200
-    assert version.json["app_version"] == "2.8.0"
+    assert version.json["app_version"] == "2.9.0"
     assert version.json["apk_url"] == "/get/android"
 
 
@@ -762,8 +762,12 @@ def test_player_start_total_persists_separately_from_live_activity(api, monkeypa
         def close(self):
             pass
 
+    class Session:
+        def get(self, *_args, **_kwargs):
+            return Upstream()
+
     monkeypatch.setattr(api, "_safe_upstream_url", lambda _url: "https://cdn.example/video.mp4")
-    monkeypatch.setattr(api.requests, "get", lambda *_args, **_kwargs: Upstream())
+    monkeypatch.setattr(api, "_shared_http_session", lambda: Session())
     for _ in range(3):
         response = client.get(
             "/api/proxy/video?url=https%3A%2F%2Fcdn.example%2Fvideo.mp4",

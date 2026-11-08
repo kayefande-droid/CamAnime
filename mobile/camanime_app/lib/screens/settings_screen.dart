@@ -71,9 +71,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? savedQuality
           : '720';
       final savedStream = p.getString('stream_quality') ?? 'auto';
-      streamQuality = kStreamQualities.contains(savedStream)
-          ? savedStream
-          : 'auto';
+      streamQuality =
+          kStreamQualities.contains(savedStream) ? savedStream : 'auto';
       saveToDevice = p.getBool('save_to_device') ?? true;
       adverts = p.getBool(AdNotifications.prefKey) ?? true;
       email = p.getString('user_email') ?? '';
@@ -109,8 +108,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _tile(
                 icon: Icons.tune_rounded,
                 title: 'Recommended at a glance',
-                subtitle: 'SUB audio \u00b7 480p downloads \u00b7 data-saver '
-                    'streaming \u00b7 save to device \u00b7 autoplay on',
+                subtitle: 'SUB audio \u00b7 smallest published download \u00b7 '
+                    'data-saver streaming \u00b7 save to device \u00b7 autoplay on',
               ),
             ]),
             _group('Appearance', [
@@ -136,7 +135,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _tile(
                 icon: Icons.translate_rounded,
                 title: 'Default audio',
-                subtitle: 'Used for streaming and new downloads',
+                subtitle: 'DUB plays only where the provider publishes it; '
+                    'otherwise SUB is used',
                 trailing: SegmentedButton<String>(
                   showSelectedIcon: false,
                   segments: const [
@@ -165,17 +165,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.high_quality_rounded,
                 title: 'Streaming quality',
                 subtitle: streamQuality == 'auto'
-                    ? 'Best server available · switches quality without restarting'
-                    : '${streamQualityLabel(streamQuality)} · saves data on mobile',
+                    ? 'Plays the source as published · HLS adapts within the '
+                        'provider\u2019s real renditions'
+                    : '${streamQualityLabel(streamQuality)} · never upscales',
                 trailing: DropdownButton<String>(
                   value: streamQuality,
                   underline: const SizedBox.shrink(),
                   items: const [
                     DropdownMenuItem(value: 'auto', child: Text('Auto')),
-                    DropdownMenuItem(value: '1080', child: Text('1080p')),
-                    DropdownMenuItem(value: '720', child: Text('720p')),
-                    DropdownMenuItem(value: '480', child: Text('480p')),
-                    DropdownMenuItem(value: '360', child: Text('360p')),
+                    DropdownMenuItem(
+                        value: '1080', child: Text('Prefer 1080p')),
+                    DropdownMenuItem(value: '720', child: Text('Prefer 720p')),
+                    DropdownMenuItem(value: '480', child: Text('Prefer 480p')),
+                    DropdownMenuItem(value: '360', child: Text('Prefer 360p')),
                   ],
                   onChanged: (value) async {
                     if (value == null) return;
@@ -246,16 +248,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? 'Smallest file offered — fastest and least storage'
                         : quality == 'best'
                             ? 'Highest resolution offered — largest files'
-                            : '${downloadQualityLabel(quality)} · never exceeds ${quality}p',
+                            : '${downloadQualityLabel(quality)} · only '
+                                'provider-published files',
                 trailing: DropdownButton<String>(
                   value: quality,
                   underline: const SizedBox.shrink(),
                   items: const [
-                    DropdownMenuItem(
-                        value: '1080', child: Text('1080p')),
-                    DropdownMenuItem(value: '720', child: Text('720p')),
-                    DropdownMenuItem(value: '480', child: Text('480p')),
-                    DropdownMenuItem(value: '360', child: Text('360p')),
+                    DropdownMenuItem(value: '1080', child: Text('Up to 1080p')),
+                    DropdownMenuItem(value: '720', child: Text('Up to 720p')),
+                    DropdownMenuItem(value: '480', child: Text('Up to 480p')),
+                    DropdownMenuItem(value: '360', child: Text('Up to 360p')),
                     DropdownMenuItem(
                         value: 'smallest', child: Text('Smallest')),
                     DropdownMenuItem(value: 'best', child: Text('Best')),
@@ -420,8 +422,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Mirror site · same catalogue and API',
                 trailing: const Icon(Icons.open_in_new_rounded,
                     color: CamColors.inkDim, size: 18),
-                onTap: () =>
-                    _openSite('https://camanjme.camanime.workers.dev'),
+                onTap: () => _openSite('https://camanjme.camanime.workers.dev'),
               ),
             ]),
             _group('About', [
@@ -481,7 +482,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case 'ask':
         return 'ask each time';
       default:
-        return '${value}p';
+        return 'Up to ${value}p';
     }
   }
 
@@ -559,9 +560,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 const Text(
-                    'Lower pixel heights make much smaller episode files; higher '
-                    'ones look sharper but cost more data. These picks apply to '
-                    'every new download and stream.',
+                    'These are caps, not promises: CamAnime uses the highest '
+                    'quality the source actually publishes at or below your '
+                    'pick. Nothing is re-encoded or relabelled, so a source '
+                    'that only offers 1080p downloads will keep 1080p instead '
+                    'of faking a smaller file.',
                     style: TextStyle(
                         color: CamColors.inkDim, fontSize: 11.5, height: 1.4)),
                 const SizedBox(height: 16),
@@ -589,13 +592,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   contentPadding: EdgeInsets.zero,
                   value: dataSaver,
                   title: const Text('Data saver for streaming',
-                      style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w700)),
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                   subtitle: const Text(
-                      'Caps playback at 480p on mobile data so episodes cost '
-                      'far less internet',
-                      style: TextStyle(
-                          color: CamColors.inkDim, fontSize: 11.5)),
+                      'Prefers the smallest published rendition on mobile data '
+                      'so episodes cost less internet',
+                      style:
+                          TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
                   onChanged: (v) async {
                     setState(() => dataSaver = v);
                     final p = await SharedPreferences.getInstance();
@@ -635,8 +638,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmed != true) return;
     await WatchProgress.clearAll();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Watch history cleared.')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Watch history cleared.')));
   }
 
   Future<void> _openSite(String url) async {
@@ -644,8 +647,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(url)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(url)));
     }
   }
 
@@ -659,7 +661,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Version ${widget.version.isEmpty ? '2.8.0' : widget.version}',
+              Text(
+                  'Version ${widget.version.isEmpty ? '2.9.0' : widget.version}',
                   style: const TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               const Text(
@@ -674,8 +677,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(fontSize: 11.5)),
               const SizedBox(height: 10),
               Text(widget.credit,
-                  style: const TextStyle(
-                      color: CamColors.inkDim, fontSize: 10.5)),
+                  style:
+                      const TextStyle(color: CamColors.inkDim, fontSize: 10.5)),
             ]),
         actions: [
           TextButton(

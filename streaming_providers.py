@@ -28,6 +28,8 @@ from urllib.parse import quote, unquote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
@@ -47,6 +49,31 @@ DEFAULT_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
+def _new_session() -> requests.Session:
+    """Pooled session that retries transient provider failures.
+
+    Providers rate-limit (429), briefly return 5xx, and occasionally drop a
+    keep-alive connection. Retrying those twice with backoff turns a hard
+    failure into a slow success; 4xx client errors are never retried and no
+    data is invented when every attempt fails.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=2,
+        connect=2,
+        read=2,
+        status=2,
+        backoff_factor=0.4,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(["GET", "HEAD"]),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=16, pool_maxsize=16)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 TYPE_INDICATOR_WORDS = {
     "ova", "ona", "special", "specials", "movie", "film",
     "recap", "picture", "pv", "season", "part", "cour", "saga",
@@ -55,6 +82,30 @@ TYPE_INDICATOR_WORDS = {
 
 def normalize_title(title: str) -> str:
     return re.sub(r"[^a-z0-9]", "", (title or "").lower())
+
+
+def hls_heights_from_text(text: str) -> List[int]:
+    """Real rendition heights declared by an HLS master playlist.
+
+    HLS is the one source that publishes its own quality ladder via
+    ``RESOLUTION=``. Reading it means the UI can list exactly those renditions
+    instead of guessing a pixel height from a provider's page.
+    """
+    heights = set()
+    for match in re.finditer(r"RESOLUTION=\d+x(\d+)", text or "", re.I):
+        try:
+            height = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        if 144 <= height <= 4320:
+            heights.add(height)
+    return sorted(heights, reverse=True)
+
+
+def media_height(label: str) -> int:
+    """Pixel height a provider explicitly put in a label such as '360p'."""
+    match = re.search(r"(\d{3,4})\s*p", label or "", re.I)
+    return int(match.group(1)) if match else 0
 
 
 def significant_words(s: str) -> List[str]:
@@ -199,7 +250,7 @@ class StreamingProvider:
             self._thread_local = local
         session = getattr(local, "session", None)
         if session is None:
-            session = requests.Session()
+            session = _new_session()
             session.headers.update(dict(self.session.headers))
             session.cookies.update(self.session.cookies)
             local.session = session
@@ -218,7 +269,7 @@ class AnimeHeavenProvider(StreamingProvider):
     def __init__(self, timeout: int = 12):
         super().__init__(timeout)
         self.base_url = "https://animeheaven.me"
-        self.session = requests.Session()
+        self.session = _new_session()
         self.session.headers.update({
             "User-Agent": DEFAULT_UA,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -625,7 +676,7 @@ class AnikotoProvider(StreamingProvider):
     def __init__(self, timeout: int = 12):
         super().__init__(timeout)
         self.base_url = "https://anikoto.net"
-        self.session = requests.Session()
+        self.session = _new_session()
         self.session.headers.update({
             "User-Agent": DEFAULT_UA,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -634,6 +685,35 @@ class AnikotoProvider(StreamingProvider):
         })
         self._megaplay_script_cache: OrderedDict[str, Tuple[List[bytes], List[bytes], float]] = OrderedDict()
         self._megaplay_script_cache_max = 16
+
+    def hls_heights(self, playlist_url: str, referer: str = "") -> List[int]:
+        """Real rendition heights from the provider's HLS master playlist.
+
+        A media playlist (no RESOLUTION tags) returns an empty list, so the UI
+        says "HLS source" instead of claiming a pixel size nobody published.
+        """
+        if not playlist_url:
+            return []
+        cache_key = f"hls_heights_{playlist_url}"
+        cached = self._cache_get(cache_key, ttl=900)
+        if cached is not None:
+            return cached
+        heights: List[int] = []
+        try:
+            resp = self._parallel_session().get(
+                playlist_url,
+                headers={
+                    "User-Agent": DEFAULT_UA,
+                    "Referer": referer or f"{self.base_url}/",
+                },
+                timeout=self.timeout,
+            )
+            if resp.ok:
+                heights = hls_heights_from_text(resp.text)
+        except Exception as exc:
+            logger.debug(f"[Anikoto] HLS master heights failed: {exc}")
+        self._cache_set(cache_key, heights)
+        return heights
 
     def search(self, query: str) -> List[Dict]:
         q = (query or "").strip()
@@ -1067,7 +1147,7 @@ class YouTubeTrailerResolver:
 
     def __init__(self):
         self.cache: OrderedDict[str, str] = OrderedDict()
-        self.session = requests.Session()
+        self.session = _new_session()
         self.session.headers.update({"User-Agent": DEFAULT_UA})
 
     def get_trailer_id(self, title: str, anilist_trailer: Optional[Dict] = None) -> Optional[str]:
@@ -1249,14 +1329,18 @@ class StreamingManager:
                             "stream_url": proxy_url,
                             "raw_url": src["url"],
                             "download_url": dl_url,
-                            "quality": "1080p MP4",
+                            # The provider does not publish a pixel height for
+                            # this file, so none is claimed here.
+                            "quality": "Source MP4",
+                            "height": 0,
                             "subtitles": [],
                             "badge": "DIRECT MP4",
                         })
                         if idx == 0:
                             downloads.append({
                                 "label": f"Episode {ep_num} Direct MP4 (AnimeHeaven High-Speed)",
-                                "quality": "1080p / 720p MP4",
+                                "quality": "Source MP4",
+                                "height": 0,
                                 "audio": "SUB",
                                 "url": dl_url,
                                 "direct": True,
@@ -1281,9 +1365,11 @@ class StreamingManager:
                 _candidates = []
                 for _audio_key in ("sub", "dub"):
                     _candidates.extend(
-                        [s for s in ak_servers if s.get("type", "sub") == _audio_key][:2]
+                        [s for s in ak_servers if s.get("type", "sub") == _audio_key][:3]
                     )
-                with ThreadPoolExecutor(max_workers=4) as _pool:
+                # Three servers per audio variant: if the first two are blocked
+                # by the provider or fail to decrypt, the third still plays.
+                with ThreadPoolExecutor(max_workers=6) as _pool:
                     _resolved_streams = list(
                         _pool.map(self.anikoto.resolve_server_stream, _candidates)
                     )
@@ -1303,6 +1389,11 @@ class StreamingManager:
                                 for s in (stream_data.get("subtitles") or [])
                             ]
                             if m3u8:
+                                heights = self.anikoto.hls_heights(m3u8, ref)
+                                quality_label = (f"{heights[0]}p HLS" if heights
+                                                 else "HLS source")
+                                badge = (f"{heights[0]}p {audio.upper()}" if heights
+                                         else f"HLS {audio.upper()}")
                                 hls_proxy = f"/api/proxy/hls?url={quote(m3u8, safe='')}&ref={quote(ref, safe='')}"
                                 # HLS is stitched server-side into one .ts file: a raw
                                 # playlist cannot be played offline, so the app must
@@ -1318,15 +1409,18 @@ class StreamingManager:
                                     "raw_url": m3u8,
                                     "download_url": hls_dl,
                                     "embed_url": stream_data.get("embed_url"),
-                                    "quality": "1080p HLS",
+                                    "quality": quality_label,
+                                    "height": heights[0] if heights else 0,
+                                    "qualities": heights,
                                     "subtitles": subs,
                                     "intro": stream_data.get("intro"),
                                     "outro": stream_data.get("outro"),
-                                    "badge": f"1080p {audio.upper()}",
+                                    "badge": badge,
                                 })
                                 downloads.append({
                                     "label": f"Episode {ep_num} {audio.upper()} Stream File (same as playing)",
-                                    "quality": "HLS playlist",
+                                    "quality": quality_label,
+                                    "height": heights[0] if heights else 0,
                                     "audio": audio.upper(),
                                     "url": hls_dl,
                                     "direct": True,
@@ -1355,6 +1449,7 @@ class StreamingManager:
                             downloads.append({
                                 "label": f"Episode {ep_num} ({audio_key.upper()} · {q_label})",
                                 "quality": q_label,
+                                "height": media_height(q_label),
                                 "audio": audio_key.upper(),
                                 "url": dl_link,
                                 "direct": False,
@@ -1387,7 +1482,7 @@ class StreamingManager:
                 "audio": "sub",
                 "playback_mode": "iframe",
                 "stream_url": f"https://vidlink.pro/anime/{_mid}/{ep_num}/sub",
-                "quality": "1080p Embed",
+                "quality": "Provider embed",
                 "subtitles": [],
                 "badge": "BACKUP SUB",
                 "fallback": True,
@@ -1400,7 +1495,7 @@ class StreamingManager:
                 "audio": "sub",
                 "playback_mode": "iframe",
                 "stream_url": f"https://vidsrc.cc/v2/embed/anime/ani{anilist_id}/{ep_num}/sub",
-                "quality": "1080p Embed",
+                "quality": "Provider embed",
                 "subtitles": [],
                 "badge": "MIRROR SUB",
                 "fallback": True,
@@ -1413,21 +1508,6 @@ class StreamingManager:
             return (audio_match, mode_rank)
 
         servers.sort(key=server_priority)
-
-        # Real quality switching for playback: the same source is re-encoded
-        # into 720p/480p/360p on demand, so choosing a lower quality changes
-        # actual pixels and bandwidth instead of only the label.
-        transcode_available = False
-        try:
-            import transcode as _transcode
-            transcode_available = _transcode.available()
-            servers = _transcode.add_stream_options(
-                servers,
-                (titles[0] if titles else f"Anime {anilist_id}"),
-                episode=ep_num,
-            )
-        except Exception:
-            logger.warning("converted stream options failed", exc_info=True)
 
         # Download manager promise: EVERY episode must offer at least one
         # direct-file download path. When no scraper resolved a file, hand the
@@ -1444,19 +1524,6 @@ class StreamingManager:
                 "provider": "AnimeHeaven resolver",
             })
 
-        # Resolution-reduced downloads: every downloadable MP4/HLS source also
-        # offers 720p/480p/360p converted files, so a 1080p episode can be saved
-        # at phone-friendly size without hunting for a different mirror.
-        try:
-            import transcode as _transcode
-            _transcode.add_download_options(
-                downloads, servers,
-                (titles[0] if titles else f"Anime {anilist_id}"),
-                episode=ep_num,
-            )
-        except Exception:
-            logger.warning("converted download options failed", exc_info=True)
-
         bundle = {
             "anilist_id": anilist_id,
             "mal_id": mal_id,
@@ -1466,7 +1533,18 @@ class StreamingManager:
             "anikoto_slug": anikoto_slug,
             "servers": servers,
             "downloads": downloads,
-            "transcode_available": transcode_available,
+            # This bundle intentionally contains only files and renditions the
+            # provider published. Nothing is re-encoded server-side, so a
+            # missing 360p/480p or dub means the source does not have it.
+            "quality_note": (
+                "Only qualities and audio tracks published by the source are "
+                "listed. CamAnime does not re-encode video or invent dubs."
+            ),
+            "available_qualities": sorted({
+                int(item.get("height") or media_height(str(item.get("quality") or "")))
+                for item in (servers + downloads)
+                if int(item.get("height") or media_height(str(item.get("quality") or "")))
+            }, reverse=True),
             "audio_availability": audio_availability,
             "requested_audio": preferred_audio,
             "audio_fallback": preferred_audio == "dub" and not audio_availability["dub"],

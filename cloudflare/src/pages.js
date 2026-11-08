@@ -169,7 +169,7 @@ export function watchPage(ctx, user) {
           <div class="now-playing-info">
             <span class="ep-pill">EPISODE ${epNum}</span>
             <div><h1 style="font-weight:700;font-size:.98rem;margin:0">${esc(name)} — ${esc(current?.title || "Episode " + epNum)}</h1>
-            <div style="font-size:.78rem;color:var(--text-muted)">Cloudflare edge playback · quality auto-scales to your link</div></div>
+            <div style="font-size:.78rem;color:var(--text-muted)">Cloudflare edge playback · quality follows the provider's published source</div></div>
             <span class="mode-badge">STREAM</span>
           </div>
           <div class="transport-actions">

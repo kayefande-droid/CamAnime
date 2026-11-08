@@ -629,7 +629,7 @@
                     <i class="fas fa-play"></i> Check Ep {{ first_episode }} (SUB)
                 </a>
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=dub" class="btn-outline">
-                    <i class="fas fa-headphones"></i> Check Ep {{ first_episode }} (Dub)
+                    <i class="fas fa-headphones"></i> Try Dub on Ep {{ first_episode }}
                 </a>
                 {% else %}
                 <span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>
@@ -644,6 +644,7 @@
                 </button>
                 {% endif %}
             </div>
+            <p class="availability-note">Quality and dub availability are detected per episode from the provider. A missing resolution or dub means the source does not publish it - it is never simulated.</p>
             {% if anime.next_airing_episode and anime.next_airing_episode.airing_at %}<p id="releaseReminderHelp" class="availability-note">Saved in this browser only. Grant notification permission to save a reminder; browser notices require the site open and are not push notifications.</p>{% endif %}
         </div>
     </div>

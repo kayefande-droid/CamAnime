@@ -48,7 +48,6 @@ def test_2_6_5_is_discontinued(api):
 @pytest.mark.parametrize("path", [
     "/api/proxy/video?url=https%3A%2F%2Fcdn.example%2Fv.mp4",
     "/api/download/video?url=https%3A%2F%2Fcdn.example%2Fv.mp4",
-    "/api/download/transcode?url=https%3A%2F%2Fcdn.example%2Fv.mp4&height=360",
     "/api/episode-sources/16498/1",
 ])
 def test_streams_and_downloads_are_blocked_for_2_6_5(api, path):

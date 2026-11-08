@@ -37,7 +37,7 @@ class EpisodeSource {
     this.height = 0,
   });
 
-  String get qualityLabel => height > 0 ? '${height}p' : 'Auto';
+  String get qualityLabel => height > 0 ? '${height}p' : 'Source';
 
   EpisodeSource copyWith({String? url, List<String>? mirrors}) => EpisodeSource(
         url: url ?? this.url,
@@ -55,11 +55,9 @@ class EpisodeSource {
 const List<String> kStreamQualities = ['auto', '360', '480', '720', '1080'];
 
 String streamQualityLabel(String preference) {
-  if (preference != 'auto' || int.tryParse(preference) != null) {
-    final h = int.tryParse(preference);
-    if (h != null) return '${h}p or lower';
-  }
-  return 'Auto (best available)';
+  final h = int.tryParse(preference);
+  if (h != null) return 'Up to ${h}p when published';
+  return 'Auto (source quality)';
 }
 
 /// Builds the playable server list for one episode from an episode bundle.
@@ -99,45 +97,6 @@ List<EpisodeSource> episodeSourcesFromBundle(
       image: image,
       height: height,
     ));
-  }
-  // Hidden quality safety net: some newer seasons (and older cached bundles)
-  // list only one full-size file. When the host can convert, add real 720p /
-  // 480p / 360p streams for the chosen audio so the quality picker always
-  // changes pixels and download size instead of showing a dead label.
-  final hasLadder =
-      sources.any((s) => s.height == 360 || s.height == 480 || s.height == 720);
-  if (bundle['transcode_available'] == true && !hasLadder && seen.isNotEmpty) {
-    final raws = <String, Map>{};
-    for (final raw in servers) {
-      if (raw is! Map) continue;
-      final mode = (raw['playback_mode'] ?? '').toString();
-      if (mode != 'mp4' && mode != 'hls') continue;
-      if ((raw['audio'] ?? 'sub').toString() != preferredAudio) continue;
-      final upstream = (raw['raw_url'] ?? '').toString();
-      if (!upstream.startsWith('http')) continue;
-      raws.putIfAbsent(upstream, () => raw);
-    }
-    for (final entry in raws.entries) {
-      final ref = (entry.value['referer'] ?? '').toString();
-      for (final height in const [720, 480, 360]) {
-        final path = '/api/stream/transcode'
-            '?url=${Uri.encodeComponent(entry.key)}'
-            '&height=$height'
-            '&title=${Uri.encodeComponent(animeTitle)}'
-            '${ref.isEmpty ? '' : '&ref=${Uri.encodeComponent(ref)}'}';
-        final url = absolute(path);
-        if (!seen.add(url)) continue;
-        sources.add(EpisodeSource(
-          url: url,
-          label: 'CamAnime ${height}p',
-          animeId: animeId,
-          episode: episode,
-          animeTitle: animeTitle,
-          image: image,
-          height: height,
-        ));
-      }
-    }
   }
 
   final cap = int.tryParse(qualityPreference) ?? 0;
@@ -203,10 +162,12 @@ bool isPlaylistUrl(String url) {
   if (uri == null) return false;
   final path = uri.path.toLowerCase();
   // The stitcher returns one media file, so its embedded playlist is fine.
-  if (path.endsWith('/download/hls') || path.endsWith('/download/transcode')) {
+  if (path.endsWith('/download/hls')) {
     return false;
   }
-  if (path.endsWith('.m3u8') || path.endsWith('.m3u') || path.contains('mpegurl')) {
+  if (path.endsWith('.m3u8') ||
+      path.endsWith('.m3u') ||
+      path.contains('mpegurl')) {
     return true;
   }
   // Older bundles wrap a playlist in the generic download proxy.
@@ -321,7 +282,7 @@ String downloadQualityLabel(String preference) {
   if (preference == 'best') return 'Best available';
   if (preference == 'smallest') return 'Smallest file';
   final height = int.tryParse(preference) ?? 720;
-  return '${height}p or lower';
+  return 'Up to ${height}p (published files)';
 }
 
 /// Where the user left off, per anime + episode, in plain JSON prefs.
@@ -407,8 +368,7 @@ class WatchProgress {
         });
       });
     });
-    rows.sort((a, b) =>
-        (b['updated'] as int).compareTo(a['updated'] as int));
+    rows.sort((a, b) => (b['updated'] as int).compareTo(a['updated'] as int));
     return rows.take(limit).toList();
   }
 

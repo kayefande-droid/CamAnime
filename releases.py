@@ -85,8 +85,15 @@ SEED = [
         "version_code": 18, "version_name": "2.8.0", "status": "SUPPORTED",
         "inspection": "INSPECTED",
         "security": "No admin strings; obfuscated Dart; MFA and version enforcement live server-side.",
-        "compatibility": "Current release.",
+        "compatibility": "Previous release; still supported above the minimum build.",
         "notes": "Artifact: mobile/apk/CamAnime-2.8.0.apk.",
+    },
+    {
+        "version_code": 19, "version_name": "2.9.0", "status": "SUPPORTED",
+        "inspection": "INSPECTED",
+        "security": "No admin strings; obfuscated Dart; server-side version gate unchanged.",
+        "compatibility": "Current release; provider-published qualities and dubs only.",
+        "notes": "Artifact: static/downloads/CamAnime.apk.",
     },
 ]
 

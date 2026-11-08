@@ -102,12 +102,15 @@ def test_video_stream_preserves_range_and_streams_chunks(monkeypatch):
             self.closed = True
 
     captured = {}
+
+    class Session:
+        def get(self, url, **kwargs):
+            captured.update(url=url, **kwargs)
+            return Upstream()
+
     monkeypatch.setattr(camanime, "_safe_upstream_url", lambda _url: "https://cdn.example/video.mp4")
     monkeypatch.setattr(camanime.platform, "bump_counter", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        camanime.requests, "get",
-        lambda url, **kwargs: (captured.update(url=url, **kwargs) or Upstream()),
-    )
+    monkeypatch.setattr(camanime, "_shared_http_session", lambda: Session())
     response = client().get(
         "/api/proxy/video?url=https%3A%2F%2Fcdn.example%2Fvideo.mp4",
         headers={"Range": "bytes=0-3"},

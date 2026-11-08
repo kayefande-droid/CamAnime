@@ -134,9 +134,6 @@ _RATE_RULES = (
     # backed by the same user store — brute-forcing it must cost exactly the same.
     ("/login", 10, 300),
     ("/api/download/video", 30, 600),
-    # Re-encoding is CPU-bound, so it is allowed less often than a plain copy.
-    ("/api/download/transcode", 6, 600),
-    ("/api/stream/transcode", 6, 600),
     ("/api/proxy/", 300, 600),
     ("/api/community/comment", 20, 600),
     ("/api/community/like", 60, 600),
@@ -2538,7 +2535,8 @@ def proxy_hls():
         headers["Range"] = request.headers["Range"]
 
     try:
-        upstream = requests.get(
+        # Pooled session: keep-alive reuse cuts per-segment handshake cost.
+        upstream = _shared_http_session().get(
             url, headers=headers, stream=True, timeout=15
         )
         content_type = upstream.headers.get("Content-Type", "")
@@ -2602,7 +2600,7 @@ def proxy_video():
         headers["Range"] = request.headers["Range"]
 
     try:
-        upstream = requests.get(url, headers=headers, stream=True, timeout=20)
+        upstream = _shared_http_session().get(url, headers=headers, stream=True, timeout=20)
         ctype = (upstream.headers.get("Content-Type", "") or "").lower()
         if upstream.status_code >= 400:
             upstream.close()
@@ -2697,126 +2695,6 @@ def download_probe():
         return jsonify({"error": str(e)}), 502
 
 
-@app.route("/api/download/transcode")
-def download_transcode():
-    """Download the *same* episode at a smaller resolution.
-
-    ffmpeg re-encodes the resolved source on the fly (fragmented MP4, streamed)
-    at 720p/480p/360p with a bounded bitrate, so a 1080p file that would cost
-    365 MB can be saved at roughly 130 MB. The output is never upscaled and
-    never stored on the server.
-    """
-    import transcode
-
-    url = _safe_upstream_url(request.args.get("url", ""))
-    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
-    ref = (request.args.get("ref", "") or "").strip()
-    height = request.args.get("height", "360")
-    if not url:
-        return jsonify({"error": "Invalid or private url"}), 400
-    if _is_ad_url(url):
-        return jsonify({"error": "Blocked: ad network URL."}), 403
-    prof = transcode.profile(height)
-    if not prof:
-        return jsonify({"error": "Supported heights are 720, 480 and 360.",
-                        "heights": list(transcode.SAFE_HEIGHTS)}), 400
-    if not transcode.available():
-        return jsonify({
-            "error": ("Download conversion is not enabled on this server "
-                      "(ffmpeg is missing). Pick a direct file instead."),
-            "transcode_available": False,
-        }), 503
-
-    safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
-    safe_filename = re.sub(r"\.(mp4|m3u8|ts)$", "", safe_filename, flags=re.I)
-    safe_filename = f"{safe_filename}_{prof['height']}p.mp4"
-    _record_activity("download", anime=title[:80],
-                     detail=f"converted {prof['height']}p · {urlparse(url).netloc}")
-    try:
-        platform.bump_counter("downloads")
-    except Exception:
-        pass
-
-    generator = transcode.stream(url, prof["height"], referer=ref,
-                                 user_agent=DEFAULT_UA)
-    try:
-        # Prime the first chunk so a broken source fails with a real error
-        # instead of an empty 200 response.
-        first = next(generator)
-    except StopIteration:
-        return jsonify({"error": "The source produced no video."}), 502
-    except Exception as exc:
-        logger.error(f"Transcode start failed ({url}): {exc}")
-        return jsonify({"error": "Could not convert this episode."}), 502
-
-    def body():
-        yield first
-        yield from generator
-
-    response = Response(stream_with_context(body()), content_type="video/mp4")
-    response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
-    response.headers["X-Transcoded-Height"] = str(prof["height"])
-    response.headers["X-Transcoded-Bitrate-Kbps"] = str(
-        prof["video_kbps"] + prof["audio_kbps"])
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-@app.route("/api/stream/transcode")
-def stream_transcode():
-    """Play the episode at a genuinely smaller resolution.
-
-    The quality chips used to point at whatever height a provider advertised.
-    This route re-encodes the resolved source with ffmpeg at 720p/480p/360p
-    using the same bounded-bitrate profiles as converted downloads, and serves
-    the fragmented MP4 inline so playback starts without saving a file.
-    """
-    import transcode
-
-    url = _safe_upstream_url(request.args.get("url", ""))
-    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
-    ref = (request.args.get("ref", "") or "").strip()
-    height = request.args.get("height", "360")
-    if not url:
-        return jsonify({"error": "Invalid or private url"}), 400
-    if _is_ad_url(url):
-        return jsonify({"error": "Blocked: ad network URL."}), 403
-    prof = transcode.profile(height)
-    if not prof:
-        return jsonify({"error": "Supported heights are 720, 480 and 360.",
-                        "heights": list(transcode.SAFE_HEIGHTS)}), 400
-    if not transcode.available():
-        return jsonify({
-            "error": ("Stream conversion is not enabled on this server "
-                      "(ffmpeg is missing). Pick a direct server instead."),
-            "transcode_available": False,
-        }), 503
-
-    _record_activity("play", anime=title[:80],
-                     detail=f"{prof['height']}p stream · {urlparse(url).netloc}")
-    generator = transcode.stream(url, prof["height"], referer=ref,
-                                 user_agent=DEFAULT_UA)
-    try:
-        first = next(generator)
-    except StopIteration:
-        return jsonify({"error": "The source produced no video."}), 502
-    except Exception as exc:
-        logger.error(f"Stream transcode start failed ({url}): {exc}")
-        return jsonify({"error": "Could not convert this episode."}), 502
-
-    def body():
-        yield first
-        yield from generator
-
-    response = Response(stream_with_context(body()), content_type="video/mp4")
-    response.headers["Content-Disposition"] = "inline"
-    response.headers["X-Transcoded-Height"] = str(prof["height"])
-    response.headers["X-Transcoded-Bitrate-Kbps"] = str(
-        prof["video_kbps"] + prof["audio_kbps"])
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
 @app.route("/api/download/hls")
 def download_hls():
     """Stitches an HLS episode into ONE downloadable file.
@@ -2880,15 +2758,71 @@ def download_hls():
 
         total = sum(durations) or None
 
+        # Real byte size: sum every segment's Content-Length instead of guessing
+        # from bitrate. HEAD is cheap; a 1-byte Range GET covers CDNs that reject
+        # HEAD. The app then knows the real final size and can verify that it
+        # received the whole episode instead of accepting a half-written file.
+        def segment_size(seg_url: str) -> int:
+            try:
+                head = _shared_http_session().head(
+                    seg_url, headers=headers, timeout=15, allow_redirects=True
+                )
+                length = int(head.headers.get("Content-Length") or 0)
+                if head.status_code < 400 and length > 0:
+                    return length
+            except Exception:
+                pass
+            try:
+                probe = _shared_http_session().get(
+                    seg_url,
+                    headers={**headers, "Range": "bytes=0-0"},
+                    timeout=15,
+                )
+                content_range = probe.headers.get("Content-Range", "")
+                match = re.search(r"/(\d+)\s*$", content_range)
+                if match:
+                    return int(match.group(1))
+                length = int(probe.headers.get("Content-Length") or 0)
+                return length if probe.status_code in (200, 206) and length > 0 else 0
+            except Exception:
+                return 0
+
+        exact_bytes = 0
+        estimated_bytes = 0
+        if len(segments) <= 800:
+            with ThreadPoolExecutor(max_workers=16) as size_pool:
+                sizes = list(size_pool.map(segment_size, segments))
+            if sizes and all(size > 0 for size in sizes):
+                exact_bytes = sum(sizes)
+            elif any(size > 0 for size in sizes):
+                known = [
+                    (size, duration)
+                    for size, duration in zip(sizes, durations)
+                    if size > 0 and duration > 0
+                ]
+                known_duration = sum(duration for _, duration in known)
+                if known and known_duration > 0 and total:
+                    bytes_per_second = (
+                        sum(size for size, _ in known) / known_duration
+                    )
+                    estimated_bytes = int(bytes_per_second * total)
+                else:
+                    known_bytes = sum(size for size in sizes if size > 0)
+                    known_count = sum(1 for size in sizes if size > 0)
+                    if known_count:
+                        estimated_bytes = int(
+                            known_bytes / known_count * len(segments)
+                        )
+
         def fetch_segment(seg_url: str) -> bytes:
             r = _shared_http_session().get(seg_url, headers=headers, timeout=25)
             r.raise_for_status()
             return r.content
 
         def generate():
-            pool = ThreadPoolExecutor(max_workers=8)
+            pool = ThreadPoolExecutor(max_workers=12)
             try:
-                window = 8
+                window = 12
                 futures = [pool.submit(fetch_segment, s) for s in segments[:window]]
                 for idx in range(len(segments)):
                     chunk = futures[idx].result()
@@ -2905,6 +2839,13 @@ def download_hls():
             content_type="video/mp2t",
         )
         response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+        if exact_bytes:
+            response.headers["Content-Length"] = str(exact_bytes)
+            response.headers["X-Total-Bytes"] = str(exact_bytes)
+            response.headers["X-Total-Exact"] = "1"
+        elif estimated_bytes:
+            response.headers["X-Total-Bytes"] = str(estimated_bytes)
+            response.headers["X-Total-Exact"] = "0"
         if total:
             response.headers["X-Content-Duration"] = f"{total:.0f}"
         response.headers["Cache-Control"] = "no-store"
@@ -2948,6 +2889,7 @@ def download_video():
     headers = {
         "User-Agent": DEFAULT_UA,
         "Accept": "*/*",
+        "Accept-Encoding": "identity",
         "Referer": ref,
     }
     # Byte-range passthrough: the watch page's turbo downloader requests one
@@ -3289,7 +3231,7 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.8.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.9.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
 APP_VERSION_CODE = 18
 import app_version  # noqa: E402 — version policy store, declared after routes
 import releases  # noqa: E402 — verified release inventory + blocked telemetry
@@ -3828,6 +3770,9 @@ def api_public_anime(anime_id: int):
                     "downloads_require_login": True,
                     "audio": audio,
                     "audio_availability": bundle.get("audio_availability", {}),
+                    "audio_fallback": bundle.get("audio_fallback", False),
+                    "quality_note": bundle.get("quality_note", ""),
+                    "available_qualities": bundle.get("available_qualities", []),
                     "rating": platform.anime_rating(None, anime_id)})
 
 

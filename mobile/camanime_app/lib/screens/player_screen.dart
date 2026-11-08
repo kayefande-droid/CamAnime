@@ -73,6 +73,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   bool _resumeEnabled = true;
   int _preferredServer = 0;
   EpisodeSource? _variant;
+  bool _dataSaver = false;
+  bool _qualityFallbackTried = false;
 
   // Control overlay.
   bool _showControls = true;
@@ -172,7 +174,9 @@ class _PlayerScreenState extends State<PlayerScreen>
         : List.of(widget.playlist);
     index = widget.startIndex.clamp(0, playlist.length - 1);
     _episodeVariants = widget.variants;
-    _variant = _episodeVariants.isEmpty ? null : _episodeVariants.first;
+    // Start on the episode's default/source rendition. A quality chip only
+    // takes over after the viewer picks one, and a failed pick falls back here.
+    _variant = null;
     _boot();
     _loadRecommendationsWhenIdle();
   }
@@ -183,12 +187,19 @@ class _PlayerScreenState extends State<PlayerScreen>
     _autoplayNext = p.getBool('app_autoplay') ?? true;
     _resumeEnabled = p.getBool('app_resume') ?? true;
     _speed = (p.getDouble('player_speed') ?? 1.0).clamp(0.5, 2.0).toDouble();
-    _volume =
-        (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
+    _volume = (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
     _brightness =
         (p.getDouble('player_brightness') ?? 1.0).clamp(0.05, 1.0).toDouble();
     _autoSkipIntro = p.getBool('player_skip_intro') ?? true;
     _autoSkipOutro = p.getBool('player_skip_outro') ?? true;
+    _dataSaver = p.getBool('app_data_saver') ?? false;
+    if (_dataSaver && _episodeVariants.isNotEmpty) {
+      final low = _episodeVariants
+          .where((s) => s.height > 0 && s.height <= 480)
+          .toList()
+        ..sort((a, b) => a.height.compareTo(b.height));
+      if (low.isNotEmpty) _variant = low.first;
+    }
     if (_brightness < 0.99) unawaited(_applyBrightness(_brightness));
     _preferredServer = p.getInt(_preferredKey) ?? 0;
     final live = widget.handoff;
@@ -266,6 +277,7 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted) return;
     _introSkipped = false;
     _outroHandled = false;
+    _qualityFallbackTried = false;
     _urlIndex = 0;
     setState(() {
       _loading = true;
@@ -342,6 +354,19 @@ class _PlayerScreenState extends State<PlayerScreen>
         } catch (_) {}
         if (!mounted) return;
         if (i + 1 < urls.length) continue;
+        if (!_local && _variant != null && !_qualityFallbackTried) {
+          // The chosen pixel failed to initialise. Return to the episode's
+          // default/source rendition rather than declaring the episode dead.
+          _qualityFallbackTried = true;
+          _snack('That quality did not play — back to the source quality.');
+          setState(() {
+            _variant = null;
+            _urlIndex = 0;
+            _attempt = 'Switching back to source quality…';
+          });
+          await _tryUrls();
+          return;
+        }
         setState(() {
           _loading = false;
           _error = _local
@@ -376,6 +401,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   Future<void> _retry() async {
     _urlIndex = 0;
     _autoHops = 0;
+    _qualityFallbackTried = false;
     await _loadCurrent();
   }
 
@@ -525,14 +551,16 @@ class _PlayerScreenState extends State<PlayerScreen>
     for (final source in _variants) {
       final h = source.height;
       if (h <= 0) continue;
-      final score =
-          h == height ? -1000 : (h <= height ? height - h : 1000 + (h - height));
+      final score = h == height
+          ? -1000
+          : (h <= height ? height - h : 1000 + (h - height));
       if (score < bestScore) {
         bestScore = score;
         best = source;
       }
     }
     if (best == null || best.url == _primaryUrl) return;
+    _qualityFallbackTried = false;
     _urlIndex = 0;
     setState(() => _variant = best);
     await _disposePlayback();
@@ -586,6 +614,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         _variant = null;
         _episodeVariants = const [];
+        _qualityFallbackTried = false;
         _error = null;
         _ended = false;
         _posMs = 0;
@@ -882,7 +911,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _surface({bool fill = false}) {
     final v = _video;
     final ready = v != null && v.value.isInitialized;
-    final aspect = ready && v.value.aspectRatio > 0 ? v.value.aspectRatio : 16 / 9;
+    final aspect =
+        ready && v.value.aspectRatio > 0 ? v.value.aspectRatio : 16 / 9;
     final surface = AspectRatio(
       aspectRatio: aspect,
       child: ColoredBox(
@@ -928,7 +958,8 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   Widget _controlsOverlay() {
-    final total = _durMs > 0 ? _durMs : (_video?.value.duration.inMilliseconds ?? 0);
+    final total =
+        _durMs > 0 ? _durMs : (_video?.value.duration.inMilliseconds ?? 0);
     final pos = (_dragMs ?? _posMs).clamp(0, total == 0 ? 0 : total);
     return AnimatedOpacity(
       opacity: _showControls ? 1 : 0,
@@ -1046,9 +1077,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                 left: 18,
                 right: 18,
                 bottom: 74,
-                child: _ended
-                    ? _endCard()
-                    : const SizedBox.shrink(),
+                child: _ended ? _endCard() : const SizedBox.shrink(),
               ),
             Positioned(
               left: 8,
@@ -1070,7 +1099,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                           const RoundSliderOverlayShape(overlayRadius: 16),
                     ),
                     child: Slider(
-                      value: pos.toDouble().clamp(0, total == 0 ? 1 : total.toDouble()),
+                      value: pos
+                          .toDouble()
+                          .clamp(0, total == 0 ? 1 : total.toDouble()),
                       max: total == 0 ? 1 : total.toDouble(),
                       activeColor: CamColors.accent,
                       inactiveColor: Colors.white24,
@@ -1087,8 +1118,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                   ),
                 ),
                 Text(_clock(total),
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 11.5)),
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 11.5)),
                 IconButton(
                   tooltip: 'Playback settings',
                   onPressed: _openSettings,
@@ -1118,7 +1149,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                 ? 'Up next · Episode ${(current.episode ?? 0) + 1}'
                 : 'You finished this episode.',
             style: const TextStyle(
-                color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700),
+                color: Colors.white,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700),
           ),
         ),
         if (_canHaveNext)
@@ -1244,161 +1277,171 @@ class _PlayerScreenState extends State<PlayerScreen>
             padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
             child: SingleChildScrollView(
               child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_qualities.length > 1 && !_local) ...[
-                  const Text('Video quality',
-                      style:
-                          TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_qualities.length > 1 && !_local) ...[
+                    const Text('Video quality',
+                        style: TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final height in _qualities)
+                        ChoiceChip(
+                          label: Text('${height}p'),
+                          selected: _activeHeight == height,
+                          onSelected: (_) {
+                            Navigator.pop(ctx);
+                            _selectQuality(height);
+                          },
+                        ),
+                    ]),
+                    const Text(
+                        'Only resolutions this source publishes are listed. '
+                        'HLS adapts within the provider\u2019s real renditions.',
+                        style:
+                            TextStyle(color: CamColors.inkDim, fontSize: 10.5)),
+                    const SizedBox(height: 18),
+                  ],
+                  const Text('Volume',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  Row(children: [
+                    Icon(
+                        _volume == 0
+                            ? Icons.volume_off_rounded
+                            : Icons.volume_up_rounded,
+                        size: 18,
+                        color: CamColors.inkDim),
+                    Expanded(
+                      child: Slider(
+                        value: _volume,
+                        activeColor: CamColors.accent,
+                        onChanged: (value) {
+                          setSheet(() => _volume = value);
+                          setState(() => _volume = value);
+                          _video?.setVolume(value);
+                        },
+                        onChangeEnd: (_) => _savePlaybackPrefs(),
+                      ),
+                    ),
+                    Text('${(_volume * 100).round()}%',
+                        style: const TextStyle(
+                            fontSize: 11, color: CamColors.inkDim)),
+                  ]),
+                  const Text('Brightness',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w800)),
+                  Row(children: [
+                    const Icon(Icons.brightness_6_rounded,
+                        size: 18, color: CamColors.inkDim),
+                    Expanded(
+                      child: Slider(
+                        value: _brightness,
+                        min: 0.15,
+                        activeColor: CamColors.accent,
+                        onChanged: (value) {
+                          setSheet(() => _brightness = value);
+                          setState(() => _brightness = value);
+                          unawaited(_applyBrightness(value));
+                        },
+                        onChangeEnd: (_) => _savePlaybackPrefs(),
+                      ),
+                    ),
+                    Text('${(_brightness * 100).round()}%',
+                        style: const TextStyle(
+                            fontSize: 11, color: CamColors.inkDim)),
+                  ]),
+                  const SizedBox(height: 8),
+                  const Text('Playback speed',
+                      style: TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   Wrap(spacing: 8, runSpacing: 8, children: [
-                    for (final height in _qualities)
+                    for (final speed in const [0.75, 1.0, 1.25, 1.5, 2.0])
                       ChoiceChip(
-                        label: Text('${height}p'),
-                        selected: _activeHeight == height,
-                        onSelected: (_) {
-                          Navigator.pop(ctx);
-                          _selectQuality(height);
+                        label: Text(speed == 1.0 ? '1x' : '${speed}x'),
+                        selected: _speed == speed,
+                        onSelected: (_) async {
+                          setSheet(() => _speed = speed);
+                          _applySpeed();
+                          final p = await SharedPreferences.getInstance();
+                          await p.setDouble('player_speed', speed);
                         },
                       ),
                   ]),
-                  const SizedBox(height: 18),
-                ],
-                const Text('Volume',
-                    style:
-                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
-                Row(children: [
-                  Icon(_volume == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-                      size: 18, color: CamColors.inkDim),
-                  Expanded(
-                    child: Slider(
-                      value: _volume,
-                      activeColor: CamColors.accent,
-                      onChanged: (value) {
-                        setSheet(() => _volume = value);
-                        setState(() => _volume = value);
-                        _video?.setVolume(value);
-                      },
-                      onChangeEnd: (_) => _savePlaybackPrefs(),
-                    ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Auto play next episode',
+                        style: TextStyle(fontSize: 13)),
+                    value: _autoplayNext,
+                    onChanged: (value) async {
+                      setSheet(() => _autoplayNext = value);
+                      if (mounted) setState(() => _autoplayNext = value);
+                      final p = await SharedPreferences.getInstance();
+                      await p.setBool('app_autoplay', value);
+                    },
                   ),
-                  Text('${(_volume * 100).round()}%',
-                      style: const TextStyle(
-                          fontSize: 11, color: CamColors.inkDim)),
-                ]),
-                const Text('Brightness',
-                    style:
-                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
-                Row(children: [
-                  const Icon(Icons.brightness_6_rounded,
-                      size: 18, color: CamColors.inkDim),
-                  Expanded(
-                    child: Slider(
-                      value: _brightness,
-                      min: 0.15,
-                      activeColor: CamColors.accent,
-                      onChanged: (value) {
-                        setSheet(() => _brightness = value);
-                        setState(() => _brightness = value);
-                        unawaited(_applyBrightness(value));
-                      },
-                      onChangeEnd: (_) => _savePlaybackPrefs(),
-                    ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Auto skip intro',
+                        style: TextStyle(fontSize: 13)),
+                    subtitle: const Text('Jump past the first 90 seconds',
+                        style: TextStyle(fontSize: 11)),
+                    value: _autoSkipIntro,
+                    onChanged: (value) async {
+                      setSheet(() => _autoSkipIntro = value);
+                      if (mounted) setState(() => _autoSkipIntro = value);
+                      final p = await SharedPreferences.getInstance();
+                      await p.setBool('player_skip_intro', value);
+                    },
                   ),
-                  Text('${(_brightness * 100).round()}%',
-                      style: const TextStyle(
-                          fontSize: 11, color: CamColors.inkDim)),
-                ]),
-                const SizedBox(height: 8),
-                const Text('Playback speed',
-                    style:
-                        TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  for (final speed in const [0.75, 1.0, 1.25, 1.5, 2.0])
-                    ChoiceChip(
-                      label: Text(speed == 1.0 ? '1x' : '${speed}x'),
-                      selected: _speed == speed,
-                      onSelected: (_) async {
-                        setSheet(() => _speed = speed);
-                        _applySpeed();
-                        final p = await SharedPreferences.getInstance();
-                        await p.setDouble('player_speed', speed);
-                      },
-                    ),
-                ]),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Auto play next episode',
-                      style: TextStyle(fontSize: 13)),
-                  value: _autoplayNext,
-                  onChanged: (value) async {
-                    setSheet(() => _autoplayNext = value);
-                    if (mounted) setState(() => _autoplayNext = value);
-                    final p = await SharedPreferences.getInstance();
-                    await p.setBool('app_autoplay', value);
-                  },
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Auto skip intro',
-                      style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('Jump past the first 90 seconds',
-                      style: TextStyle(fontSize: 11)),
-                  value: _autoSkipIntro,
-                  onChanged: (value) async {
-                    setSheet(() => _autoSkipIntro = value);
-                    if (mounted) setState(() => _autoSkipIntro = value);
-                    final p = await SharedPreferences.getInstance();
-                    await p.setBool('player_skip_intro', value);
-                  },
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Auto skip outro to next episode',
-                      style: TextStyle(fontSize: 13)),
-                  subtitle: const Text('Starts the next episode near the ending',
-                      style: TextStyle(fontSize: 11)),
-                  value: _autoSkipOutro,
-                  onChanged: (value) async {
-                    setSheet(() => _autoSkipOutro = value);
-                    if (mounted) setState(() => _autoSkipOutro = value);
-                    final p = await SharedPreferences.getInstance();
-                    await p.setBool('player_skip_outro', value);
-                  },
-                ),
-                if (playlist.length > 1) ...[
-                  const Divider(),
-                  Text('Episodes (${playlist.length})',
-                      style: const TextStyle(
-                          fontSize: 12.5, fontWeight: FontWeight.w800)),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 160),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: playlist.length,
-                      itemBuilder: (_, i) => ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          i == index
-                              ? Icons.graphic_eq_rounded
-                              : Icons.play_arrow_rounded,
-                          size: 18,
-                          color: i == index ? CamColors.accent : null,
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Auto skip outro to next episode',
+                        style: TextStyle(fontSize: 13)),
+                    subtitle: const Text(
+                        'Starts the next episode near the ending',
+                        style: TextStyle(fontSize: 11)),
+                    value: _autoSkipOutro,
+                    onChanged: (value) async {
+                      setSheet(() => _autoSkipOutro = value);
+                      if (mounted) setState(() => _autoSkipOutro = value);
+                      final p = await SharedPreferences.getInstance();
+                      await p.setBool('player_skip_outro', value);
+                    },
+                  ),
+                  if (playlist.length > 1) ...[
+                    const Divider(),
+                    Text('Episodes (${playlist.length})',
+                        style: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w800)),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 160),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: playlist.length,
+                        itemBuilder: (_, i) => ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            i == index
+                                ? Icons.graphic_eq_rounded
+                                : Icons.play_arrow_rounded,
+                            size: 18,
+                            color: i == index ? CamColors.accent : null,
+                          ),
+                          title: Text(playlist[i].label,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            if (i != index) _goTo(i);
+                          },
                         ),
-                        title: Text(playlist[i].label,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          if (i != index) _goTo(i);
-                        },
                       ),
                     ),
-                  ),
-                ],
+                  ],
                 ],
               ),
             ),

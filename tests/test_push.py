@@ -96,7 +96,7 @@ def fcm(monkeypatch):
     server.server_close()
 
 
-def app_headers(build=18, version="2.8.0", install="install-push-01"):
+def app_headers(build=18, version="2.9.0", install="install-push-01"):
     return {
         "X-CamAnime-Version": version,
         "X-CamAnime-Build": str(build),
@@ -126,7 +126,7 @@ def test_delivery_counts_successes_and_prunes_dead_tokens(api, fcm):
     result = api.push.send_update_alert(
         ["inst-good-1", "inst-dead", "inst-good-2"],
         "Update CamAnime", "A newer CamAnime is available.",
-        {"type": "app_update", "version": "2.8.0"})
+        {"type": "app_update", "version": "2.9.0"})
 
     assert result["available"] is True
     assert result["targets"] == 3

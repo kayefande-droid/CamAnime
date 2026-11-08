@@ -23,15 +23,16 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.8.0",
-    "latest_version_code": 18,
+    "latest_version": "2.9.0",
+    "latest_version_code": 19,
     "minimum_supported_version": "2.7.0",
     "minimum_supported_version_code": 17,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Minimal player with next-episode autoplay, real mini-player controls, "
-        "TOTP two-factor protection for the dashboard and push update notices."
+        "Only provider-published video qualities and dubs are offered. Removed "
+        "server re-encoding, added provider embed fallback, faster media proxy "
+        "and clearer availability notices."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "
@@ -132,6 +133,18 @@ def get_policy() -> Dict:
                  d["minimum_supported_version_code"], d["force_update"],
                  d["download_url"], d["release_notes"], d["update_message"],
                  d["release_enabled"], now, "system"),
+            )
+            row = conn.execute("SELECT * FROM version_policy WHERE id=1").fetchone()
+        # A shipped release must become visible without an operator manually
+        # editing the row after every deploy. Only the *latest* fields advance;
+        # the minimum supported build remains under operator control.
+        if int(row["latest_version_code"]) < int(DEFAULT_POLICY["latest_version_code"]):
+            conn.execute(
+                "UPDATE version_policy SET latest_version=?, latest_version_code=?,"
+                " release_notes=?, updated=?, updated_by='release' WHERE id=1",
+                (DEFAULT_POLICY["latest_version"],
+                 DEFAULT_POLICY["latest_version_code"],
+                 DEFAULT_POLICY["release_notes"], now),
             )
             row = conn.execute("SELECT * FROM version_policy WHERE id=1").fetchone()
     return {

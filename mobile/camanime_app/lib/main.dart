@@ -26,9 +26,8 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.8.0';
+const String appVersion = '2.9.0';
 const String appCredit = 'Made by kayefande-droid & co.';
-
 
 // ── Website-mirrored palette ───────────────────────────
 const bg = Color(0xFF07080D);
@@ -134,8 +133,7 @@ class CamAnimeApp extends StatefulWidget {
   State<CamAnimeApp> createState() => _CamAnimeAppState();
 }
 
-class _CamAnimeAppState extends State<CamAnimeApp>
-    with WidgetsBindingObserver {
+class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
   int tab = 0;
   bool showTutorial = false;
   String themeName = 'midnight';
@@ -311,7 +309,8 @@ class _CamAnimeAppState extends State<CamAnimeApp>
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Confirm the install to finish CamAnime ${info.version}.')));
+        content:
+            Text('Confirm the install to finish CamAnime ${info.version}.')));
   }
 
   void _updateDialog(String latest) {
@@ -377,24 +376,23 @@ class _CamAnimeAppState extends State<CamAnimeApp>
                 policy: requiredPolicy, currentVersion: appVersion);
           }
           return Stack(
-        children: [
-          Scaffold(
-            body: [
-              HomeTab(onUpdate: () => _checkUpdate(manual: true)),
-              const ExploreTab(),
-              const SearchTab(),
-              const LibraryTab(),
-              const ProfileTab(),
-            ][tab],
-            bottomNavigationBar: _FloatingNav(
-              tab: tab,
-              tabs: _tabs,
-              onTab: (i) => setState(() => tab = i),
-              onSettings: () async {
-                final nav = appNavigatorKey.currentState;
-                if (nav == null) return;
-                await nav.push(
-                    MaterialPageRoute(
+            children: [
+              Scaffold(
+                body: [
+                  HomeTab(onUpdate: () => _checkUpdate(manual: true)),
+                  const ExploreTab(),
+                  const SearchTab(),
+                  const LibraryTab(),
+                  const ProfileTab(),
+                ][tab],
+                bottomNavigationBar: _FloatingNav(
+                  tab: tab,
+                  tabs: _tabs,
+                  onTab: (i) => setState(() => tab = i),
+                  onSettings: () async {
+                    final nav = appNavigatorKey.currentState;
+                    if (nav == null) return;
+                    await nav.push(MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                             themeName: themeName,
                             onTheme: _applyTheme,
@@ -404,18 +402,19 @@ class _CamAnimeAppState extends State<CamAnimeApp>
                             onReplayTour: () =>
                                 setState(() => showTutorial = true),
                             onCheckUpdate: () => _checkUpdate(manual: true))));
-              },
-            ),
-          ),
-          const Positioned(left: 12, right: 12, bottom: 88, child: _MiniBar()),
-          if (showTutorial)
-            TutorialOverlay(onDone: () async {
-              final p = await SharedPreferences.getInstance();
-              await p.setBool('tutorial_done', true);
-              setState(() => showTutorial = false);
-              _checkUpdate();
-            }),
-        ],
+                  },
+                ),
+              ),
+              const Positioned(
+                  left: 12, right: 12, bottom: 88, child: _MiniBar()),
+              if (showTutorial)
+                TutorialOverlay(onDone: () async {
+                  final p = await SharedPreferences.getInstance();
+                  await p.setBool('tutorial_done', true);
+                  setState(() => showTutorial = false);
+                  _checkUpdate();
+                }),
+            ],
           );
         },
       ),
@@ -523,8 +522,8 @@ class _MiniBar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Back 10 seconds',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => MiniPlayer.seekBy(
-                          const Duration(seconds: -10)),
+                      onPressed: () =>
+                          MiniPlayer.seekBy(const Duration(seconds: -10)),
                       icon: const Icon(Icons.replay_10_rounded,
                           size: 21, color: CamColors.inkDim),
                     ),
@@ -542,8 +541,8 @@ class _MiniBar extends StatelessWidget {
                     IconButton(
                       tooltip: 'Forward 10 seconds',
                       visualDensity: VisualDensity.compact,
-                      onPressed: () => MiniPlayer.seekBy(
-                          const Duration(seconds: 10)),
+                      onPressed: () =>
+                          MiniPlayer.seekBy(const Duration(seconds: 10)),
                       icon: const Icon(Icons.forward_10_rounded,
                           size: 21, color: CamColors.inkDim),
                     ),
@@ -739,7 +738,8 @@ class Api {
     }
   }
 
-  static bool _isTransientStatus(int status) => status >= 500;
+  static bool _isTransientStatus(int status) =>
+      status == 408 || status == 429 || status >= 500;
   static const bool _testMode = bool.fromEnvironment('FLUTTER_TEST');
 
   static Future<http.Response> _get(Uri uri,
@@ -750,7 +750,10 @@ class Api {
       try {
         final response = await _client().get(uri).timeout(timeout);
         if (_isTransientStatus(response.statusCode) && attempt + 1 < attempts) {
-          await Future<void>.delayed(const Duration(milliseconds: 350));
+          // 300ms, 600ms, 1.2s: covers a Render cold start or a brief 429
+          // without making a genuinely offline app wait for the full ladder.
+          await Future<void>.delayed(
+              Duration(milliseconds: 300 * (1 << attempt)));
           continue;
         }
         if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -761,7 +764,8 @@ class Api {
       } catch (e) {
         lastError = e;
         if (attempt + 1 < attempts) {
-          await Future<void>.delayed(const Duration(milliseconds: 350));
+          await Future<void>.delayed(
+              Duration(milliseconds: 300 * (1 << attempt)));
         }
       }
     }
@@ -1464,6 +1468,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       series = [],
       classics = [],
       ann = [];
+
   /// Shown when the deployed API predates the classics row. These are real
   /// AniList ids, so tapping one resolves the normal streaming servers — the
   /// classics are not a special case in the player or the downloader.
@@ -1485,8 +1490,10 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   ];
 
   Map? featured;
+
   /// Episodes this device started but did not finish, newest first.
   List<Map<String, dynamic>> resume = [];
+
   /// Rows are shuffled once per app open, so the shelf feels fresh each launch
   /// without losing their meaning when the user pulls to refresh.
   bool _shuffled = false;
@@ -1572,7 +1579,15 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         if (!_shuffled) {
           _shuffled = true;
           final rng = Random();
-          for (final row in [trending, popular, topRated, fresh, movies, series, classics]) {
+          for (final row in [
+            trending,
+            popular,
+            topRated,
+            fresh,
+            movies,
+            series,
+            classics
+          ]) {
             row.shuffle(rng);
           }
         }
@@ -1748,8 +1763,8 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
 
   /// Opens the full catalogue browser — the same surface the Explore tab uses.
   void _openBrowse() {
-    Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const BrowseScreen()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const BrowseScreen()));
   }
 
   Widget _slideshow(List slides) => _Slideshow(items: slides);
@@ -2336,7 +2351,8 @@ class _ExploreTabState extends State<ExploreTab> {
                       _miniRail('Trending now', trending),
                       _sectionHead('Popular this season', 'Currently airing'),
                       _miniRail('Popular this season', popular),
-                      _sectionHead('All-time top rated', 'The classics that hold up'),
+                      _sectionHead(
+                          'All-time top rated', 'The classics that hold up'),
                       _miniRail('Top rated', topRated),
                       _sectionHead('Movies', 'One sitting, one story'),
                       _miniRail('Movies', movies),
@@ -2371,8 +2387,7 @@ class _ExploreTabState extends State<ExploreTab> {
               style:
                   const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text(subtitle,
-              style: const TextStyle(color: muted, fontSize: 11.5)),
+          Text(subtitle, style: const TextStyle(color: muted, fontSize: 11.5)),
         ]),
       );
 
@@ -2467,6 +2482,60 @@ class _DetailScreenState extends State<DetailScreen> {
   bool loading = true;
   bool dataSaver = false;
   String audio = 'sub';
+
+  /// Provider-published audio for this title, learned from a real episode
+  /// bundle. Null means "not checked yet", so DUB stays selectable until the
+  /// server has actually reported whether the provider lists it.
+  bool? _dubAvailable;
+
+  void _applyAudioAvailability(Map<String, dynamic> bundle) {
+    final raw = bundle['audio_availability'];
+    if (raw is! Map || raw['dub'] is! bool) return;
+    final dub = raw['dub'] as bool;
+    if (_dubAvailable == dub) return;
+    if (!mounted) return;
+    setState(() {
+      _dubAvailable = dub;
+      if (!dub && audio == 'dub') audio = 'sub';
+    });
+  }
+
+  String _sourceAudio(Map<String, dynamic> bundle) =>
+      bundle['audio_fallback'] == true ? 'sub' : audio;
+
+  void _noteAudioFallback(Map<String, dynamic> bundle, int ep) {
+    if (bundle['audio_fallback'] != true || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('No provider dub for episode $ep — playing SUB. '
+          'CamAnime only offers audio the source actually publishes.'),
+    ));
+  }
+
+  /// First provider embed for an episode, used when no direct MP4/HLS source
+  /// exists (common for the newest season). The provider still plays it; the
+  /// app must not pretend the episode is unavailable.
+  String? _providerEmbed(Map<String, dynamic> bundle) {
+    for (final raw in (bundle['servers'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      if ((raw['playback_mode'] ?? '').toString() != 'iframe') continue;
+      final url = (raw['embed_url'] ?? raw['stream_url'] ?? '').toString();
+      if (url.startsWith('http')) return url;
+    }
+    return null;
+  }
+
+  Future<void> _openProviderEmbed(String url) async {
+    var opened = false;
+    try {
+      opened =
+          await launchUrl(Uri.parse(url), mode: LaunchMode.inAppBrowserView);
+    } catch (_) {}
+    if (!opened) {
+      try {
+        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+  }
 
   final Set<int> selected = {};
   String dlStatus = '';
@@ -2619,12 +2688,13 @@ class _DetailScreenState extends State<DetailScreen> {
       final bundle = await _sourcesFor(ep);
       currentEpisode = ep;
       if (bundle == null) continue;
+      _applyAudioAvailability(bundle);
       final list = await _streamSources(ep, bundle);
       if (list.isEmpty) continue;
       sources.add(EpisodeSource(
         url: list.first.url,
         mirrors: list.skip(1).map((s) => s.url).toList(),
-        label: '$title — Ep $ep (${audio.toUpperCase()})',
+        label: '$title — Ep $ep (${_sourceAudio(bundle).toUpperCase()})',
         animeId: widget.animeId,
         episode: ep,
         animeTitle: title,
@@ -2640,9 +2710,9 @@ class _DetailScreenState extends State<DetailScreen> {
       return;
     }
     await Navigator.push(
-      context,
-      MaterialPageRoute(
-          builder: (_) => PlayerScreen(
+        context,
+        MaterialPageRoute(
+            builder: (_) => PlayerScreen(
                 url: sources.first.url,
                 label: sources.first.label,
                 playlist: sources,
@@ -2675,6 +2745,7 @@ class _DetailScreenState extends State<DetailScreen> {
     try {
       final bundle = await Api.episodeSources(widget.animeId, ep, audio);
       _sourceCache[key] = bundle;
+      _applyAudioAvailability(bundle);
       _prefetchNext(ep);
       return bundle;
     } catch (_) {
@@ -2691,8 +2762,9 @@ class _DetailScreenState extends State<DetailScreen> {
     final key = '${widget.animeId}|$ep|$audio';
     if (_sourceCache.containsKey(key)) return;
     try {
-      _sourceCache[key] =
-          await Api.episodeSources(widget.animeId, ep, audio);
+      final bundle = await Api.episodeSources(widget.animeId, ep, audio);
+      _sourceCache[key] = bundle;
+      _applyAudioAvailability(bundle);
     } catch (_) {}
   }
 
@@ -2729,7 +2801,8 @@ class _DetailScreenState extends State<DetailScreen> {
     if (match != null) {
       final hours = int.tryParse(match.group(1)!) ?? 0;
       final mins = RegExp(r'(\d+)\s*m').firstMatch(raw);
-      return hours * 60 + (mins == null ? 0 : int.tryParse(mins.group(1)!) ?? 0);
+      return hours * 60 +
+          (mins == null ? 0 : int.tryParse(mins.group(1)!) ?? 0);
     }
     final minsOnly = RegExp(r'(\d+)').firstMatch(raw);
     return minsOnly == null ? 0 : int.tryParse(minsOnly.group(1)!) ?? 0;
@@ -2747,12 +2820,16 @@ class _DetailScreenState extends State<DetailScreen> {
   /// anime page instead of something buried in Settings.
   Future<void> _pickDownloadQuality() async {
     const options = <(String, String, String)>[
-      ('smallest', 'Smallest file', 'Lowest resolution offered — smallest MB'),
-      ('360', '360p', 'Tiny files, fine on a phone screen'),
-      ('480', '480p', 'Balanced — the recommended default'),
-      ('720', '720p', 'Sharper, roughly double the 480p size'),
-      ('1080', '1080p', 'Full HD, the largest files'),
-      ('best', 'Best available', 'Whatever the servers offer, no cap'),
+      (
+        'smallest',
+        'Smallest published file',
+        'Lowest resolution the source offers'
+      ),
+      ('360', 'Up to 360p', 'Only if the source publishes 360p'),
+      ('480', 'Up to 480p', 'Only if the source publishes 480p or lower'),
+      ('720', 'Up to 720p', 'Only if the source publishes 720p or lower'),
+      ('1080', 'Up to 1080p', 'Only if the source publishes 1080p or lower'),
+      ('best', 'Best published', 'Highest resolution the source offers'),
       ('ask', 'Ask each time', 'Pick per episode with live file sizes'),
     ];
     final chosen = await showModalBottomSheet<String>(
@@ -2772,7 +2849,11 @@ class _DetailScreenState extends State<DetailScreen> {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w800)),
                     SizedBox(height: 2),
-                    Text('Applies to new downloads on this device',
+                    Text(
+                        'Only source-published qualities are downloaded — '
+                        'CamAnime does not re-encode video or invent a lower '
+                        'resolution. If a size is not offered, the next real '
+                        'file is used.',
                         style:
                             TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
                   ]),
@@ -2784,9 +2865,8 @@ class _DetailScreenState extends State<DetailScreen> {
                   _dlQuality == o.$1
                       ? Icons.radio_button_checked_rounded
                       : Icons.radio_button_off_rounded,
-                  color: _dlQuality == o.$1
-                      ? CamColors.accent
-                      : CamColors.inkDim),
+                  color:
+                      _dlQuality == o.$1 ? CamColors.accent : CamColors.inkDim),
               title: Text(o.$2),
               subtitle: Text(o.$3,
                   style:
@@ -2803,7 +2883,8 @@ class _DetailScreenState extends State<DetailScreen> {
     if (!mounted) return;
     setState(() => _dlQuality = chosen);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Downloads will use ${downloadQualityLabel(chosen).toLowerCase()}.'),
+        content: Text(
+            'Downloads will use ${downloadQualityLabel(chosen).toLowerCase()}.'),
         duration: const Duration(seconds: 2)));
   }
 
@@ -2829,7 +2910,9 @@ class _DetailScreenState extends State<DetailScreen> {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w800)),
                     SizedBox(height: 2),
-                    Text('Real video files only — sizes checked live',
+                    Text(
+                        'Real source files only — these are every quality '
+                        'the provider publishes for this episode',
                         style:
                             TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
                   ]),
@@ -2886,18 +2969,33 @@ class _DetailScreenState extends State<DetailScreen> {
     );
   }
 
-  /// Real size of a download option, from a HEAD request. Returns null when
-  /// the server does not publish a Content-Length (the player still works).
+  /// Real size of a download option. The API returns Content-Length for direct
+  /// MP4 files and for stitched HLS episodes; when a CDN refuses HEAD we ask for
+  /// a single byte and read the total from Content-Range.
   Future<int?> _remoteSize(String url) async {
     final client = http.Client();
     try {
-      final request = http.Request('HEAD', Uri.parse(Api.abs(url)))
-        ..headers.addAll(await Api.headers());
+      final target = Uri.parse(Api.abs(url));
+      final headers = await Api.headers();
+      final request = http.Request('HEAD', target)..headers.addAll(headers);
       final response =
-          await client.send(request).timeout(const Duration(seconds: 8));
+          await client.send(request).timeout(const Duration(seconds: 20));
       await response.stream.drain<void>();
       final length = int.tryParse(response.headers['content-length'] ?? '');
-      return (length != null && length > 0) ? length : null;
+      if (length != null && length > 0) return length;
+      // The stitcher ignores Range and would transfer the whole episode, so a
+      // missing HEAD size there is reported as unavailable rather than fetched.
+      if (target.path.endsWith('/download/hls')) return null;
+      final probe = http.Request('GET', target)
+        ..headers.addAll({...headers, 'Range': 'bytes=0-0'});
+      final ranged =
+          await client.send(probe).timeout(const Duration(seconds: 20));
+      await ranged.stream.drain<void>();
+      final range = ranged.headers['content-range'] ?? '';
+      final match = RegExp(r'/(\d+)\s*$').firstMatch(range);
+      if (match != null) return int.tryParse(match.group(1)!);
+      final rangedLength = int.tryParse(ranged.headers['content-length'] ?? '');
+      return (rangedLength != null && rangedLength > 1) ? rangedLength : null;
     } catch (_) {
       return null;
     } finally {
@@ -3014,7 +3112,10 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<List<EpisodeSource>> _streamSources(
       int ep, Map<String, dynamic> bundle) async {
     final p = await SharedPreferences.getInstance();
-    final pref = p.getString('stream_quality') ?? 'auto';
+    final saved = p.getString('stream_quality') ?? 'auto';
+    // Data saver streams the lowest genuine rendition at or below 480p. If the
+    // provider publishes nothing that low, the normal ordering still applies.
+    final pref = (p.getBool('app_data_saver') ?? false) ? '480' : saved;
     return episodeSourcesFromBundle(
       bundle,
       animeId: widget.animeId,
@@ -3093,24 +3194,37 @@ class _DetailScreenState extends State<DetailScreen> {
           content: Text('Could not reach streaming servers — try again.')));
       return;
     }
+    _applyAudioAvailability(bundle);
+    _noteAudioFallback(bundle, ep);
     final sources = await _streamSources(ep, bundle);
     if (!mounted) return;
     if (sources.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Only embed servers available — watch on the site.')));
+      final embed = _providerEmbed(bundle);
+      if (embed != null) {
+        if (mounted) {
+          setState(() => dlStatus =
+              'Episode $ep uses a provider player — opening it now.');
+        }
+        await _openProviderEmbed(embed);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No playable source was returned for this episode. '
+                'Try another episode or server.')));
+      }
       return;
     }
     Navigator.push(
-      context,
-      MaterialPageRoute(
-          builder: (_) => PlayerScreen(
+        context,
+        MaterialPageRoute(
+            builder: (_) => PlayerScreen(
                   url: sources.first.url,
                   mirrors: sources.skip(1).map((s) => s.url).toList(),
                   variants: sources,
                   episode: ep,
                   resume: true,
                   fetchEpisode: _sourceForEpisode,
-                  label: '$title — Ep $ep (${audio.toUpperCase()})',
+                  label:
+                      '$title — Ep $ep (${_sourceAudio(bundle).toUpperCase()})',
                   onOpenAnime: _openAnime,
                 )));
   }
@@ -3123,6 +3237,12 @@ class _DetailScreenState extends State<DetailScreen> {
     try {
       final bundle = await _sourcesFor(ep);
       if (bundle == null) throw const HttpException('No servers reachable');
+      _applyAudioAvailability(bundle);
+      if (bundle['audio_fallback'] == true && audio == 'dub' && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No provider dub for this episode — a SUB file will '
+                'be saved.')));
+      }
       final options =
           downloadOptions(bundle, preferredAudio: audio, absolute: Api.abs);
       if (options.isEmpty) {
@@ -3134,29 +3254,39 @@ class _DetailScreenState extends State<DetailScreen> {
           ? await _chooseDownload(options)
           : pickDownloadOption(options, pref);
       if (chosen == null || !mounted) return;
-      await _queueEpisode(ep, bundle, option: chosen);
+      final task = await _queueEpisode(ep, bundle, option: chosen);
       if (!mounted) return;
-      setState(() => dlStatus = 'Episode $ep queued — it starts immediately.');
+      // The real size arrives with the response headers. Wait briefly so the
+      // confirmation shows the actual file size instead of a guessed one.
+      for (var i = 0; i < 10 && task.total <= 0; i++) {
+        if (task.stage == DownloadStage.failed) break;
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+      final size = task.total > 0 ? ' · ${compactBytes(task.total)}' : '';
+      if (!mounted) return;
+      setState(
+          () => dlStatus = 'Episode $ep queued$size — it starts immediately.');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              'Episode $ep added to downloads. It appears in Library now.')));
+          content: Text('Episode $ep added$size to downloads. '
+              'It appears in Library now.')));
     } catch (e) {
       if (mounted) setState(() => dlStatus = 'Episode $ep: $e');
     }
   }
 
-  Future<void> _queueEpisode(int ep, Map<String, dynamic> bundle,
+  Future<DownloadTask> _queueEpisode(int ep, Map<String, dynamic> bundle,
       {DownloadOption? option}) async {
     final options =
         downloadOptions(bundle, preferredAudio: audio, absolute: Api.abs);
     final pref = await _downloadPref();
-    final chosen = option ?? pickDownloadOption(options, pref == 'ask' ? '720' : pref);
+    final chosen =
+        option ?? pickDownloadOption(options, pref == 'ask' ? '720' : pref);
     if (chosen == null) {
       throw const HttpException(
           'No direct video file for this episode — it is stream-only.');
     }
     final rawPoster = (info['image'] ?? '').toString().trim();
-    await DownloadManager.instance.enqueue(
+    return DownloadManager.instance.enqueue(
       animeTitle: (info['title'] ?? widget.title).toString(),
       animeId: int.tryParse(widget.animeId) ?? 0,
       episode: ep,
@@ -3270,12 +3400,25 @@ class _DetailScreenState extends State<DetailScreen> {
                         const SizedBox(height: 16),
                         _AudioSeasonBar(
                           audio: audio,
+                          dubAvailable: _dubAvailable,
                           onAudio: _setAudio,
                           currentId: widget.animeId,
                           currentTitle: title,
                           seasons: seasons,
                           onSeason: _openSeason,
                         ),
+                        if (_dubAvailable == false) ...[
+                          const SizedBox(height: 6),
+                          const Text(
+                            'No provider dub is published for this title yet. '
+                            'SUB is used automatically when a DUB track does '
+                            'not exist.',
+                            style: TextStyle(
+                                color: CamColors.inkDim,
+                                fontSize: 10.5,
+                                height: 1.4),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         ..._episodeSection(),
                         const SizedBox(height: 28),
@@ -3442,6 +3585,7 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   void _setAudio(String value) {
+    if (value == 'dub' && _dubAvailable == false) return;
     setState(() => audio = value);
     SharedPreferences.getInstance()
         .then((p) => p.setString('app_audio', value));
@@ -3817,7 +3961,8 @@ class _SearchTabState extends State<SearchTab> {
     var out = rows.whereType<Map>().toList();
     if (formatKey.isNotEmpty) {
       out = out
-          .where((r) => (r['format'] ?? '').toString().toUpperCase() == formatKey)
+          .where(
+              (r) => (r['format'] ?? '').toString().toUpperCase() == formatKey)
           .toList();
     }
     if (olderOnly) {
@@ -3965,12 +4110,9 @@ class _SearchTabState extends State<SearchTab> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Row(children: [
               TextButton.icon(
-                onPressed: () =>
-                    setState(() => filtersOpen = !filtersOpen),
+                onPressed: () => setState(() => filtersOpen = !filtersOpen),
                 icon: Icon(
-                    filtersOpen
-                        ? Icons.filter_alt
-                        : Icons.filter_alt_outlined,
+                    filtersOpen ? Icons.filter_alt : Icons.filter_alt_outlined,
                     size: 18),
                 label: const Text('Filters'),
               ),
@@ -4005,38 +4147,38 @@ class _SearchTabState extends State<SearchTab> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Wrap(spacing: 7, runSpacing: 7, children: [
-                  for (final entry in _sorts.entries)
-                    ChoiceChip(
-                      label: Text(entry.value),
-                      selected: sortKey == entry.key,
-                      onSelected: (_) {
-                        setState(() => sortKey = entry.key);
-                        _browseFilters();
-                      },
-                    ),
-                ]),
-                const SizedBox(height: 8),
-                Wrap(spacing: 7, runSpacing: 7, children: [
-                  for (final entry in _formats.entries)
-                    ChoiceChip(
-                      label: Text(entry.value),
-                      selected: formatKey == entry.key,
-                      onSelected: (_) {
-                        setState(() => formatKey = entry.key);
-                        _browseFilters();
-                      },
-                    ),
-                  FilterChip(
-                    label: const Text('Older classics'),
-                    selected: olderOnly,
-                    onSelected: (v) {
-                      setState(() => olderOnly = v);
-                      _browseFilters();
-                    },
-                  ),
-                ]),
-              ]),
+                    Wrap(spacing: 7, runSpacing: 7, children: [
+                      for (final entry in _sorts.entries)
+                        ChoiceChip(
+                          label: Text(entry.value),
+                          selected: sortKey == entry.key,
+                          onSelected: (_) {
+                            setState(() => sortKey = entry.key);
+                            _browseFilters();
+                          },
+                        ),
+                    ]),
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 7, runSpacing: 7, children: [
+                      for (final entry in _formats.entries)
+                        ChoiceChip(
+                          label: Text(entry.value),
+                          selected: formatKey == entry.key,
+                          onSelected: (_) {
+                            setState(() => formatKey = entry.key);
+                            _browseFilters();
+                          },
+                        ),
+                      FilterChip(
+                        label: const Text('Older classics'),
+                        selected: olderOnly,
+                        onSelected: (v) {
+                          setState(() => olderOnly = v);
+                          _browseFilters();
+                        },
+                      ),
+                    ]),
+                  ]),
             ),
           if (loading || genreBusy) const LinearProgressIndicator(color: amber),
           Expanded(
@@ -4784,9 +4926,7 @@ class _ActionRow extends StatelessWidget {
       ),
       const SizedBox(width: 8),
       _RoundButton(
-        icon: saved
-            ? Icons.bookmark_rounded
-            : Icons.bookmark_border_rounded,
+        icon: saved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
         tooltip: saved ? 'In your watchlist' : 'Add to watchlist',
         onTap: onSave,
         size: 46,
@@ -4805,6 +4945,7 @@ class _ActionRow extends StatelessWidget {
 
 class _AudioSeasonBar extends StatelessWidget {
   final String audio;
+  final bool? dubAvailable;
   final ValueChanged<String> onAudio;
   final String currentId;
   final String currentTitle;
@@ -4813,6 +4954,7 @@ class _AudioSeasonBar extends StatelessWidget {
 
   const _AudioSeasonBar({
     required this.audio,
+    this.dubAvailable,
     required this.onAudio,
     required this.currentId,
     required this.currentTitle,
@@ -4832,13 +4974,14 @@ class _AudioSeasonBar extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
+            segments: [
+              const ButtonSegment(
                   value: 'sub',
                   icon: Icon(Icons.closed_caption_rounded, size: 14),
                   label: Text('SUB')),
               ButtonSegment(
                   value: 'dub',
+                  enabled: dubAvailable != false,
                   icon: Icon(Icons.headphones_rounded, size: 14),
                   label: Text('DUB')),
             ],

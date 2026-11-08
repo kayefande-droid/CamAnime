@@ -77,9 +77,8 @@ class _LibraryTabState extends State<LibraryTab> {
         }
       }
       if (id.isEmpty) {
-        final title = folder.tasks.isEmpty
-            ? ''
-            : folder.tasks.first.animeTitle.trim();
+        final title =
+            folder.tasks.isEmpty ? '' : folder.tasks.first.animeTitle.trim();
         if (title.isEmpty) continue;
         id = 'title:$title';
       }
@@ -149,8 +148,10 @@ class _LibraryTabState extends State<LibraryTab> {
                 const SizedBox(height: 14),
                 _summary(active.length, readyCount),
                 _libraryTabs(),
-                if (_view == 1) ..._watchlistSection()
-                else if (_view == 2) ..._historySection()
+                if (_view == 1)
+                  ..._watchlistSection()
+                else if (_view == 2)
+                  ..._historySection()
                 else if (!_started)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
@@ -214,8 +215,8 @@ class _LibraryTabState extends State<LibraryTab> {
                           ),
                           TextButton.icon(
                             onPressed: DeviceStorage.openDownloads,
-                            icon: const Icon(Icons.folder_open_rounded,
-                                size: 16),
+                            icon:
+                                const Icon(Icons.folder_open_rounded, size: 16),
                             label: const Text('Open'),
                           ),
                         ]),
@@ -259,30 +260,26 @@ class _LibraryTabState extends State<LibraryTab> {
                   border: Border.all(
                       color: _view == i ? CamColors.accent : CamColors.line),
                 ),
-                child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icons[i],
-                          size: 15,
-                          color: _view == i
-                              ? CamColors.accent
-                              : CamColors.inkDim),
-                      const SizedBox(width: 5),
-                      // Flexible + ellipsis: the three tabs must never overflow
-                      // on the narrowest phones (the 430dp test caught 0.4px).
-                      Flexible(
-                        child: Text(labels[i],
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                color: _view == i
-                                    ? CamColors.ink
-                                    : CamColors.inkDim)),
-                      ),
-                    ]),
+                child:
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(icons[i],
+                      size: 15,
+                      color: _view == i ? CamColors.accent : CamColors.inkDim),
+                  const SizedBox(width: 5),
+                  // Flexible + ellipsis: the three tabs must never overflow
+                  // on the narrowest phones (the 430dp test caught 0.4px).
+                  Flexible(
+                    child: Text(labels[i],
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            color:
+                                _view == i ? CamColors.ink : CamColors.inkDim)),
+                  ),
+                ]),
               ),
             ),
           ),
@@ -347,7 +344,8 @@ class _LibraryTabState extends State<LibraryTab> {
                             style: const TextStyle(
                                 fontWeight: FontWeight.w800, fontSize: 13)),
                         const SizedBox(height: 3),
-                        Text('${row['episodes'] ?? 0} episodes · on this device',
+                        Text(
+                            '${row['episodes'] ?? 0} episodes · on this device',
                             style: const TextStyle(
                                 color: CamColors.inkDim, fontSize: 10.5)),
                       ]),
@@ -580,7 +578,8 @@ class _LibraryTabState extends State<LibraryTab> {
   /// One anime season = one folder, collapsed until tapped.
   Widget _folderCard(DownloadFolder folder) {
     final open = _expanded.contains(folder.key);
-    final exported = folder.tasks.where((t) => (t.devicePath ?? '').isNotEmpty).length;
+    final exported =
+        folder.tasks.where((t) => (t.devicePath ?? '').isNotEmpty).length;
     return CamCard(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
       onTap: () => setState(() {
@@ -618,47 +617,44 @@ class _LibraryTabState extends State<LibraryTab> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(folder.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w800, fontSize: 13.5)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${folder.subtitle} · ${folder.tasks.length} ep'
-                    '${folder.tasks.length == 1 ? '' : 's'} · '
-                    '${compactBytes(folder.bytes)}',
-                    style: const TextStyle(
-                        color: CamColors.inkDim, fontSize: 10.5),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(folder.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, fontSize: 13.5)),
+              const SizedBox(height: 4),
+              Text(
+                '${folder.subtitle} · ${folder.tasks.length} ep'
+                '${folder.tasks.length == 1 ? '' : 's'} · '
+                '${compactBytes(folder.bytes)}',
+                style: const TextStyle(color: CamColors.inkDim, fontSize: 10.5),
+              ),
+              const SizedBox(height: 5),
+              Row(children: [
+                MetaPill('FOLDER',
+                    icon: Icons.folder_rounded, color: CamColors.accentAlt),
+                const SizedBox(width: 6),
+                if (exported > 0)
+                  MetaPill(
+                    exported == folder.tasks.length
+                        ? 'ON DEVICE'
+                        : '$exported/${folder.tasks.length} ON DEVICE',
+                    icon: Icons.smartphone_rounded,
+                    color: CamColors.success,
                   ),
-                  const SizedBox(height: 5),
-                  Row(children: [
-                    MetaPill('FOLDER',
-                        icon: Icons.folder_rounded,
-                        color: CamColors.accentAlt),
-                    const SizedBox(width: 6),
-                    if (exported > 0)
-                      MetaPill(
-                        exported == folder.tasks.length
-                            ? 'ON DEVICE'
-                            : '$exported/${folder.tasks.length} ON DEVICE',
-                        icon: Icons.smartphone_rounded,
-                        color: CamColors.success,
-                      ),
-                    if (_resume[folder.key] != null) ...[
-                      const SizedBox(width: 6),
-                      MetaPill(
-                        'RESUME EP ${_resume[folder.key]!['ep']} · '
-                        '${_clock(int.tryParse('${_resume[folder.key]!['posMs']}') ?? 0)}',
-                        icon: Icons.play_arrow_rounded,
-                        color: CamColors.accent,
-                      ),
-                    ],
-                  ]),
-                ]),
+                if (_resume[folder.key] != null) ...[
+                  const SizedBox(width: 6),
+                  MetaPill(
+                    'RESUME EP ${_resume[folder.key]!['ep']} · '
+                    '${_clock(int.tryParse('${_resume[folder.key]!['posMs']}') ?? 0)}',
+                    icon: Icons.play_arrow_rounded,
+                    color: CamColors.accent,
+                  ),
+                ],
+              ]),
+            ]),
           ),
           Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
               color: CamColors.inkDim),
@@ -703,7 +699,8 @@ class _LibraryTabState extends State<LibraryTab> {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Episode ${task.episode} · ${task.audio.toUpperCase()}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -711,7 +708,8 @@ class _LibraryTabState extends State<LibraryTab> {
                     fontWeight: FontWeight.w700, fontSize: 12.5)),
             const SizedBox(height: 2),
             Text(
-              '${compactBytes(task.total)} · ${task.qualityLabel}'
+              '${task.total > 0 ? compactBytes(task.total) : 'Size pending'} · '
+              '${task.qualityLabel}'
               '${task.durationLabel.isEmpty ? '' : ' · ${task.durationLabel}'} · '
               '${task.completedLabel}',
               style: const TextStyle(color: CamColors.inkDim, fontSize: 10),
@@ -721,8 +719,7 @@ class _LibraryTabState extends State<LibraryTab> {
                 task.devicePath!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: CamColors.success, fontSize: 9.5),
+                style: const TextStyle(color: CamColors.success, fontSize: 9.5),
               ),
           ]),
         ),
