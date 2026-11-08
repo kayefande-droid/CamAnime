@@ -343,6 +343,33 @@ class WatchProgress {
     return b;
   }
 
+  /// Every watched episode, newest first — the Library's History tab.
+  static Future<List<Map<String, dynamic>>> history({int limit = 100}) async {
+    final data = await _load();
+    final rows = <Map<String, dynamic>>[];
+    data.forEach((animeId, episodes) {
+      if (episodes is! Map) return;
+      episodes.forEach((ep, entry) {
+        if (entry is! Map) return;
+        final pos = int.tryParse('${entry['posMs'] ?? 0}') ?? 0;
+        final dur = int.tryParse('${entry['durMs'] ?? 0}') ?? 0;
+        rows.add({
+          'id': animeId,
+          'ep': int.tryParse(ep) ?? 0,
+          'title': (entry['title'] ?? 'Anime').toString(),
+          'image': (entry['image'] ?? '').toString(),
+          'posMs': pos,
+          'durMs': dur,
+          'updated': int.tryParse('${entry['updated'] ?? 0}') ?? 0,
+          'finished': dur > 0 && pos >= dur * 0.95,
+        });
+      });
+    });
+    rows.sort((a, b) =>
+        (b['updated'] as int).compareTo(a['updated'] as int));
+    return rows.take(limit).toList();
+  }
+
   /// Anime ids this device has watched, most recently touched first. Used to
   /// learn a taste profile for Explore without any account.
   static Future<List<String>> recentAnimeIds({int limit = 8}) async {

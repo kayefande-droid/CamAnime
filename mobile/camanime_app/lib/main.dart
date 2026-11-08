@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,18 +11,21 @@ import 'package:path_provider/path_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/ad_notifications.dart';
+import 'core/app_updater.dart';
 import 'core/app_notifications.dart';
 import 'core/cam_ui.dart';
 import 'core/downloads.dart';
 import 'core/mini_player.dart';
 import 'core/models.dart';
+import 'core/watchlist.dart';
+import 'core/pip.dart';
 import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
 import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.6.1';
+const String appVersion = '2.6.4';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 
@@ -145,6 +149,13 @@ class _CamAnimeAppState extends State<CamAnimeApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Closing the floating window (Android's X) ends mini playback instead of
+    // leaving an orphaned decoder running.
+    PiP.listen((inPip) {
+      if (!inPip && MiniPlayer.current.value != null) {
+        unawaited(MiniPlayer.close());
+      }
+    });
     _firstRun();
   }
 
@@ -179,38 +190,111 @@ class _CamAnimeAppState extends State<CamAnimeApp>
     }
   }
 
+  /// Checks the website on launch and, when a newer build exists, downloads and
+  /// installs it without the user going to a browser.
   Future<void> _checkUpdate({bool manual = false}) async {
-    try {
-      final r = await http
-          .get(Uri.parse('$apiHost/api/version'))
-          .timeout(const Duration(seconds: 12));
-      final d = json.decode(r.body) as Map<String, dynamic>;
-      final latest = (d['app_version'] ?? '').toString();
-      if (latest.isNotEmpty && _isNewerVersion(latest, appVersion) && mounted) {
-        _updateDialog(latest);
-      } else if (manual && mounted) {
+    final installed = await AppUpdater.installedVersion();
+    final info = await AppUpdater.check(current: installed);
+    if (!mounted) return;
+    if (info == null) {
+      if (manual) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('You are on the latest version ($appVersion)')));
+            content: Text('You are on the latest version ($installed)')));
       }
-    } catch (_) {
-      if (manual && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Could not reach the website — check internet.')));
-      }
+      return;
     }
+    await _installUpdate(info);
   }
 
-  bool _isNewerVersion(String latest, String current) {
-    List<int> parts(String v) =>
-        v.split(RegExp(r'[.+-]')).map((e) => int.tryParse(e) ?? 0).toList();
-    final a = parts(latest);
-    final b = parts(current);
-    for (var i = 0; i < 3; i++) {
-      final x = i < a.length ? a[i] : 0;
-      final y = i < b.length ? b[i] : 0;
-      if (x != y) return x > y;
+  /// Downloads the new APK with a live progress sheet, then opens the system
+  /// installer. Android replaces the app and restarts it after the install.
+  Future<void> _installUpdate(UpdateInfo info) async {
+    if (!Platform.isAndroid) {
+      _updateDialog(info.version);
+      return;
     }
-    return false;
+    var allow = await AppUpdater.canInstall();
+    if (!mounted) return;
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: card,
+        title: Text('Updating to CamAnime ${info.version}'),
+        content: Text(
+            'The new version is downloading and will install itself. Your '
+            'library, downloads and watch history stay exactly as they are — an '
+            'update replaces the app, never your files. If Android asks to allow '
+            'installs from CamAnime, accept once.'
+            '${allow ? '' : '\n\nTap Continue to enable that permission.'}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Later')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: amber, foregroundColor: Colors.black),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(allow ? 'Update now' : 'Continue'),
+          ),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    if (!allow) {
+      await AppUpdater.openPermissionSettings();
+      return;
+    }
+
+    final progress = ValueNotifier<double?>(0);
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ValueListenableBuilder<double?>(
+        valueListenable: progress,
+        builder: (c, value, _) => AlertDialog(
+          backgroundColor: card,
+          title: Text('Downloading ${info.version}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            LinearProgressIndicator(
+              value: value,
+              backgroundColor: CamColors.line,
+              valueColor: const AlwaysStoppedAnimation<Color>(amber),
+            ),
+            const SizedBox(height: 12),
+            Text(value == null
+                ? 'Starting…'
+                : '${(value * 100).toStringAsFixed(0)}%'),
+          ]),
+        ),
+      ),
+    );
+
+    final apk = await AppUpdater.download(
+      info,
+      onProgress: (p) => progress.value = p,
+    );
+    progress.dispose();
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (apk == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Update download failed. Try again from Settings → Check for updates.')));
+      return;
+    }
+    final started = await AppUpdater.install(apk);
+    if (!mounted) return;
+    if (!started) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Allow installs for CamAnime in the settings screen that opened, '
+              'then tap Check for updates again.')));
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Confirm the install to finish CamAnime ${info.version}.')));
   }
 
   void _updateDialog(String latest) {
@@ -230,9 +314,7 @@ class _CamAnimeAppState extends State<CamAnimeApp>
                 backgroundColor: amber, foregroundColor: Colors.black),
             onPressed: () {
               Navigator.pop(context);
-              setState(() => tab = 3);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Open Library → App update to download.')));
+              _checkUpdate(manual: true);
             },
             child: const Text('Get it'),
           ),
@@ -416,6 +498,13 @@ class _MiniBar extends StatelessWidget {
                         color: CamColors.accent,
                       ),
                     ),
+                    if (Platform.isAndroid)
+                      IconButton(
+                        tooltip: 'Float over other apps',
+                        onPressed: () => PiP.enter(),
+                        icon: const Icon(Icons.picture_in_picture_alt_rounded,
+                            size: 19, color: CamColors.inkDim),
+                      ),
                     IconButton(
                       tooltip: 'Close miniplayer',
                       onPressed: MiniPlayer.close,
@@ -1375,6 +1464,11 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   ];
 
   Map? featured;
+  /// Episodes this device started but did not finish, newest first.
+  List<Map<String, dynamic>> resume = [];
+  /// Rows are shuffled once per app open, so the shelf feels fresh each launch
+  /// without losing their meaning when the user pulls to refresh.
+  bool _shuffled = false;
   bool loading = true;
   bool offline = false;
   String? err;
@@ -1403,8 +1497,29 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// Reads the saved watch spots so Home can offer a one-tap continue.
+  Future<void> _loadResume() async {
+    final ids = await WatchProgress.recentAnimeIds(limit: 10);
+    final rows = <Map<String, dynamic>>[];
+    for (final id in ids) {
+      final latest = await WatchProgress.latest(id);
+      if (latest == null) continue;
+      rows.add({
+        'id': id,
+        'title': (latest['title'] ?? 'Continue watching').toString(),
+        'image': (latest['image'] ?? '').toString(),
+        'episode': int.tryParse('${latest['ep']}') ?? 1,
+        'posMs': int.tryParse('${latest['posMs']}') ?? 0,
+        'durMs': int.tryParse('${latest['durMs']}') ?? 0,
+      });
+    }
+    if (!mounted) return;
+    setState(() => resume = rows);
+  }
+
   Future<void> _load() async {
     _lastRefresh = DateTime.now();
+    unawaited(_loadResume());
     try {
       final result = await Api.catalogHome();
       final data = (result['catalog'] as Map?)?.cast<String, dynamic>() ??
@@ -1432,6 +1547,13 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         classics = list('classics');
         if (classics.isEmpty) classics = List.of(_classicFallback);
         featured = hero;
+        if (!_shuffled) {
+          _shuffled = true;
+          final rng = Random();
+          for (final row in [trending, popular, topRated, fresh, movies, series, classics]) {
+            row.shuffle(rng);
+          }
+        }
         offline = result['offline'] == true;
         err = trending.isEmpty && popular.isEmpty && topRated.isEmpty
             ? 'The catalogue is empty right now. Pull to retry.'
@@ -1567,6 +1689,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     }
     final slides = trending.isNotEmpty ? trending.take(6).toList() : [];
     if (slides.isNotEmpty) out.add(_slideshow(slides));
+    if (resume.isNotEmpty) out.add(_resumeRail());
     if (featured != null) out.add(_featuredCard(featured!));
     out.add(_rail('Trending Anime', trending));
     out.add(_rail('Popular this season', popular));
@@ -1673,6 +1796,100 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         ),
       ),
     );
+  }
+
+  /// "Continue watching": the exact episode and second this device stopped at.
+  Widget _resumeRail() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(children: [
+              const Text('Continue watching',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              TextButton(
+                onPressed: () async {
+                  await WatchProgress.clearAll();
+                  if (mounted) setState(() => resume = []);
+                },
+                child: const Text('Clear'),
+              ),
+            ]),
+          ),
+          SizedBox(
+            height: 214,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: resume.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, i) {
+                final row = resume[i];
+                final pos = row['posMs'] as int;
+                final dur = row['durMs'] as int;
+                final progress = dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0;
+                return GestureDetector(
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => DetailScreen(
+                              animeId: row['id'].toString(),
+                              title: row['title'].toString()))),
+                  child: SizedBox(
+                    width: 128,
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: AspectRatio(
+                              aspectRatio: 2 / 2.7,
+                              child: Stack(fit: StackFit.expand, children: [
+                                CachedPosterImage(url: row['image'].toString()),
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: LinearProgressIndicator(
+                                    value: progress,
+                                    minHeight: 3,
+                                    backgroundColor: Colors.black54,
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                            amber),
+                                  ),
+                                ),
+                              ]),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(row['title'].toString(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w700)),
+                          Text(
+                            'Ep ${row['episode']} · ${_clock(pos)} in',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                const TextStyle(color: muted, fontSize: 10.5),
+                          ),
+                        ]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+
+  String _clock(int ms) {
+    final total = (ms / 1000).round().clamp(0, 1 << 30);
+    final m = total ~/ 60;
+    final ss = (total % 60).toString().padLeft(2, '0');
+    return '$m:$ss';
   }
 
   Widget _rail(String title, List items) =>
@@ -2236,6 +2453,7 @@ class _DetailScreenState extends State<DetailScreen> {
   String commentError = '';
   final _commentCtrl = TextEditingController();
   int? myScore;
+  bool _saved = false;
   Map<int, EpisodePreview> previews = {};
   Map<int, double> watch = {};
   int? resumeEp;
@@ -2267,6 +2485,8 @@ class _DetailScreenState extends State<DetailScreen> {
     dataSaver = p.getBool('app_data_saver') ?? false;
     await _load();
     await _loadViewingState();
+    final saved = await Watchlist.contains(widget.animeId);
+    if (mounted && saved != _saved) setState(() => _saved = saved);
     // Resolve the servers for the episode the user is most likely to start in
     // the background, so the first Play/Download tap responds instantly.
     if (!dataSaver) unawaited(_warmFirstEpisode());
@@ -2942,6 +3162,8 @@ class _DetailScreenState extends State<DetailScreen> {
                               ? null
                               : () => _downloadEp(current),
                           onRate: _rateSheet,
+                          saved: _saved,
+                          onSave: _toggleWatch,
                         ),
                         const SizedBox(height: 16),
                         _AudioSeasonBar(
@@ -3129,6 +3351,25 @@ class _DetailScreenState extends State<DetailScreen> {
         context,
         MaterialPageRoute(
             builder: (_) => DetailScreen(animeId: id, title: title)));
+  }
+
+  /// Bookmark for the Library's Watchlist tab.
+  Future<void> _toggleWatch() async {
+    final title = (info['title'] ?? widget.title).toString();
+    final saved = await Watchlist.toggle(
+      animeId: widget.animeId,
+      title: title,
+      image: (info['image'] ?? '').toString(),
+      episodes: int.tryParse('${info['episodes'] ?? 0}') ?? 0,
+    );
+    if (!mounted) return;
+    setState(() => _saved = saved);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(saved
+          ? 'Added to watchlist — find it in Library'
+          : 'Removed from watchlist'),
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   void _rateSheet() {
@@ -4532,6 +4773,8 @@ class _ActionRow extends StatelessWidget {
   final VoidCallback? onWatch;
   final VoidCallback? onDownload;
   final VoidCallback onRate;
+  final bool saved;
+  final VoidCallback onSave;
 
   const _ActionRow({
     required this.watchLabel,
@@ -4539,6 +4782,8 @@ class _ActionRow extends StatelessWidget {
     required this.onWatch,
     required this.onDownload,
     required this.onRate,
+    required this.saved,
+    required this.onSave,
   });
 
   @override
@@ -4596,6 +4841,15 @@ class _ActionRow extends StatelessWidget {
                 maxLines: 1, overflow: TextOverflow.ellipsis),
           ),
         ),
+      ),
+      const SizedBox(width: 8),
+      _RoundButton(
+        icon: saved
+            ? Icons.bookmark_rounded
+            : Icons.bookmark_border_rounded,
+        tooltip: saved ? 'In your watchlist' : 'Add to watchlist',
+        onTap: onSave,
+        size: 46,
       ),
       const SizedBox(width: 8),
       _RoundButton(

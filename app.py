@@ -3092,12 +3092,13 @@ def _app_file_info(filename: str):
 def download_page():
     apk = _app_file_info("CamAnime.apk")
     winapp = _app_file_info("CamAnime-Windows.zip") or _app_file_info("CamAnime.exe")
-    return render_template("download.html", user=_current_user(), apk=apk, winapp=winapp)
+    return render_template("download.html", user=_current_user(), apk=apk,
+                           winapp=winapp, app_version=APP_VERSION)
 
 
 RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.2.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
-APP_VERSION = "1.2.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.6.4"  # keep aligned with mobile/camanime_app/pubspec.yaml
 
 
 def _serve_app_file(local_names, release_name, download_name):
@@ -3666,8 +3667,11 @@ def api_public_stream_or_download():
 def api_version():
     """Update-check endpoint for native apps: current release + direct links."""
     return jsonify({"status": "success", "app_version": APP_VERSION,
+                    "version_code": 14,
                     "apk": "CamAnime.apk", "windows": "CamAnime-Windows.zip",
-                    "apk_url": "/get/android", "windows_url": "/get/windows"})
+                    "apk_url": "/get/android", "windows_url": "/get/windows",
+                    "notes": "Self-updating app, continue watching, miniplayer, "
+                             "search filters, offline auto-next."})
 
 
 @app.route("/api/announcements")

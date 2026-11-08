@@ -13,7 +13,56 @@
     if (THEMES.indexOf(name) === -1) name = "midnight";
     document.documentElement.setAttribute("data-theme", name);
     try { localStorage.setItem("camanime-theme", name); } catch (e) {}
+    syncAppearanceToggle();
   };
+
+  /* Appearance: one switch flips between the light theme and the last dark
+     theme that was in use, on every page, and remembers the choice. */
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || "midnight";
+  }
+  window.caToggleAppearance = function () {
+    var isLight = currentTheme() === "light";
+    if (isLight) {
+      var back = "midnight";
+      try { back = localStorage.getItem("camanime-dark-theme") || "midnight"; } catch (e) {}
+      if (THEMES.indexOf(back) === -1 || back === "light") back = "midnight";
+      caSetTheme(back);
+    } else {
+      try { localStorage.setItem("camanime-dark-theme", currentTheme()); } catch (e) {}
+      caSetTheme("light");
+    }
+  };
+  function syncAppearanceToggle() {
+    var btn = document.getElementById("caAppearanceToggle");
+    if (!btn) return;
+    var light = currentTheme() === "light";
+    btn.setAttribute("aria-pressed", light ? "true" : "false");
+    btn.setAttribute("title", light ? "Switch to dark theme" : "Switch to light theme");
+    btn.setAttribute("aria-label", btn.getAttribute("title"));
+    btn.innerHTML = light
+      ? '<i class="fas fa-moon" aria-hidden="true"></i>'
+      : '<i class="fas fa-sun" aria-hidden="true"></i>';
+  }
+  function mountAppearanceToggle() {
+    if (document.getElementById("caAppearanceToggle")) return;
+    var host = document.querySelector(".header-actions") ||
+               document.querySelector(".header-inner") ||
+               document.querySelector("header");
+    if (!host) return;
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "caAppearanceToggle";
+    btn.className = "ca-appearance-toggle";
+    btn.onclick = window.caToggleAppearance;
+    host.appendChild(btn);
+    syncAppearanceToggle();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mountAppearanceToggle);
+  } else {
+    mountAppearanceToggle();
+  }
   window.caSearchPop = function (open) {
     var el = document.getElementById("caSearchPop");
     if (el) el.classList.toggle("open", open !== false);

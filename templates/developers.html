@@ -14,6 +14,25 @@
 <style>
 /* Docs page: the floating release-schedule tab would sit on top of the API tables. */
 .live-schedule-tab, .live-schedule-backdrop, .live-schedule-drawer { display: none !important; }
+.dev-code-wrap { position: relative; }
+.dev-copy-btn {
+  position: absolute; top: .55rem; right: .6rem;
+  font: 600 .72rem/1 'Outfit', system-ui, sans-serif;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-secondary, #9aa4bd);
+  background: rgba(255,255,255,.07);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,.12));
+  border-radius: 8px; padding: .38rem .6rem; cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.dev-copy-btn:hover, .dev-copy-btn:focus-visible {
+  color: var(--text-primary, #f3f5fa);
+  border-color: var(--accent, #FFB347);
+}
+.dev-copy-btn.is-copied { color: var(--accent, #FFB347); border-color: var(--accent, #FFB347); }
+.dev-key-copy { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+.dev-key-copy .ctrl-btn.is-copied { color: var(--accent, #FFB347); }
+.dev-sub { font-size: 1rem; font-weight: 700; margin: 1.4rem 0 .5rem; color: var(--text-primary, #f3f5fa); }
 </style>
 </head>
 <body>
@@ -69,6 +88,8 @@
     <div class="dev-table-scroll"><table class="dev-table">
       <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Returns</th></tr></thead>
       <tbody>
+        <tr><td><code>GET</code></td><td><code>/api/v1/dev/catalog</code></td><td><code>x-api-key</code></td><td>Catalogue rows: browse, filter and search</td></tr>
+        <tr><td><code>GET</code></td><td><code>/api/v1/dev/anime/:animeId</code></td><td><code>x-api-key</code></td><td>One title plus its episode list</td></tr>
         <tr><td><code>GET</code></td><td><code>/api/v1/stream/:animeId/:ep</code></td><td><code>x-api-key</code></td><td>Stream URLs for that episode</td></tr>
         <tr><td><code>GET</code></td><td><code>/api/developer/keys</code></td><td>Session cookie</td><td>Your keys and today's usage</td></tr>
         <tr><td><code>POST</code></td><td><code>/api/developer/keys</code></td><td>Session cookie</td><td>A new key — shown once</td></tr>
@@ -98,6 +119,54 @@
 const data = await res.json();
 player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/video&gt;</pre>
     <p class="muted">Keep the key server-side when you can. The proxy URL is Referer-safe, so it plays from your domain without extra headers.</p>
+  </section>
+
+  <section id="build">
+    <h2 class="section-title">Build your own anime site</h2>
+    <p class="muted">Three calls are enough for a working site: list the catalogue, show a title with its episodes, then play the episode. Everything is JSON, everything is CORS-open, and the same key works for all of it.</p>
+
+    <h3 class="dev-sub">1. Catalogue, filters and search</h3>
+    <pre class="dev-code">GET /api/v1/dev/catalog?sort=popular&amp;page=1&amp;perPage=24
+GET /api/v1/dev/catalog?q=jujutsu
+GET /api/v1/dev/catalog?genre=Action&amp;format=TV&amp;sort=rating
+x-api-key: ca_live_your_key_here
+
+{
+  "api": "camanime-catalog",
+  "results": [
+    { "id": "16498", "title": "Attack on Titan", "image": "https://…",
+      "episodes": 25, "score": 84, "format": "TV", "year": 2013 }
+  ],
+  "page": 1, "has_next_page": true,
+  "usage": { "calls_today": 1, "daily_limit": 1000 }
+}</pre>
+    <p class="muted"><code>sort</code>: popular, trending, rating, recent, alphabetical. <code>format</code>: TV, TV_SHORT, MOVIE, OVA, ONA, SPECIAL. <code>genre</code>: any AniList genre name. <code>perPage</code> up to 50.</p>
+
+    <h3 class="dev-sub">2. One title and its episodes</h3>
+    <pre class="dev-code">GET /api/v1/dev/anime/16498
+x-api-key: ca_live_your_key_here
+
+{
+  "anime": {
+    "id": "16498", "title": "Attack on Titan", "episodes": 25,
+    "description": "…", "genres": ["Action", "Drama"],
+    "episode_list": [ { "episode": 1, "stream": "https://…/api/v1/stream/16498/1" } ]
+  }
+}</pre>
+
+    <h3 class="dev-sub">3. Play it</h3>
+    <pre class="dev-code">const key = "ca_live_your_key_here";   // keep this server-side
+
+const list = await fetch("https://camanime.onrender.com/api/v1/dev/catalog?sort=trending", {
+  headers: { "x-api-key": key }
+}).then(r =&gt; r.json());
+
+const ep = await fetch("https://camanime.onrender.com/api/v1/stream/" + list.results[0].id + "/1", {
+  headers: { "x-api-key": key }
+}).then(r =&gt; r.json());
+
+document.querySelector("video").src = ep.streams[0].url;</pre>
+    <p class="muted">Send your own users' traffic through your server when you can — the key is the only thing protecting your quota. Links inside <code>streams[]</code> are already absolute and Referer-safe, so the browser plays them from your domain.</p>
   </section>
 
   <section id="keys">
@@ -138,6 +207,51 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
 </footer>
 
 <script>
+function copyText(text, btn, label) {
+  var done = function () {
+    if (!btn) return;
+    var was = label || btn.textContent;
+    btn.textContent = 'Copied';
+    btn.classList.add('is-copied');
+    setTimeout(function () { btn.textContent = was; btn.classList.remove('is-copied'); }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(function () { legacyCopy(text, done); });
+  } else {
+    legacyCopy(text, done);
+  }
+}
+function legacyCopy(text, done) {
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) {}
+  document.body.removeChild(ta);
+}
+(function () {
+  // Every code block on this page gets a copy button; no per-snippet markup.
+  var blocks = document.querySelectorAll('pre.dev-code');
+  for (var i = 0; i < blocks.length; i++) {
+    (function (pre) {
+      if (pre.parentNode.classList.contains('dev-code-wrap')) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'dev-code-wrap';
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dev-copy-btn';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy this code');
+      btn.onclick = function () { copyText(pre.innerText, btn, 'Copy'); };
+      wrap.appendChild(btn);
+    })(blocks[i]);
+  }
+})();
 function toggleMobileNav(force) {
   var nav = document.getElementById('mobileNav'), btn = document.getElementById('navToggle');
   if (!nav || !btn) return;
@@ -192,7 +306,13 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') togg
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) { out.textContent = res.d.error || 'Could not create a key.'; return; }
-        out.appendChild(el('code', 'dev-key-plain', res.d.key));
+        var keyRow = el('div', 'dev-key-copy');
+        keyRow.appendChild(el('code', 'dev-key-plain', res.d.key));
+        var copyKey = el('button', 'ctrl-btn', 'Copy key');
+        copyKey.type = 'button';
+        copyKey.onclick = function () { copyText(res.d.key, copyKey, 'Copy key'); };
+        keyRow.appendChild(copyKey);
+        out.appendChild(keyRow);
         out.appendChild(el('p', 'muted', res.d.note || 'Copy this key now.'));
         form.reset();
         load();

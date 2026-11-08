@@ -69,7 +69,15 @@ async function apiRoutes(request, env, url, path) {
   const mobileResponse = await mobile.route(env, request, url, parts);
   if (mobileResponse) return mobileResponse;
 
-  // Developer API: free-tier keys (session auth) + the public keyed stream endpoint.
+  // Developer API: free-tier keys (session auth) + the public keyed endpoints.
+  if (p1 === "v1" && p2 === "dev" && p3 === "catalog") {
+    if (method === "OPTIONS") return developer.preflight();
+    return developer.catalog(env, request, url);
+  }
+  if (p1 === "v1" && p2 === "dev" && p3 === "anime" && p4) {
+    if (method === "OPTIONS") return developer.preflight();
+    return developer.animeDetail(env, request, url, p4);
+  }
   if (p1 === "v1" && p2 === "stream") {
     if (method === "OPTIONS") return developer.preflight();
     return developer.stream(env, request, url, p3, p4);

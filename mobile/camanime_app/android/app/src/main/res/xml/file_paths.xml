@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Paths the in-app updater is allowed to expose to the system installer. -->
+<paths>
+    <cache-path name="updates" path="." />
+    <files-path name="files" path="." />
+    <external-cache-path name="external_updates" path="." />
+</paths>

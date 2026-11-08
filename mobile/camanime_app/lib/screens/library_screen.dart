@@ -6,6 +6,8 @@ import '../core/cam_ui.dart';
 import '../core/device_storage.dart';
 import '../core/downloads.dart';
 import '../core/models.dart';
+import '../core/watchlist.dart';
+import '../main.dart' show DetailScreen;
 import 'player_screen.dart';
 
 /// Library = live download queue + offline episodes, folded into one folder
@@ -24,6 +26,11 @@ class _LibraryTabState extends State<LibraryTab> {
   /// Where each downloaded series was left off: folder key -> episode + ms.
   Map<String, Map<String, dynamic>> _resume = const {};
 
+  /// 0 = downloads, 1 = watchlist, 2 = history.
+  int _view = 0;
+  List<Map<String, dynamic>> _watch = const [];
+  List<Map<String, dynamic>> _history = const [];
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +42,25 @@ class _LibraryTabState extends State<LibraryTab> {
     if (!mounted) return;
     setState(() => _started = true);
     await _loadResume();
+    await _loadLists();
+  }
+
+  Future<void> _loadLists() async {
+    final watch = await Watchlist.entries();
+    final history = await WatchProgress.history();
+    if (!mounted) return;
+    setState(() {
+      _watch = watch;
+      _history = history;
+    });
+  }
+
+  Future<void> _openAnime(String id, String title) async {
+    if (id.trim().isEmpty || id.startsWith('title:')) return;
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => DetailScreen(animeId: id, title: title),
+    ));
+    await _loadLists();
   }
 
   /// Reads the saved position for every anime in the library, so a folder can
@@ -110,6 +136,11 @@ class _LibraryTabState extends State<LibraryTab> {
                         ]),
                   ),
                   IconButton(
+                    tooltip: 'Pause all downloads',
+                    onPressed: active.isEmpty ? null : _manager.pauseAll,
+                    icon: const Icon(Icons.pause_circle_outline_rounded),
+                  ),
+                  IconButton(
                     tooltip: 'Resume all downloads',
                     onPressed: active.isEmpty ? null : _manager.resumeAll,
                     icon: const Icon(Icons.play_circle_outline_rounded),
@@ -117,7 +148,10 @@ class _LibraryTabState extends State<LibraryTab> {
                 ]),
                 const SizedBox(height: 14),
                 _summary(active.length, readyCount),
-                if (!_started)
+                _libraryTabs(),
+                if (_view == 1) ..._watchlistSection()
+                else if (_view == 2) ..._historySection()
+                else if (!_started)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 40),
                     child: Center(child: CircularProgressIndicator()),
@@ -199,6 +233,182 @@ class _LibraryTabState extends State<LibraryTab> {
         },
       ),
     );
+  }
+
+  Widget _libraryTabs() {
+    const labels = ['Downloads', 'Watchlist', 'History'];
+    const icons = [
+      Icons.download_rounded,
+      Icons.bookmark_rounded,
+      Icons.history_rounded
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 14, 0, 2),
+      child: Row(children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _view = i),
+              child: Container(
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _view == i ? CamColors.surfaceAlt : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _view == i ? CamColors.accent : CamColors.line),
+                ),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icons[i],
+                          size: 15,
+                          color: _view == i
+                              ? CamColors.accent
+                              : CamColors.inkDim),
+                      const SizedBox(width: 5),
+                      Text(labels[i],
+                          style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                              color: _view == i
+                                  ? CamColors.ink
+                                  : CamColors.inkDim)),
+                    ]),
+              ),
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _posterThumb(String image) => ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 44,
+          height: 58,
+          child: image.isEmpty
+              ? Container(
+                  color: CamColors.surfaceAlt,
+                  alignment: Alignment.center,
+                  child: const Icon(Icons.movie_rounded,
+                      size: 18, color: CamColors.inkDim))
+              : Image.network(image,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                        color: CamColors.surfaceAlt,
+                        alignment: Alignment.center,
+                        child: const Icon(Icons.movie_rounded,
+                            size: 18, color: CamColors.inkDim),
+                      )),
+        ),
+      );
+
+  List<Widget> _watchlistSection() {
+    return [
+      CamSectionTitle('Watchlist',
+          eyebrow: '${_watch.length} saved',
+          padding: const EdgeInsets.fromLTRB(0, 20, 0, 10)),
+      if (_watch.isEmpty)
+        const CamCard(
+          child: EmptyState(
+            icon: Icons.bookmark_border_rounded,
+            title: 'Your watchlist is empty',
+            message:
+                'Open any anime and tap the bookmark to keep it here for later. It stays on this device.',
+          ),
+        )
+      else
+        for (final row in _watch)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 9),
+            child: CamCard(
+              padding: const EdgeInsets.all(11),
+              onTap: () => _openAnime('${row['id']}', '${row['title']}'),
+              child: Row(children: [
+                _posterThumb('${row['image']}'),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${row['title']}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 13)),
+                        const SizedBox(height: 3),
+                        Text('${row['episodes'] ?? 0} episodes · on this device',
+                            style: const TextStyle(
+                                color: CamColors.inkDim, fontSize: 10.5)),
+                      ]),
+                ),
+                IconButton(
+                  tooltip: 'Remove from watchlist',
+                  onPressed: () async {
+                    await Watchlist.remove('${row['id']}');
+                    await _loadLists();
+                  },
+                  icon: const Icon(Icons.bookmark_remove_rounded,
+                      size: 19, color: CamColors.inkDim),
+                ),
+              ]),
+            ),
+          ),
+    ];
+  }
+
+  List<Widget> _historySection() {
+    return [
+      CamSectionTitle('History',
+          eyebrow: '${_history.length} episodes',
+          padding: const EdgeInsets.fromLTRB(0, 20, 0, 10)),
+      if (_history.isEmpty)
+        const CamCard(
+          child: EmptyState(
+            icon: Icons.history_rounded,
+            title: 'Nothing watched yet',
+            message:
+                'Every episode you play is listed here with how far you got, so you can jump straight back in.',
+          ),
+        )
+      else
+        for (final row in _history)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 9),
+            child: CamCard(
+              padding: const EdgeInsets.all(11),
+              onTap: () => _openAnime('${row['id']}', '${row['title']}'),
+              child: Row(children: [
+                _posterThumb('${row['image']}'),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${row['title']}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 13)),
+                        const SizedBox(height: 3),
+                        Text(
+                          'EP ${row['ep']} · '
+                          '${_clock(int.tryParse('${row['posMs']}') ?? 0)}'
+                          '${row['finished'] == true ? ' · watched' : ''}',
+                          style: const TextStyle(
+                              color: CamColors.inkDim, fontSize: 10.5),
+                        ),
+                      ]),
+                ),
+                const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+              ]),
+            ),
+          ),
+    ];
   }
 
   Widget _summary(int activeCount, int readyCount) {
@@ -509,6 +719,22 @@ class _LibraryTabState extends State<LibraryTab> {
               ),
           ]),
         ),
+        if (task.stage == DownloadStage.paused)
+          IconButton(
+            tooltip: 'Resume this download',
+            onPressed: () => _manager.resume(task.id),
+            icon: const Icon(Icons.play_arrow_rounded,
+                color: CamColors.accent, size: 21),
+          )
+        else if (task.stage == DownloadStage.downloading ||
+            task.stage == DownloadStage.queued ||
+            task.stage == DownloadStage.waitingNetwork)
+          IconButton(
+            tooltip: 'Pause this download',
+            onPressed: () => _manager.pause(task.id),
+            icon: const Icon(Icons.pause_rounded,
+                color: CamColors.inkDim, size: 21),
+          ),
         if (DeviceStorage.supported && !onDevice)
           IconButton(
             tooltip: 'Save to device',

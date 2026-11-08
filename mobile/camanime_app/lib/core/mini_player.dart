@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:video_player/video_player.dart';
 
+import 'pip.dart';
+
 /// The episode that keeps playing after the player screen is dismissed.
 ///
 /// Everything the mini bar needs lives here, including a builder that can
@@ -88,6 +90,7 @@ class MiniPlayer {
     _live = playback;
     controller.addListener(_pump);
     current.value = playback;
+    PiP.arm(true);
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(milliseconds: 500), (_) {
       // Position changes do not notify on their own; nudge the bar along.
@@ -116,6 +119,7 @@ class MiniPlayer {
   }
 
   static Future<void> close() async {
+    PiP.arm(false);
     _ticker?.cancel();
     _ticker = null;
     final live = _live;

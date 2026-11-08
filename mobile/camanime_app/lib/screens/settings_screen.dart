@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/ad_notifications.dart';
 import '../core/app_notifications.dart';
@@ -393,7 +394,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => Navigator.pop(context),
               ),
             ]),
+            _group('Watch history', [
+              _tile(
+                icon: Icons.history_rounded,
+                title: 'Clear watch history',
+                subtitle: 'Removes every saved resume point on this device',
+                trailing: const Icon(Icons.delete_outline_rounded,
+                    color: CamColors.inkDim),
+                onTap: _clearHistory,
+              ),
+            ]),
+            _group('Websites', [
+              _tile(
+                icon: Icons.public_rounded,
+                title: 'CamAnime on Render',
+                subtitle: 'Primary site · catalogue, downloads, developer API',
+                trailing: const Icon(Icons.open_in_new_rounded,
+                    color: CamColors.inkDim, size: 18),
+                onTap: () => _openSite('https://camanime.onrender.com'),
+              ),
+              const Divider(height: 1),
+              _tile(
+                icon: Icons.cloud_rounded,
+                title: 'CamAnime on Cloudflare',
+                subtitle: 'Mirror site · same catalogue and API',
+                trailing: const Icon(Icons.open_in_new_rounded,
+                    color: CamColors.inkDim, size: 18),
+                onTap: () =>
+                    _openSite('https://camanjme.camanime.workers.dev'),
+              ),
+            ]),
             _group('About', [
+              _tile(
+                icon: Icons.info_rounded,
+                title: 'About CamAnime',
+                subtitle: 'Version, build and credits',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: _aboutDialog,
+              ),
               _tile(
                 icon: Icons.info_outline_rounded,
                 title: widget.version.isEmpty
@@ -567,6 +606,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
         );
       }),
+    );
+  }
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CamColors.surface,
+        title: const Text('Clear watch history?'),
+        content: const Text(
+            'Every saved resume point and Continue watching entry is removed '
+            'from this device. Downloads and settings stay as they are.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keep')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: CamColors.danger,
+                foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await WatchProgress.clearAll();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Watch history cleared.')));
+  }
+
+  Future<void> _openSite(String url) async {
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(url)));
+    }
+  }
+
+  void _aboutDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CamColors.surface,
+        title: const Text('About CamAnime'),
+        content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Version ${widget.version.isEmpty ? '2.6.4' : widget.version}',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              const Text(
+                  'Free anime streaming: stream, download for offline, keep '
+                  'watching on any device. Built by kayefande & Co.',
+                  style: TextStyle(
+                      color: CamColors.inkDim, fontSize: 12, height: 1.45)),
+              const SizedBox(height: 12),
+              const Text('camanime.onrender.com',
+                  style: TextStyle(fontSize: 11.5)),
+              const Text('camanjme.camanime.workers.dev',
+                  style: TextStyle(fontSize: 11.5)),
+              const SizedBox(height: 10),
+              Text(widget.credit,
+                  style: const TextStyle(
+                      color: CamColors.inkDim, fontSize: 10.5)),
+            ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
     );
   }
 

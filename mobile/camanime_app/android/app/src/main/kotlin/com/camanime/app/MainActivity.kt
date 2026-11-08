@@ -2,8 +2,11 @@ package com.camanime.app
 
 import android.Manifest
 import android.content.Intent
+import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
+import android.util.Rational
 import androidx.core.app.ActivityCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,12 +17,20 @@ class MainActivity : FlutterActivity() {
     private val advertsChannel = "camanime/adverts"
     private val navigationChannel = "camanime/navigation"
     private val notificationsChannel = "camanime/notifications"
+    private val pipChannel = "camanime/pip"
 
     private var navigation: MethodChannel? = null
+    private var pip: MethodChannel? = null
     private var pendingAdvert: Map<String, String>? = null
+    /** True while the miniplayer is playing, i.e. worth floating. */
+    private var pipArmed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // In-app self-update: download the release APK, then hand it to the
+        // system installer (Android always requires that final confirmation).
+        UpdaterBridge.register(this, flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, keepAliveChannel)
             .setMethodCallHandler { call, result ->
@@ -96,6 +107,26 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Miniplayer, small floating window: leaving the app with playback
+        // running shrinks it above other apps; Android's own X closes it and
+        // Dart ends playback in that case.
+        pip = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            pipChannel
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "supported" -> result.success(pipSupported())
+                    "arm" -> {
+                        pipArmed = call.argument<Boolean>("armed") ?: false
+                        result.success(true)
+                    }
+                    "enter" -> result.success(enterPip())
+                    else -> result.notImplemented()
+                }
+            }
+        }
+
         StorageBridge.attach(this)
         StorageBridge.register(this, flutterEngine.dartExecutor.binaryMessenger)
 
@@ -125,6 +156,41 @@ class MainActivity : FlutterActivity() {
         val granted = grantResults.isNotEmpty() &&
             grantResults[0] == PackageManager.PERMISSION_GRANTED
         StorageBridge.onPermissionResult(requestCode, granted)
+    }
+
+    private fun pipSupported(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            packageManager.hasSystemFeature(
+                PackageManager.FEATURE_PICTURE_IN_PICTURE
+            )
+
+    private fun enterPip(): Boolean {
+        if (!pipSupported() || isInPictureInPictureMode) return false
+        return try {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            enterPictureInPictureMode(params)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Home button / app switch: float the episode instead of stopping it. */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (pipArmed) enterPip()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pip?.invokeMethod(
+            if (isInPictureInPictureMode) "pipEntered" else "pipClosed",
+            null
+        )
     }
 
     override fun onNewIntent(intent: Intent) {

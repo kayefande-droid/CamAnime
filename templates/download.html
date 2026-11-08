@@ -51,7 +51,7 @@ a{color:var(--accent, #FFB347)}
   <div class="card">
     <h2><i class="fab fa-android" style="color:#34d399"></i> Android <span class="badge">APK</span></h2>
     {% if apk %}
-    <div class="meta">CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
+    <div class="meta">CamAnime {{ app_version }} · CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
     {% else %}
     <div class="meta">APK builds on every release — grab the latest below.</div>
     {% endif %}
@@ -76,6 +76,7 @@ a{color:var(--accent, #FFB347)}
 </div>
 <h2 style="font-family:'Syne';margin-top:2rem">Build on your own PC in minutes</h2>
 <ol>
+  <li><strong>Automatic updates:</strong> the app checks the website on launch, downloads the new release and hands it to Android's installer. Library, downloads and watch history are preserved.</li>
   <li><strong>Android:</strong> install Flutter → <code>cd mobile/camanime_app &amp;&amp; flutter pub get &amp;&amp; flutter build apk --release</code> → file lands in <code>build/app/outputs/flutter-apk/app-release.apk</code>.</li>
   <li><strong>Windows:</strong> install .NET 8 SDK → <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code> → <code>CamAnime.exe</code>.</li>
   <li>Point the app at your site URL, sign in with your website account — one shared user database.</li>

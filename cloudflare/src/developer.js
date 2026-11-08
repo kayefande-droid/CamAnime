@@ -10,6 +10,7 @@
  * answers 404 with a message instead of a fake stream.
  */
 import { json, sha256Hex, randomToken } from "./util.js";
+import { alData } from "./anilist.js";
 import { currentUser } from "./auth.js";
 import { episodeBundle } from "./providers.js";
 import { animeDetails } from "./mobile.js";
@@ -213,4 +214,179 @@ export async function stream(env, request, url, animeId, epRaw) {
 /** OPTIONS preflight for the public endpoint. */
 export function preflight() {
   return new Response(null, { status: 204, headers: CORS });
+}
+
+export const SORTS = {
+  popular: "POPULARITY_DESC",
+  trending: "TRENDING_DESC",
+  rating: "SCORE_DESC",
+  recent: "START_DATE_DESC",
+  alphabetical: "TITLE_ROMAJI",
+};
+
+export const FORMATS = ["TV", "TV_SHORT", "MOVIE", "OVA", "ONA", "SPECIAL"];
+
+/**
+ * Validates the caller's key and books the call against the daily quota.
+ * Returns { id, calls } on success or { response } when the request is done.
+ */
+async function consumeKey(env, request, url) {
+  const key = keyFromRequest(request, url);
+  if (!key) {
+    return { response: json({
+      error: "Missing API key. Send it as the x-api-key header.",
+      docs: url.origin + "/developers",
+      create_key: url.origin + "/developers#keys",
+    }, 401, CORS) };
+  }
+  const row = await env.DB.prepare(
+    "SELECT id, revoked FROM api_keys WHERE key_hash = ?1"
+  ).bind(await sha256Hex(key)).first();
+  if (!row || row.revoked) {
+    return { response: json({ error: "Invalid or revoked API key." }, 403, CORS) };
+  }
+  const day = today();
+  await env.DB.prepare(
+    "INSERT INTO api_usage (key_id, day, calls) VALUES (?1, ?2, 1) ON CONFLICT(key_id, day) DO UPDATE SET calls = calls + 1"
+  ).bind(row.id, day).run();
+  const usage = await env.DB.prepare(
+    "SELECT calls FROM api_usage WHERE key_id = ?1 AND day = ?2"
+  ).bind(row.id, day).first();
+  const calls = usage?.calls ?? 1;
+  if (calls > DAILY_LIMIT) {
+    return { response: json({
+      error: `Daily free-tier limit of ${DAILY_LIMIT} calls reached.`,
+      calls_today: calls,
+      daily_limit: DAILY_LIMIT,
+    }, 429, CORS) };
+  }
+  await env.DB.prepare("UPDATE api_keys SET last_used = ?1 WHERE id = ?2")
+    .bind(Date.now(), row.id).run();
+  return { id: row.id, calls };
+}
+
+function card(media) {
+  const title = media.title || {};
+  const cover = media.coverImage || {};
+  return {
+    id: String(media.id || ""),
+    idMal: media.idMal ?? null,
+    title: title.english || title.romaji || title.native || "",
+    title_romaji: title.romaji || "",
+    image: cover.large || cover.medium || "",
+    episodes: media.episodes ?? null,
+    score: media.averageScore ?? null,
+    format: media.format ?? null,
+    year: media.seasonYear ?? null,
+  };
+}
+
+const LIST_QUERY = `
+query($page:Int,$perPage:Int,$sort:[MediaSort],$search:String,$format:MediaFormat,$genre:String){
+  Page(page:$page,perPage:$perPage){
+    pageInfo{hasNextPage total}
+    media(type:ANIME,sort:$sort,search:$search,format:$format,genre:$genre,isAdult:false){
+      id idMal format seasonYear episodes averageScore
+      title{romaji english native}
+      coverImage{large medium}
+    }
+  }
+}`;
+
+const DETAIL_QUERY = `
+query($id:Int){
+  Media(id:$id,type:ANIME){
+    id idMal format seasonYear episodes duration averageScore status genres
+    description(asHtml:false)
+    title{romaji english native}
+    coverImage{large medium extraLarge}
+    bannerImage
+    studios(isMain:true){nodes{name}}
+  }
+}`;
+
+/** GET /api/v1/anime — catalogue, filters and search in one keyed call. */
+export async function catalog(env, request, url) {
+  const guard = await consumeKey(env, request, url);
+  if (guard.response) return guard.response;
+
+  const q = (url.searchParams.get("q") || url.searchParams.get("search") || "").trim().slice(0, 100);
+  const genre = (url.searchParams.get("genre") || "").trim();
+  const format = (url.searchParams.get("format") || "").trim().toUpperCase();
+  const sortKey = (url.searchParams.get("sort") || "popular").trim().toLowerCase();
+  const page = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1));
+  const perPage = Math.min(50, Math.max(1, parseInt(url.searchParams.get("perPage") || "24", 10) || 24));
+
+  if (!SORTS[sortKey]) {
+    return json({ error: "Unsupported sort.", allowed: Object.keys(SORTS) }, 400, CORS);
+  }
+  if (format && !FORMATS.includes(format)) {
+    return json({ error: "Unsupported format.", allowed: FORMATS }, 400, CORS);
+  }
+
+  const variables = { page, perPage, sort: [SORTS[sortKey]] };
+  if (q) variables.search = q;
+  if (genre) variables.genre = genre;
+  if (format) variables.format = format;
+
+  let data;
+  try {
+    data = await alData(LIST_QUERY, variables);
+  } catch {
+    return json({ error: "The catalogue provider is unavailable." }, 502, CORS);
+  }
+  const rows = (data?.Page?.media || []).filter(Boolean).map(card);
+  return json({
+    api: "camanime-catalog",
+    version: 1,
+    query: { q, genre, format, sort: sortKey },
+    results: rows,
+    page,
+    perPage,
+    has_next_page: Boolean(data?.Page?.pageInfo?.hasNextPage),
+    usage: { calls_today: guard.calls, daily_limit: DAILY_LIMIT },
+    attribution: "Powered by CamAnime",
+  }, 200, {
+    ...CORS,
+    "x-ratelimit-limit": String(DAILY_LIMIT),
+    "x-ratelimit-remaining": String(Math.max(0, DAILY_LIMIT - guard.calls)),
+  });
+}
+
+/** GET /api/v1/anime/:id — one title with its playable episode list. */
+export async function animeDetail(env, request, url, animeId) {
+  const guard = await consumeKey(env, request, url);
+  if (guard.response) return guard.response;
+
+  let data;
+  try {
+    data = await alData(DETAIL_QUERY, { id: Number(animeId) });
+  } catch {
+    return json({ error: "The catalogue provider is unavailable." }, 502, CORS);
+  }
+  const media = data?.Media;
+  if (!media) return json({ error: "Anime not found." }, 404, CORS);
+
+  const total = Number(media.episodes || 0);
+  const base = url.origin + "/api/v1/stream/" + animeId + "/";
+  const anime = {
+    ...card(media),
+    description: media.description || "",
+    status: media.status ?? null,
+    genres: media.genres || [],
+    duration: media.duration ?? null,
+    banner: media.bannerImage || "",
+    studios: (media.studios?.nodes || []).map((n) => n?.name).filter(Boolean),
+    episode_list: Array.from({ length: total }, (_, i) => ({
+      episode: i + 1,
+      stream: base + (i + 1),
+    })),
+  };
+  return json({
+    api: "camanime-anime",
+    version: 1,
+    anime,
+    usage: { calls_today: guard.calls, daily_limit: DAILY_LIMIT },
+    attribution: "Powered by CamAnime",
+  }, 200, CORS);
 }
