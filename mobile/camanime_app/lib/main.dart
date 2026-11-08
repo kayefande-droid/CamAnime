@@ -25,7 +25,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.6.4';
+const String appVersion = '2.6.5';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 
@@ -344,7 +344,7 @@ class _CamAnimeAppState extends State<CamAnimeApp>
     final seed = Color(t['seed'] as int);
     final scaffold = Color(t['bg'] as int);
     return MaterialApp(
-      key: ValueKey('app-$mode-$themeName'),
+      key: ValueKey('app-$mode'),
       title: 'CamAnime',
       debugShowCheckedModeBanner: false,
       navigatorKey: appNavigatorKey,
@@ -364,8 +364,9 @@ class _CamAnimeAppState extends State<CamAnimeApp>
               tabs: _tabs,
               onTab: (i) => setState(() => tab = i),
               onSettings: () async {
-                await Navigator.push(
-                    context,
+                final nav = appNavigatorKey.currentState;
+                if (nav == null) return;
+                await nav.push(
                     MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                             themeName: themeName,
@@ -2448,6 +2449,10 @@ class _DetailScreenState extends State<DetailScreen> {
 
   final Set<int> selected = {};
   String dlStatus = '';
+
+  /// Download quality the user picked from the detail screen (persisted in
+  /// `download_quality`, the same key Settings edits).
+  String _dlQuality = '720';
   List comments = [];
   bool commentsBusy = false;
   String commentError = '';
@@ -2487,6 +2492,10 @@ class _DetailScreenState extends State<DetailScreen> {
     await _loadViewingState();
     final saved = await Watchlist.contains(widget.animeId);
     if (mounted && saved != _saved) setState(() => _saved = saved);
+    final qualityPref = await _downloadPref();
+    if (mounted && qualityPref != _dlQuality) {
+      setState(() => _dlQuality = qualityPref);
+    }
     // Resolve the servers for the episode the user is most likely to start in
     // the background, so the first Play/Download tap responds instantly.
     if (!dataSaver) unawaited(_warmFirstEpisode());
@@ -2713,6 +2722,70 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Shows the real file sizes/labels the servers resolved and lets the user
   /// pick one (used when the preference is "Ask").
+  /// Always-available quality picker, so the download size is a choice on the
+  /// anime page instead of something buried in Settings.
+  Future<void> _pickDownloadQuality() async {
+    const options = <(String, String, String)>[
+      ('smallest', 'Smallest file', 'Lowest resolution offered — smallest MB'),
+      ('360', '360p', 'Tiny files, fine on a phone screen'),
+      ('480', '480p', 'Balanced — the recommended default'),
+      ('720', '720p', 'Sharper, roughly double the 480p size'),
+      ('1080', '1080p', 'Full HD, the largest files'),
+      ('best', 'Best available', 'Whatever the servers offer, no cap'),
+      ('ask', 'Ask each time', 'Pick per episode with live file sizes'),
+    ];
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(18, 0, 18, 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Download quality',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    SizedBox(height: 2),
+                    Text('Applies to new downloads on this device',
+                        style:
+                            TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+                  ]),
+            ),
+          ),
+          for (final o in options)
+            ListTile(
+              leading: Icon(
+                  _dlQuality == o.$1
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_off_rounded,
+                  color: _dlQuality == o.$1
+                      ? CamColors.accent
+                      : CamColors.inkDim),
+              title: Text(o.$2),
+              subtitle: Text(o.$3,
+                  style:
+                      const TextStyle(color: CamColors.inkDim, fontSize: 11)),
+              onTap: () => Navigator.pop(ctx, o.$1),
+            ),
+          const SizedBox(height: 6),
+        ]),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final p = await SharedPreferences.getInstance();
+    await p.setString('download_quality', chosen);
+    if (!mounted) return;
+    setState(() => _dlQuality = chosen);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Downloads will use ${downloadQualityLabel(chosen).toLowerCase()}.'),
+        duration: const Duration(seconds: 2)));
+  }
+
   Future<DownloadOption?> _chooseDownload(List<DownloadOption> options) {
     if (options.length == 1) return Future.value(options.first);
     // Ask the servers for the real file size of every option at once, so the
@@ -3061,13 +3134,16 @@ class _DetailScreenState extends State<DetailScreen> {
       throw const HttpException(
           'No direct video file for this episode — it is stream-only.');
     }
+    final rawPoster = (info['image'] ?? '').toString().trim();
     await DownloadManager.instance.enqueue(
       animeTitle: (info['title'] ?? widget.title).toString(),
       animeId: int.tryParse(widget.animeId) ?? 0,
       episode: ep,
       audio: chosen.audio,
       url: chosen.url,
-      image: (info['image'] ?? '').toString(),
+      // Absolute URL: the notification host fetches this directly, without the
+      // app's API headers, so a relative path would never resolve to artwork.
+      image: rawPoster.isEmpty ? '' : Api.abs(rawPoster),
       season: (info['season'] ?? '').toString(),
       height: chosen.height,
       durationMinutes: _episodeMinutes,
@@ -3164,6 +3240,11 @@ class _DetailScreenState extends State<DetailScreen> {
                           onRate: _rateSheet,
                           saved: _saved,
                           onSave: _toggleWatch,
+                        ),
+                        const SizedBox(height: 10),
+                        _DownloadQualityRow(
+                          value: _dlQuality,
+                          onTap: _pickDownloadQuality,
                         ),
                         const SizedBox(height: 16),
                         _AudioSeasonBar(
@@ -4553,6 +4634,47 @@ class _AdminPanelState extends State<AdminPanel> {
             color: card2, borderRadius: BorderRadius.circular(999)),
         child: Text(label, style: const TextStyle(fontSize: 12)),
       );
+}
+
+/// Pill under the action buttons showing the download quality in force.
+class _DownloadQualityRow extends StatelessWidget {
+  final String value;
+  final VoidCallback onTap;
+  const _DownloadQualityRow({required this.value, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: CamColors.surfaceAlt,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: CamColors.line),
+        ),
+        child: Row(children: [
+          const Icon(Icons.high_quality_rounded,
+              size: 17, color: CamColors.accent),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Download quality · ${downloadQualityLabel(value)}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text('Change',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.primary)),
+          const Icon(Icons.chevron_right_rounded,
+              size: 18, color: CamColors.inkDim),
+        ]),
+      ),
+    );
+  }
 }
 
 // ── Settings (gear screen) ─────────────────────────────

@@ -37,6 +37,9 @@ android {
             // WorkManager + Room are reached reflectively; without these rules R8
             // strips them and the app crashes inside androidx.startup.
             isMinifyEnabled = true
+            // Drop unused resources too; minify + shrink make the release APK
+            // harder to inspect and smaller to download.
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

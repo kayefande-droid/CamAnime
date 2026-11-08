@@ -240,7 +240,7 @@ export async function route(env, request, url, parts) {
 
   if (p1 === "version") {
     return json({
-      app_version: env.APP_VERSION || "2.6.4",
+      app_version: env.APP_VERSION || "2.6.5",
       platform: "cloudflare-workers",
       download_url: "/static/downloads/CamAnime.apk",
       architecture: "workers+d1+r2",

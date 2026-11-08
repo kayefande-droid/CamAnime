@@ -3098,7 +3098,7 @@ def download_page():
 
 RELEASE_TAG = os.environ.get("CAMANIME_RELEASE_TAG", "v1.2.0")
 RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
-APP_VERSION = "2.6.4"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.6.5"  # keep aligned with mobile/camanime_app/pubspec.yaml
 
 
 def _serve_app_file(local_names, release_name, download_name):

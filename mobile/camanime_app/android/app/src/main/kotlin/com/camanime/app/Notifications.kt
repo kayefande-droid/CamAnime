@@ -8,6 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -83,7 +89,7 @@ object Notifications {
             title,
             episode,
             taskId,
-            localFallbackPoster(appContext)
+            localFallbackPoster(title, episode)
         )
 
         if (imageUrl.isNullOrBlank()) return
@@ -147,15 +153,54 @@ object Notifications {
         }
     }
 
-    /** Local artwork used until (or instead of) the remote poster. */
-    private fun localFallbackPoster(context: Context): Bitmap {
-        val decoded = try {
-            BitmapFactory.decodeResource(context.resources, POSTER_FALLBACK)
-        } catch (_: Exception) {
-            null
+    /**
+     * Local poster card used until (or instead of) the remote artwork.
+     *
+     * Drawn on the device so the banner always reads as a card — title, episode
+     * and brand colour — rather than a bare icon when the CDN is unreachable,
+     * the artwork is behind a hotlink rule, or the download ran offline.
+     */
+    private fun localFallbackPoster(title: String, episode: Int): Bitmap {
+        val w = 640
+        val h = 360
+        val card = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(card)
+        canvas.drawColor(Color.parseColor("#0A0D14"))
+        val wash = Paint().apply {
+            shader = LinearGradient(
+                0f, 0f, w.toFloat(), h.toFloat(),
+                Color.parseColor("#16305A"), Color.parseColor("#0A0D14"),
+                Shader.TileMode.CLAMP
+            )
         }
-        return decoded ?: Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), wash)
+        canvas.drawRect(
+            0f, h - 10f, w.toFloat(), h.toFloat(),
+            Paint().apply { color = Color.parseColor("#087BFF") }
+        )
+        val titlePaint = Paint().apply {
+            color = Color.WHITE
+            textSize = 38f
+            isAntiAlias = true
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val subPaint = Paint().apply {
+            color = Color.parseColor("#B7C3D9")
+            textSize = 24f
+            isAntiAlias = true
+        }
+        val label = title.trim().ifBlank { "CamAnime" }
+        canvas.drawText(
+            if (label.length > 24) label.substring(0, 24) else label,
+            30f, h / 2f, titlePaint
+        )
+        canvas.drawText("Episode $episode · CamAnime", 30f, h / 2f + 46f, subPaint)
+        return card
     }
+
+    /** Placeholder kept for callers that only need a valid bitmap. */
+    private fun blankPoster(): Bitmap =
+        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
 
     /**
      * Downloads and downscales the poster. Runs on [posterExecutor], never on
@@ -169,6 +214,12 @@ object Notifications {
                 readTimeout = 4000
                 instanceFollowRedirects = true
                 setRequestProperty("User-Agent", "CamAnime/Android")
+                setRequestProperty(
+                    "Accept",
+                    "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+                )
+                setRequestProperty("Referer", "https://camanime.onrender.com/")
+                setInstanceFollowRedirects(true)
                 connect()
             }
             if (connection.responseCode !in 200..299) return null
