@@ -99,18 +99,18 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
   <div class="set-card">
     {% if user %}
     <h2><i class="fas fa-user-check"></i> Account
-      {% if user.get('role') == 'admin' %}<span style="font-size:.8rem;color:#34d399;border:1px solid rgba(52,211,153,.4);border-radius:999px;padding:.15rem .7rem;margin-left:.4rem">Admin</span>{% endif %}
+      {% if user.get('role') in ['admin', 'owner', 'developer', 'support'] %}<span style="font-size:.8rem;color:#34d399;border:1px solid rgba(52,211,153,.4);border-radius:999px;padding:.15rem .7rem;margin-left:.4rem">Admin</span>{% endif %}
     </h2>
     <p>Signed in as <b>{{ user.get('name') or user.get('email') }}</b>{% if user.get('email') and user.get('name') %} ({{ user.get('email') }}){% endif %}.</p>
     <div class="btn-row">
-      {% if user.get('role') == 'admin' %}
-      <a class="btn btn-save" href="/admin"><i class="fas fa-shield-halved"></i> Open admin tools</a>
+      {% if user.get('role') in ['admin', 'owner', 'developer', 'support'] %}
+      <a class="btn btn-save" href="{{ admin_path }}"><i class="fas fa-shield-halved"></i> Open admin tools</a>
       {% endif %}
       <a class="btn btn-danger" href="/logout"><i class="fas fa-arrow-right-from-bracket"></i> Sign out</a>
     </div>
     {% else %}
     <h2><i class="fas fa-right-to-bracket"></i> Sign in</h2>
-    <p>Save your comments, ratings and watch progress to your CamAnime account. Watching works without an account too. Admins sign in with the Admin mode.</p>
+    <p>Save your comments, ratings and watch progress to your CamAnime account. Watching works without an account too.</p>
     <form method="POST" action="/login?next=/settings" class="login-fields">
       <input type="hidden" name="action" value="signin">
       <input type="email" name="email" required autocomplete="email" placeholder="Email" aria-label="Email">
@@ -118,7 +118,6 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
       <div class="btn-row">
         <button type="submit" class="btn btn-save"><i class="fas fa-right-to-bracket"></i> Sign in</button>
         <button type="submit" class="btn btn-ghost" name="action" value="signup"><i class="fas fa-user-plus"></i> Create account</button>
-        <a class="btn btn-ghost" style="color:#34d399" href="/login?mode=admin&next=/admin"><i class="fas fa-shield-halved"></i> Admin sign in</a>
       </div>
     </form>
     {% endif %}

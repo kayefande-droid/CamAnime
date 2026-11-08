@@ -87,6 +87,30 @@ app.secret_key = _load_secret_key()
 
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 86400  # /static cached 1 day
 
+
+# ── Private owner console ──────────────────────────────────────────────
+# The dashboard is not reachable at /admin. It lives at an unlisted path the
+# owner chooses with CAMANIME_ADMIN_PATH; the Settings page only shows the link
+# to signed-in privileged accounts. Authentication and roles are still enforced
+# on every request and every /api/admin/* call — the hidden path is extra
+# obscurity, never the authorization itself.
+def _resolve_admin_path() -> str:
+    raw = (os.environ.get("CAMANIME_ADMIN_PATH") or "").strip()
+    path = raw or "/owner-console"
+    if not path.startswith("/"):
+        path = "/" + path
+    if not re.fullmatch(r"/[A-Za-z0-9][A-Za-z0-9_-]{5,79}", path):
+        raise RuntimeError(
+            "CAMANIME_ADMIN_PATH must be a simple path such as "
+            "/owner-console-7f3a (letters, digits, dash, underscore).")
+    if path in {"/admin", "/login", "/logout", "/settings", "/"}:
+        raise RuntimeError("CAMANIME_ADMIN_PATH must not reuse a public route.")
+    return path
+
+
+ADMIN_PATH = _resolve_admin_path()
+app.jinja_env.globals["admin_path"] = ADMIN_PATH
+
 # ── Session / cookie hardening ─────────────────────────
 # Secure cookies require HTTPS; Render terminates TLS so this is correct in
 # production. Set CAMANIME_COOKIE_SECURE=0 for local plain-HTTP development.
@@ -149,7 +173,7 @@ AD_NETWORK_PATTERN = re.compile(
 def _is_ad_url(url_text: str) -> bool:
     return bool(AD_NETWORK_PATTERN.search(url_text or ""))
 
-_AUTHENTICATED_PATHS = ("/admin", "/settings", "/login", "/logout")
+_AUTHENTICATED_PATHS = (ADMIN_PATH, "/settings", "/login", "/logout")
 
 
 def _client_ip() -> str:
@@ -3164,7 +3188,9 @@ def api_auth_logout():
 def login_page():
     from flask import session as _s
     error = ""
-    mode = request.args.get("mode", "signin")
+    # Admin sign-in is the normal form; only the signup tab changes the page.
+    # A public /login?mode=admin no longer advertises an admin entrance.
+    mode = "signup" if request.args.get("mode") == "signup" else "signin"
     mfa_required = False
     if request.method == "POST":
         email = request.form.get("email", "").strip()
@@ -3203,13 +3229,16 @@ def logout_page():
     return redirect(url_for("home"))
 
 
-@app.route("/admin")
 def admin_page():
     u = _current_user()
     if not _is_privileged(u):
-        return redirect(url_for("login_page", mode="admin", next="/admin"))
+        return redirect(url_for("login_page", next=ADMIN_PATH))
     stats = platform.admin_stats()
     return render_template("admin.html", user=u, stats=stats, schedule=platform.CLASSICS_SCHEDULE)
+
+
+# Registered only at the private path. /admin intentionally has no route.
+app.add_url_rule(ADMIN_PATH, "admin_page", admin_page)
 
 
 @app.route("/schedule")

@@ -369,16 +369,19 @@ class DownloadManager extends ChangeNotifier {
 
   DownloadTask? byId(String id) => _tasks[id];
 
+  /// Resolves a stored episode location. Legacy imports may be absolute; new
+  /// episodes are `<Series>/<episode file>` relative to the media directory.
+  File? _fileForStored(String? name) {
+    if (name == null || name.trim().isEmpty || _media == null) return null;
+    final raw = name.trim();
+    final file = File(raw);
+    if (file.isAbsolute) return file;
+    return File('${_media!.path}${Platform.pathSeparator}$raw');
+  }
+
   File? completedFile(DownloadTask task) {
-    final name = task.localName;
-    if (name == null || _media == null) return null;
-    // Legacy imports and recovered files record an absolute path; newer tasks
-    // record just the file name inside the media folder. Prefixing an absolute
-    // path used to make those files look missing, which hid them from the
-    // Library after an update.
-    final path = File(name).isAbsolute ? name : '${_media!.path}/$name';
-    final file = File(path);
-    return file.existsSync() ? file : null;
+    final file = _fileForStored(task.localName);
+    return file != null && file.existsSync() ? file : null;
   }
 
   File? partFile(DownloadTask task) {
@@ -417,6 +420,9 @@ class DownloadManager extends ChangeNotifier {
       }
       await _loadQueue();
       await _importLegacyLibrary(support);
+      // One filesystem folder per series, including episodes saved by older
+      // versions in the flat media directory.
+      await _organizeMedia();
       await _adoptOrphanMedia();
       await refresh();
       _ready = true;
@@ -464,9 +470,7 @@ class DownloadManager extends ChangeNotifier {
   }
 
   bool _fileExists(String? name) =>
-      name != null &&
-      _media != null &&
-      File('${_media!.path}/$name').existsSync();
+      _fileForStored(name)?.existsSync() ?? false;
 
   /// Episodes downloaded by the previous app version already live in the
   /// legacy library folder. Surface them as completed tasks instead of
@@ -524,6 +528,87 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  /// Moves every finished episode into `media/<Series>/`.
+  ///
+  /// Older builds saved all episodes flat inside `media/`, so two seasons of a
+  /// long series looked shuffled together. Task files are moved using their
+  /// real title; stray flat files infer the series from `Show - Ep N.ext`.
+  /// Names are kept, so playback paths and the queue update without re-encoding.
+  Future<void> _organizeMedia() async {
+    if (_media == null) return;
+    final mediaPath = _media!.path;
+    var changed = false;
+
+    for (final task in _tasks.values) {
+      if (task.stage != DownloadStage.completed) continue;
+      final file = completedFile(task);
+      if (file == null || !file.path.startsWith(mediaPath)) continue;
+      if (file.parent.path == mediaPath) {
+        final folder = Directory(
+            '$mediaPath${Platform.pathSeparator}${_safeName(task.animeTitle)}');
+        await folder.create(recursive: true);
+        final moved = await _moveInto(file, folder, task.fileName);
+        if (moved != null) {
+          task.localName = _relativeToMedia(moved);
+          changed = true;
+        }
+      }
+    }
+
+    // Files with no queue entry (recovered library) get the same treatment so
+    // nothing is left loose beside the series folders.
+    await for (final entity in _media!.list(followLinks: false)) {
+      if (entity is! File) continue;
+      final lower = entity.path.toLowerCase();
+      if (!lower.endsWith('.mp4') && !lower.endsWith('.m4v')) continue;
+      final base = entity.uri.pathSegments.last;
+      final title = _seriesFromFilename(base);
+      if (title.isEmpty) continue;
+      final folder = Directory(
+          '$mediaPath${Platform.pathSeparator}${_safeName(title)}');
+      await folder.create(recursive: true);
+      final moved = await _moveInto(entity, folder, base);
+      if (moved != null) changed = true;
+    }
+
+    if (changed) await _persist();
+  }
+
+  Future<File?> _moveInto(File source, Directory folder, String preferred) async {
+    if (!await source.exists()) return null;
+    var name = _safeName(preferred);
+    if (name.isEmpty) name = source.uri.pathSegments.last;
+    var dest = File('${folder.path}${Platform.pathSeparator}$name');
+    if (await dest.exists()) {
+      if (dest.path == source.path) return source;
+      name = '${DateTime.now().microsecondsSinceEpoch}-$name';
+      dest = File('${folder.path}${Platform.pathSeparator}$name');
+    }
+    try {
+      await source.rename(dest.path);
+      return dest;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _relativeToMedia(File file) {
+    final prefix = '${_media!.path}${Platform.pathSeparator}';
+    return file.path.startsWith(prefix)
+        ? file.path.substring(prefix.length)
+        : file.path;
+  }
+
+  /// `Frieren - Ep 12.mp4` -> `Frieren`; also handles `[Group] Show - Ep 1`.
+  String _seriesFromFilename(String fileName) {
+    final stem = fileName.replaceFirst(
+        RegExp(r'\.(mp4|m4v|ts|mkv|webm)$', caseSensitive: false), '');
+    final match = RegExp(r'^(.*?)\s+-\s+Ep\s*\d+', caseSensitive: false)
+        .firstMatch(stem);
+    final title = (match?.group(1) ?? '').trim();
+    return title.isEmpty ? stem.trim() : title;
+  }
+
   /// Adopts finished media files that the queue does not reference.
   ///
   /// An app update replaces the APK and leaves the files in app storage alone,
@@ -537,29 +622,42 @@ class DownloadManager extends ChangeNotifier {
     for (final task in _tasks.values) {
       known.add(task.fileName);
       final local = task.localName;
-      if (local != null) known.add(local.split(Platform.pathSeparator).last);
+      if (local != null) {
+        known.add(local.split(Platform.pathSeparator).last);
+        final file = _fileForStored(local);
+        if (file != null) known.add(file.path);
+      }
     }
     var added = false;
-    await for (final entity in _media!.list()) {
+    // Recursive: episodes live inside their series folder now.
+    await for (final entity in _media!.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
       final name = entity.uri.pathSegments.last;
       final lower = name.toLowerCase();
       if (!lower.endsWith('.mp4') && !lower.endsWith('.m4v')) continue;
-      if (known.contains(name)) continue;
+      if (known.contains(name) || known.contains(entity.path)) continue;
       final size = await entity.length();
       if (size < 1024) continue;
       final id = 'recovered-${sha256.convert(utf8.encode(entity.path)).toString().substring(0, 16)}';
       if (_tasks.containsKey(id)) continue;
+      final parent = entity.parent.path == _media!.path
+          ? ''
+          : entity.parent.uri.pathSegments.last;
+      final stem = name.replaceAll(
+          RegExp(r'\.(mp4|m4v)$', caseSensitive: false), '');
+      final parsed = RegExp(r'^(.*?)\s+-\s+Ep\s*(\d+)', caseSensitive: false)
+          .firstMatch(stem);
+      final title = (parsed?.group(1) ?? (parent.isEmpty ? stem : parent)).trim();
+      final episode = int.tryParse(parsed?.group(2) ?? '') ?? 0;
       _tasks[id] = DownloadTask(
         id: id,
         animeId: 0,
-        animeTitle: name.replaceAll(
-            RegExp(r'\.(mp4|m4v)$', caseSensitive: false), ''),
-        episode: 0,
+        animeTitle: title.isEmpty ? stem : title,
+        episode: episode,
         audio: 'sub',
         sourceUrl: '',
         fileName: name,
-        localName: entity.path,
+        localName: _relativeToMedia(entity),
         received: size,
         total: size,
         stage: DownloadStage.completed,
@@ -710,7 +808,15 @@ class DownloadManager extends ChangeNotifier {
       final part = partFile(task);
       if (part != null) await part.delete();
       final done = completedFile(task);
-      if (done != null) await done.delete();
+      if (done != null) {
+        final parent = done.parent;
+        await done.delete();
+        // Remove the now-empty series folder so the library stays tidy.
+        if (parent.path != _media!.path) {
+          final left = await parent.list().isEmpty;
+          if (left) await parent.delete();
+        }
+      }
       final local = task.localName;
       if (local != null && local.endsWith('.mp4')) {
         final file = File(local);
@@ -1014,15 +1120,19 @@ class DownloadManager extends ChangeNotifier {
       task.error = 'The episode file is empty.';
       return;
     }
+    final series = _safeName(task.animeTitle);
+    final folder = Directory(
+        '${_media!.path}${Platform.pathSeparator}$series');
+    await folder.create(recursive: true);
     var target = task.fileName;
-    var dest = File('${_media!.path}/$target');
+    var dest = File('${folder.path}${Platform.pathSeparator}$target');
     if (await dest.exists()) {
       target = '${task.id}-${task.fileName}';
-      dest = File('${_media!.path}/$target');
+      dest = File('${folder.path}${Platform.pathSeparator}$target');
     }
     await part.rename(dest.path);
     task
-      ..localName = target
+      ..localName = '$series/$target'
       ..received = size
       ..total = size
       ..estimated = false

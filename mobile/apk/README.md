@@ -5,9 +5,9 @@ Dart obfuscation, split debug symbols).
 
 | File | Version | SHA-256 |
 | --- | --- | --- |
-| `CamAnime-2.8.0.apk` | 2.8.0 (versionCode 18) | `edb044182d9dfc2b4d454230c8a2d111c43698f451fa0e0b6e417dadfdb4654d` |
+| `CamAnime-2.8.0.apk` | 2.8.0 (versionCode 18) | `03ad05d9c0ffbd252b8d2449d9a00354f8f39a411212e0ffc2b1871cbd4ba0a1` |
 
-Size: 53,316,395 bytes. Signed with the same key as every previous CamAnime
+Size: 53,398,315 bytes. Signed with the same key as every previous CamAnime
 build, so older installs update in place and keep their downloads, watchlist
 and watch history.
 
@@ -28,6 +28,7 @@ and watch history.
   hours) plus a manual Settings check, downloads the APK in-app and opens
   Android's installer. Updates never clear the offline library, watchlist or
   watch history; finished files are re-adopted if the queue index is lost.
+- **Series folders**: every downloaded episode of a series lives in that series' own folder in the offline library, including episodes saved before this build.
 - **Admin notifications**: publishing an announcement at `/admin` sends the website banner, the app feed and an Android notification. Registered installs get an FCM broadcast when Firebase is configured; otherwise the APK shows the newest unseen announcement as a local notification on next launch.
 - Version 2.7.0 and older are refused by the API and the Cloudflare edge.
 

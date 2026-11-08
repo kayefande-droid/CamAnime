@@ -290,7 +290,11 @@ async function pageRoutes(request, env, ctx, path) {
     return html(developersPage(user));
   }
 
-  if (path === "/admin") {
+  // The dashboard is not public: it renders only on the private path set in
+  // the worker's ADMIN_PATH secret. Unset means /admin is a 404 here, matching
+  // the Render origin (which uses CAMANIME_ADMIN_PATH).
+  const adminPath = String(env.ADMIN_PATH || "").trim();
+  if (adminPath && path === adminPath) {
     if (!user || user.role !== "admin") {
       const inner = `<h1 class="section-title">Admin</h1><div class="discovery-empty">Admin account required. <a href="/login">Sign in</a>.</div>`;
       return html(chrome("Admin", "CamAnime admin.", user?.name, inner), user ? 403 : 401);

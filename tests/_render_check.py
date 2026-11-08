@@ -30,11 +30,11 @@ for path in sorted(glob.glob("templates/*.html")) + ["static/css/sync.css"]:
 
 # 3. render network-free routes
 client = app.test_client()
-for route in ["/settings", "/login", "/admin", "/download", "/promo", "/scraper"]:
+for route in ["/settings", "/login", "/owner-console", "/download", "/promo", "/scraper"]:
     resp = client.get(route)
     body = resp.get_data(as_text=True)
     has_new = all(s in body for s in ("obsidian", "neo", "tokyo"))
-    ok = (resp.status_code == 200 or (route == "/admin" and resp.status_code == 302)) and (has_new or route == "/admin")
+    ok = (resp.status_code == 200 or (route == "/owner-console" and resp.status_code == 302)) and (has_new or route == "/owner-console")
     print(f"{'PASS' if ok else 'FAIL'} {route} status={resp.status_code} themes={has_new}")
     if not ok: fails += 1
     if route == "/settings":
