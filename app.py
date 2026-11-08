@@ -3815,7 +3815,8 @@ def api_version():
                     "apk": "CamAnime.apk", "windows": "CamAnime-Windows.zip",
                     "apk_url": "/get/android", "windows_url": "/get/windows",
                     "download_url": policy["download_url"],
-                    "notes": policy["release_notes"]})
+                    "notes": policy["release_notes"],
+                    "sha256": _apk_sha256()})
 
 
 @app.route("/api/announcements")
@@ -4050,7 +4051,6 @@ def _update_payload(policy, build_code=None):
         "minimum_supported_version": policy["minimum_supported_version"],
         "minimum_supported_version_code": policy["minimum_supported_version_code"],
         "discontinued": retired,
-        "discontinued_at_or_below_version": app_version.DISCONTINUED_AT_OR_BELOW_VERSION,
         "discontinued_at_or_below_version": app_version.DISCONTINUED_AT_OR_BELOW_VERSION,
         "discontinued_at_or_below_version_code": app_version.DISCONTINUED_AT_OR_BELOW_VERSION_CODE,
         "status": "update_required" if reason else "ok",
