@@ -48,6 +48,7 @@ class AppNotifications {
     required String animeTitle,
     required int episode,
     required String taskId,
+    String? imageUrl,
   }) async {
     if (!Platform.isAndroid || !_enabled) return;
     try {
@@ -55,6 +56,7 @@ class AppNotifications {
         'title': animeTitle,
         'episode': episode,
         'id': taskId,
+        if (imageUrl != null && imageUrl.isNotEmpty) 'image': imageUrl,
       });
     } catch (_) {}
   }

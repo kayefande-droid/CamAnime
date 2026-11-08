@@ -21,6 +21,12 @@ def api(tmp_path, monkeypatch):
     sys.modules.pop("camanime_platform", None)
     module = importlib.import_module("app")
     module.app.config.update(TESTING=True)
+    # streaming_providers stays imported across tests, so its bundle/mapping
+    # caches would otherwise leak one test's mocked servers into the next.
+    module.streaming_manager.clear_caches()
+    # Mocks in this file swap providers between calls for the same episode;
+    # caching would hand the second call the first call's servers.
+    module.streaming_manager.bundle_cache_ttl = 0
     yield module
     sys.modules.pop("app", None)
     sys.modules.pop("camanime_platform", None)

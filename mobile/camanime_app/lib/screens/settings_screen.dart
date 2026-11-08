@@ -94,6 +94,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 6, 16, 36),
           children: [
+            _group('Recommended', [
+              _tile(
+                icon: Icons.auto_awesome_rounded,
+                title: 'Apply recommended settings',
+                subtitle:
+                    'Small downloads, data-saver streaming, autoplay and alerts',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: _applyRecommended,
+              ),
+              const Divider(height: 1),
+              _tile(
+                icon: Icons.tune_rounded,
+                title: 'Recommended at a glance',
+                subtitle: 'SUB audio \u00b7 480p downloads \u00b7 data-saver '
+                    'streaming \u00b7 save to device \u00b7 autoplay on',
+              ),
+            ]),
             _group('Appearance', [
               Padding(
                 padding: const EdgeInsets.all(14),
@@ -189,6 +207,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
             _group('Downloads', [
+              _tile(
+                icon: Icons.straighten_rounded,
+                title: 'Download & stream by pixel size',
+                subtitle: 'Download ${_qualityLabel(quality)} \u00b7 '
+                    'stream ${_qualityLabel(streamQuality)}',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: _pixelPanel,
+              ),
               _switchTile(
                 icon: Icons.smartphone_rounded,
                 title: 'Save to device storage',
@@ -344,6 +371,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                 ),
               ]),
+            _group('Profile', [
+              _tile(
+                icon: Icons.account_circle_outlined,
+                title: 'View profile picture',
+                subtitle: 'See your avatar enlarged',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: _viewProfilePicture,
+              ),
+            ]),
             _group('Account', [
               _tile(
                 icon: Icons.person_outline_rounded,
@@ -390,6 +427,192 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ]),
           ],
         ),
+      ),
+    );
+  }
+
+  String _qualityLabel(String value) {
+    switch (value) {
+      case 'smallest':
+        return 'smallest file';
+      case 'best':
+        return 'best quality';
+      case 'auto':
+        return 'auto';
+      case 'ask':
+        return 'ask each time';
+      default:
+        return '${value}p';
+    }
+  }
+
+  /// One tap puts every choice back to what works best on a phone: SUB audio,
+  /// 480p downloads to keep files small, data-saver streaming, autoplay on,
+  /// saved copies in device storage, and the download-complete alert on.
+  Future<void> _applyRecommended() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('app_audio', 'sub');
+    await p.setString('download_quality', '480');
+    await p.setString('stream_quality', '480');
+    await p.setBool('app_autoplay', true);
+    await p.setBool('app_resume', true);
+    await p.setBool('app_data_saver', true);
+    await p.setBool('save_to_device', true);
+    await AppNotifications.setEnabled(true);
+    if (!mounted) return;
+    setState(() {
+      audio = 'sub';
+      quality = '480';
+      streamQuality = '480';
+      autoplay = true;
+      resume = true;
+      dataSaver = true;
+      saveToDevice = true;
+      downloadAlerts = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Recommended settings applied.')));
+  }
+
+  /// Pixel-level moderation: the exact height used for downloads and streams,
+  /// so an episode can be kept small (360/480p) or sharp (720/1080p), plus the
+  /// data-saver switch that caps streaming when a connection is metered.
+  Future<void> _pixelPanel() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+        Future<void> save(String key, String value) async {
+          final p = await SharedPreferences.getInstance();
+          await p.setString(key, value);
+          if (!mounted) return;
+          setState(() {
+            if (key == 'download_quality') {
+              quality = value;
+            } else {
+              streamQuality = value;
+            }
+          });
+          setSheet(() {});
+        }
+
+        Widget chips(List<String> values, String selected,
+                ValueChanged<String> onPick) =>
+            Wrap(spacing: 7, runSpacing: 7, children: [
+              for (final value in values)
+                ChoiceChip(
+                  label: Text(_qualityLabel(value)),
+                  selected: selected == value,
+                  onSelected: (_) => onPick(value),
+                ),
+            ]);
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 2, 20, 28),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Download & stream by pixel size',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text(
+                    'Lower pixel heights make much smaller episode files; higher '
+                    'ones look sharper but cost more data. These picks apply to '
+                    'every new download and stream.',
+                    style: TextStyle(
+                        color: CamColors.inkDim, fontSize: 11.5, height: 1.4)),
+                const SizedBox(height: 16),
+                const Text('DOWNLOAD HEIGHT',
+                    style: TextStyle(
+                        color: CamColors.inkDim,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 6),
+                chips(const ['smallest', '360', '480', '720', '1080'], quality,
+                    (value) => save('download_quality', value)),
+                const SizedBox(height: 16),
+                const Text('STREAM HEIGHT',
+                    style: TextStyle(
+                        color: CamColors.inkDim,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2)),
+                const SizedBox(height: 6),
+                chips(const ['auto', '360', '480', '720', '1080'],
+                    streamQuality, (value) => save('stream_quality', value)),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: dataSaver,
+                  title: const Text('Data saver for streaming',
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                  subtitle: const Text(
+                      'Caps playback at 480p on mobile data so episodes cost '
+                      'far less internet',
+                      style: TextStyle(
+                          color: CamColors.inkDim, fontSize: 11.5)),
+                  onChanged: (v) async {
+                    setState(() => dataSaver = v);
+                    final p = await SharedPreferences.getInstance();
+                    await p.setBool('app_data_saver', v);
+                    setSheet(() {});
+                  },
+                ),
+              ]),
+        );
+      }),
+    );
+  }
+
+  Future<void> _viewProfilePicture() async {
+    final p = await SharedPreferences.getInstance();
+    final name = (p.getString('username') ?? '').trim();
+    final idx = p.getInt('avatar_idx') ?? 0;
+    final avatars = <IconData>[
+      Icons.person_rounded,
+      Icons.auto_awesome_rounded,
+      Icons.rocket_launch_rounded,
+      Icons.sports_esports_rounded,
+      Icons.local_fire_department_rounded,
+      Icons.nightlight_round,
+    ];
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: CamColors.surface,
+        title: const Text('Profile picture'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 128,
+            height: 128,
+            decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                    colors: [CamColors.accent, CamColors.accentAlt])),
+            child: Icon(
+              avatars[idx % avatars.length],
+              size: 64,
+              color: Colors.black,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(name.isEmpty ? 'Guest' : name,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Change it from your Profile tab.',
+              style: TextStyle(color: CamColors.inkDim, fontSize: 11.5)),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
       ),
     );
   }

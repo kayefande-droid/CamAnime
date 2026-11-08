@@ -13,6 +13,7 @@ import 'core/ad_notifications.dart';
 import 'core/app_notifications.dart';
 import 'core/cam_ui.dart';
 import 'core/downloads.dart';
+import 'core/mini_player.dart';
 import 'core/models.dart';
 import 'screens/library_screen.dart';
 import 'screens/player_screen.dart';
@@ -20,8 +21,9 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.5.0';
+const String appVersion = '2.6.1';
 const String appCredit = 'Made by kayefande-droid & co.';
+
 
 // ── Website-mirrored palette ───────────────────────────
 const bg = Color(0xFF07080D);
@@ -43,6 +45,9 @@ const Map<String, Map<String, dynamic>> appThemes = {
   'sakura': {'label': 'Sakura', 'seed': 0xFFFF7AA8, 'bg': 0xFF120A12},
   'forest': {'label': 'Forest', 'seed': 0xFF34D399, 'bg': 0xFF07120E},
   'neon': {'label': 'Neon', 'seed': 0xFF00E5FF, 'bg': 0xFF05090F},
+  'ocean': {'label': 'Ocean', 'seed': 0xFF22D3EE, 'bg': 0xFF04121A},
+  'sunset': {'label': 'Sunset', 'seed': 0xFFFF8A3D, 'bg': 0xFF160B06},
+  'mono': {'label': 'Mono', 'seed': 0xFFE5E7EB, 'bg': 0xFF0A0A0B},
 };
 
 const List<Map<String, dynamic>> avatarPresets = [
@@ -292,6 +297,7 @@ class _CamAnimeAppState extends State<CamAnimeApp>
               },
             ),
           ),
+          const Positioned(left: 12, right: 12, bottom: 88, child: _MiniBar()),
           if (showTutorial)
             TutorialOverlay(onDone: () async {
               final p = await SharedPreferences.getInstance();
@@ -301,6 +307,139 @@ class _CamAnimeAppState extends State<CamAnimeApp>
             }),
         ],
       ),
+    );
+  }
+}
+
+// ── Miniplayer bar ─────────────────────────────────────
+/// Sits above the nav whenever an episode is playing outside the player screen.
+class _MiniBar extends StatelessWidget {
+  const _MiniBar();
+
+  String _clock(Duration d) {
+    final total = d.inSeconds;
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    final mm = m.toString().padLeft(h > 0 ? 2 : 1, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<MiniPlayback?>(
+      valueListenable: MiniPlayer.current,
+      builder: (context, live, _) {
+        if (live == null) return const SizedBox.shrink();
+        final value = live.controller.value;
+        final total = value.duration.inMilliseconds;
+        final pos = value.position.inMilliseconds.clamp(0, total).toDouble();
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: () async {
+              final rebuild = live.rebuild;
+              if (rebuild == null) return;
+              await MiniPlayer.handOver();
+              if (!context.mounted) return;
+              Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => rebuild()));
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                color: CamColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: CamColors.line),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0xA6000000),
+                      blurRadius: 20,
+                      offset: Offset(0, 6)),
+                ],
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
+                  child: Row(children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: live.image.isEmpty
+                            ? Container(
+                                color: CamColors.surfaceAlt,
+                                alignment: Alignment.center,
+                                child: const Icon(Icons.movie_rounded,
+                                    size: 18, color: CamColors.inkDim))
+                            : Image.network(live.image,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                      color: CamColors.surfaceAlt,
+                                      alignment: Alignment.center,
+                                      child: const Icon(Icons.movie_rounded,
+                                          size: 18, color: CamColors.inkDim),
+                                    )),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(live.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${live.subtitle} · ${_clock(value.position)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: CamColors.inkDim, fontSize: 10.5),
+                            ),
+                          ]),
+                    ),
+                    IconButton(
+                      tooltip: value.isPlaying ? 'Pause' : 'Play',
+                      onPressed: MiniPlayer.toggle,
+                      icon: Icon(
+                        value.isPlaying
+                            ? Icons.pause_circle_filled_rounded
+                            : Icons.play_circle_fill_rounded,
+                        size: 30,
+                        color: CamColors.accent,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close miniplayer',
+                      onPressed: MiniPlayer.close,
+                      icon: const Icon(Icons.close_rounded,
+                          size: 18, color: CamColors.inkDim),
+                    ),
+                  ]),
+                ),
+                ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(bottom: Radius.circular(16)),
+                  child: LinearProgressIndicator(
+                    value: total <= 0 ? 0 : (pos / total).clamp(0.0, 1.0),
+                    minHeight: 2.5,
+                    backgroundColor: CamColors.surfaceAlt,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(CamColors.accent),
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -555,6 +694,31 @@ class Api {
     final data = json.decode(response.body) as Map<String, dynamic>;
     final id = (data['youtube_id'] ?? '').toString().trim();
     return RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id) ? id : null;
+  }
+
+  /// One page of the live catalogue. Powers Explore's endless browse and the
+  /// personalised rows: any genre, any sort, and older titles via [yearBefore].
+  static Future<List> browse({
+    String genre = '',
+    String sort = 'popular',
+    int page = 1,
+    int limit = 24,
+    int? yearBefore,
+    String format = '',
+  }) async {
+    final params = <String, String>{
+      'sort': sort,
+      'page': '$page',
+      'limit': '$limit',
+      if (genre.isNotEmpty) 'genre': genre,
+      if (format.isNotEmpty) 'format': format,
+      if (yearBefore != null) 'year_before': '$yearBefore',
+    };
+    final query = params.entries
+        .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
+        .join('&');
+    final response = await _get(Uri.parse('${base()}/api/v1/anime?$query'));
+    return ((json.decode(response.body) as Map)['results'] as List?) ?? [];
   }
 
   static Future<List> genres() async {
@@ -1411,6 +1575,18 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     out.add(_rail('Popular Movies', movies));
     out.add(_rail('Popular Series', series));
     out.add(_rail('Anime Classics', classics));
+    out.add(Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: _openBrowse,
+          icon: const Icon(Icons.grid_view_rounded, size: 17),
+          label: const Text('View more'),
+        ),
+      ),
+    ));
+
     if (offline) {
       out.add(const Padding(
           padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -1423,6 +1599,12 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
             textAlign: TextAlign.center,
             style: TextStyle(color: muted, fontSize: 12))));
     return out;
+  }
+
+  /// Opens the full catalogue browser — the same surface the Explore tab uses.
+  void _openBrowse() {
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const BrowseScreen()));
   }
 
   Widget _slideshow(List slides) => _Slideshow(items: slides);
@@ -1651,10 +1833,32 @@ class _ExploreTabState extends State<ExploreTab> {
   bool loading = true;
   bool genreBusy = false;
 
+  /// Personalised rows: built from the genres of what this person actually
+  /// watches and downloads, so Explore is not the same list for everybody.
+  List forYou = [];
+  List tasteGenres = [];
+  bool tasteLoading = true;
+
+  /// Endless browse: any page of the live catalogue, old titles included.
+  static const _sorts = {
+    'popular': 'Most popular',
+    'trending': 'Trending',
+    'top_rated': 'Top rated',
+    'newest': 'Newest',
+  };
+  String browseSort = 'popular';
+  bool browseOlder = false;
+  List browseRows = [];
+  int browsePage = 1;
+  bool browseBusy = false;
+  bool browseDone = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadTaste();
+    _loadBrowse(reset: true);
   }
 
   Future<void> _load() async {
@@ -1678,6 +1882,95 @@ class _ExploreTabState extends State<ExploreTab> {
       });
     } catch (_) {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  /// Reads what this device has watched and downloaded, learns the genres, and
+  /// asks the catalogue for more titles the same person is likely to start.
+  Future<void> _loadTaste() async {
+    try {
+      final watched = await WatchProgress.recentAnimeIds(limit: 8);
+      final downloaded = DownloadManager.instance.tasks
+          .map((t) => t.animeId.toString())
+          .where((id) => id != '0')
+          .toList();
+      final ids = <String>{...watched, ...downloaded}.take(8).toList();
+      final counts = <String, int>{};
+      final names = <String, String>{};
+      for (final id in ids) {
+        try {
+          final info = await Api.animeInfo(id);
+          final title = (info['title'] ?? '').toString();
+          if (title.isNotEmpty) names[id] = title;
+          for (final g in (info['genres'] as List?) ?? const []) {
+            final name = (g['name'] ?? g).toString();
+            if (name.isEmpty) continue;
+            counts[name] = (counts[name] ?? 0) + 1;
+          }
+        } catch (_) {}
+      }
+      final ranked = counts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      final top = ranked.take(3).map((e) => e.key).toList();
+      final picks = <Map>[];
+      final seen = <String>{...ids};
+      for (final genre in top) {
+        for (final page in const [1, 2]) {
+          final rows = await Api.browse(genre: genre, page: page, limit: 24);
+          for (final raw in rows) {
+            if (raw is! Map) continue;
+            final id = (raw['id'] ?? '').toString();
+            if (id.isEmpty || !seen.add(id)) continue;
+            picks.add(raw);
+            if (picks.length >= 24) break;
+          }
+          if (picks.length >= 24) break;
+        }
+        if (picks.length >= 24) break;
+      }
+      if (!mounted) return;
+      setState(() {
+        forYou = picks;
+        tasteGenres = top;
+        tasteLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => tasteLoading = false);
+    }
+  }
+
+  Future<void> _loadBrowse({required bool reset}) async {
+    if (browseBusy) return;
+    if (!reset && browseDone) return;
+    setState(() => browseBusy = true);
+    final page = reset ? 1 : browsePage;
+    try {
+      final rows = await Api.browse(
+        sort: browseSort,
+        page: page,
+        limit: 30,
+        yearBefore: browseOlder ? 2015 : null,
+        genre: genreSlug ?? '',
+      );
+      if (!mounted) return;
+      setState(() {
+        if (reset) browseRows = [];
+        final seen = browseRows
+            .map((e) => (e as Map)['id']?.toString())
+            .whereType<String>()
+            .toSet();
+        for (final raw in rows) {
+          if (raw is! Map) continue;
+          final id = (raw['id'] ?? '').toString();
+          if (id.isEmpty || !seen.add(id)) continue;
+          browseRows.add(raw);
+        }
+        browsePage = page + 1;
+        browseDone = rows.length < 30;
+        browseBusy = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => browseBusy = false);
     }
   }
 
@@ -1780,22 +2073,119 @@ class _ExploreTabState extends State<ExploreTab> {
                               ),
                       )
                     else ...[
+                      if (tasteLoading)
+                        const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 18),
+                            child: Center(
+                                child: SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: amber))))
+                      else if (forYou.isNotEmpty) ...[
+                        _sectionHead(
+                            'Made for you',
+                            tasteGenres.isEmpty
+                                ? 'Based on your watch history and downloads'
+                                : 'Because you watch & download ${tasteGenres.join(' · ')}'),
+                        _posterGrid(forYou, cols),
+                      ] else ...[
+                        _sectionHead('Made for you',
+                            'Watch or download a few episodes and this row starts matching your taste.'),
+                      ],
+                      _sectionHead('Trending now', 'What everyone is watching'),
                       _miniRail('Trending now', trending),
+                      _sectionHead('Popular this season', 'Currently airing'),
                       _miniRail('Popular this season', popular),
+                      _sectionHead('All-time top rated', 'The classics that hold up'),
                       _miniRail('Top rated', topRated),
+                      _sectionHead('Movies', 'One sitting, one story'),
                       _miniRail('Movies', movies),
+                      _sectionHead('Browse the whole catalogue',
+                          'Thousands of titles, old and new — keep loading'),
+                      _browseControls(),
+                      _posterGrid(browseRows, cols),
+                      if (browseBusy)
+                        const Padding(
+                            padding: EdgeInsets.all(20),
+                            child: Center(
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: amber)))
+                      else if (!browseDone)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                          child: OutlinedButton.icon(
+                            onPressed: () => _loadBrowse(reset: false),
+                            icon: const Icon(Icons.expand_more_rounded),
+                            label: const Text('Load more anime'),
+                          ),
+                        ),
                     ],
                   ])),
     );
   }
 
+  Widget _sectionHead(String title, String subtitle) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style:
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(subtitle,
+              style: const TextStyle(color: muted, fontSize: 11.5)),
+        ]),
+      );
+
+  Widget _posterGrid(List rows, int cols) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+        child: GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              childAspectRatio: 0.56,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 12),
+          itemCount: rows.length,
+          itemBuilder: (_, i) =>
+              PosterCard(item: rows[i] as Map, width: double.infinity),
+        ),
+      );
+
+  Widget _browseControls() => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Wrap(spacing: 7, runSpacing: 7, children: [
+            for (final entry in _sorts.entries)
+              ChoiceChip(
+                label: Text(entry.value),
+                selected: browseSort == entry.key,
+                onSelected: (_) {
+                  setState(() {
+                    browseSort = entry.key;
+                    browseDone = false;
+                  });
+                  _loadBrowse(reset: true);
+                },
+              ),
+            FilterChip(
+              label: const Text('Older classics'),
+              selected: browseOlder,
+              onSelected: (v) {
+                setState(() {
+                  browseOlder = v;
+                  browseDone = false;
+                });
+                _loadBrowse(reset: true);
+              },
+            ),
+          ]),
+        ]),
+      );
+
   Widget _miniRail(String title, List items) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-            child: Text(title,
-                style: const TextStyle(
-                    fontSize: 17, fontWeight: FontWeight.w800))),
         SizedBox(
           height: 236,
           child: items.isEmpty
@@ -1811,6 +2201,17 @@ class _ExploreTabState extends State<ExploreTab> {
                 ),
         ),
       ]);
+}
+
+/// Pushed, full-catalogue browse surface. Shares the Explore tab's live
+/// catalogue, genre picker and paging so "View more" never lands on a stub.
+class BrowseScreen extends StatelessWidget {
+  const BrowseScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Browse anime')),
+        body: const ExploreTab(),
+      );
 }
 
 // ── Detail: banner, seasons, episodes, downloads, forum ─
@@ -1866,6 +2267,9 @@ class _DetailScreenState extends State<DetailScreen> {
     dataSaver = p.getBool('app_data_saver') ?? false;
     await _load();
     await _loadViewingState();
+    // Resolve the servers for the episode the user is most likely to start in
+    // the background, so the first Play/Download tap responds instantly.
+    if (!dataSaver) unawaited(_warmFirstEpisode());
     await _loadComments();
   }
 
@@ -1986,9 +2390,9 @@ class _DetailScreenState extends State<DetailScreen> {
       return;
     }
     await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => PlayerScreen(
+      context,
+      MaterialPageRoute(
+          builder: (_) => PlayerScreen(
                 url: sources.first.url,
                 label: sources.first.label,
                 playlist: sources,
@@ -2028,6 +2432,20 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
+  /// Pre-resolves the current episode's bundle while the user is reading the
+  /// synopsis. The server also caches it, so tapping Play or Download no
+  /// longer waits on a cold provider scrape.
+  Future<void> _warmFirstEpisode() async {
+    final ep = resumeEp ?? 1;
+    if (ep < 1) return;
+    final key = '${widget.animeId}|$ep|$audio';
+    if (_sourceCache.containsKey(key)) return;
+    try {
+      _sourceCache[key] =
+          await Api.episodeSources(widget.animeId, ep, audio);
+    } catch (_) {}
+  }
+
   /// Warm the cache for the following episode in the background (staggered so
   /// it never competes with the episode the user is actually starting).
   void _prefetchNext(int ep) {
@@ -2053,6 +2471,19 @@ class _DetailScreenState extends State<DetailScreen> {
     '720',
     '1080',
   };
+
+  /// Runtime of one episode in minutes from the catalogue ("24m" -> 24).
+  int get _episodeMinutes {
+    final raw = (info['duration'] ?? '').toString().toLowerCase();
+    final match = RegExp(r'(\d+)\s*h').firstMatch(raw);
+    if (match != null) {
+      final hours = int.tryParse(match.group(1)!) ?? 0;
+      final mins = RegExp(r'(\d+)\s*m').firstMatch(raw);
+      return hours * 60 + (mins == null ? 0 : int.tryParse(mins.group(1)!) ?? 0);
+    }
+    final minsOnly = RegExp(r'(\d+)').firstMatch(raw);
+    return minsOnly == null ? 0 : int.tryParse(minsOnly.group(1)!) ?? 0;
+  }
 
   Future<String> _downloadPref() async {
     final p = await SharedPreferences.getInstance();
@@ -2303,6 +2734,29 @@ class _DetailScreenState extends State<DetailScreen> {
       final partial = local.path.endsWith('.part');
       if (!mounted) return;
       final suffix = partial ? ' (downloading)' : ' (offline)';
+      // Saved episodes for this anime play back-to-back offline, and when the
+      // on-disk folder runs out the player keeps the series going by streaming
+      // the next episode.
+      final queue = <EpisodeSource>[];
+      var start = 0;
+      for (final saved in DownloadManager.instance.completed) {
+        if (saved.animeId != animeId) continue;
+        final playable = DownloadManager.instance.playableFile(saved);
+        if (playable == null) continue;
+        if (saved.episode == ep) start = queue.length;
+        queue.add(EpisodeSource(
+          url: playable.path,
+          label: '$title — Ep ${saved.episode}',
+          animeId: widget.animeId,
+          animeTitle: title,
+          episode: saved.episode,
+          image: saved.image,
+          height: saved.height,
+        ));
+      }
+      queue.sort((a, b) => (a.episode ?? 0).compareTo(b.episode ?? 0));
+      start = queue.indexWhere((s) => s.episode == ep);
+      if (start < 0) start = 0;
       Navigator.push(
           context,
           MaterialPageRoute(
@@ -2310,6 +2764,10 @@ class _DetailScreenState extends State<DetailScreen> {
                     url: local.path,
                     label: '$title — Ep $ep$suffix',
                     localFile: true,
+                    episode: ep,
+                    playlist: queue,
+                    startIndex: start,
+                    fetchEpisode: _sourceForEpisode,
                     onOpenAnime: _openAnime,
                   )));
       return;
@@ -2329,9 +2787,9 @@ class _DetailScreenState extends State<DetailScreen> {
       return;
     }
     Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => PlayerScreen(
+      context,
+      MaterialPageRoute(
+          builder: (_) => PlayerScreen(
                   url: sources.first.url,
                   mirrors: sources.skip(1).map((s) => s.url).toList(),
                   variants: sources,
@@ -2392,6 +2850,7 @@ class _DetailScreenState extends State<DetailScreen> {
       image: (info['image'] ?? '').toString(),
       season: (info['season'] ?? '').toString(),
       height: chosen.height,
+      durationMinutes: _episodeMinutes,
     );
   }
 
@@ -2506,6 +2965,15 @@ class _DetailScreenState extends State<DetailScreen> {
                           child: _RelatedPane(
                             animeId: widget.animeId,
                             genres: genres,
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const BrowseScreen())),
+                            child: const Text('More'),
                           ),
                         ),
                         if (seasons.isNotEmpty) ...[
@@ -2903,6 +3371,25 @@ class _SearchTabState extends State<SearchTab> {
   bool loading = false;
   bool genreBusy = false;
 
+  /// Catalogue filters that sit under the search field. They narrow a text
+  /// query and, when the field is empty, browse the catalogue with them.
+  static const _sorts = <String, String>{
+    'popular': 'Popular',
+    'rating': 'Top rated',
+    'recent': 'Newest',
+    'alphabetical': 'A–Z',
+  };
+  static const _formats = <String, String>{
+    '': 'Any type',
+    'TV': 'Series',
+    'MOVIE': 'Movies',
+    'ONA': 'ONA',
+  };
+  String sortKey = 'popular';
+  String formatKey = '';
+  bool olderOnly = false;
+  bool filtersOpen = false;
+
   Timer? _debounce;
   int _requestId = 0;
   String? error;
@@ -2958,9 +3445,14 @@ class _SearchTabState extends State<SearchTab> {
       if (!mounted || requestId != _requestId) {
         return;
       }
+      final refined = _refine(found);
       setState(() {
-        results = found;
-        error = found.isEmpty ? 'No matching anime found.' : null;
+        results = refined;
+        error = refined.isEmpty
+            ? (found.isEmpty
+                ? 'No matching anime found.'
+                : 'No matches with these filters.')
+            : null;
       });
     } catch (_) {
       if (!mounted || requestId != _requestId) {
@@ -2969,6 +3461,74 @@ class _SearchTabState extends State<SearchTab> {
       setState(() {
         results = [];
         error = 'Search is unavailable. Check your connection and try again.';
+      });
+    } finally {
+      if (mounted && requestId == _requestId) setState(() => loading = false);
+    }
+  }
+
+  /// Applies the visible filters to a result list. Sorting is local because the
+  /// search endpoint ranks by relevance; a pure filter browse is served by the
+  /// catalogue endpoint instead, which honours the sort server-side.
+  List _refine(List rows) {
+    var out = rows.whereType<Map>().toList();
+    if (formatKey.isNotEmpty) {
+      out = out
+          .where((r) => (r['format'] ?? '').toString().toUpperCase() == formatKey)
+          .toList();
+    }
+    if (olderOnly) {
+      out = out
+          .where((r) => (int.tryParse('${r['year'] ?? ''}') ?? 9999) < 2015)
+          .toList();
+    }
+    int year(Map r) => int.tryParse('${r['year'] ?? ''}') ?? 0;
+    int score(Map r) =>
+        (double.tryParse('${r['score'] ?? r['rating'] ?? 0}') ?? 0).round();
+    switch (sortKey) {
+      case 'rating':
+        out.sort((a, b) => score(b).compareTo(score(a)));
+      case 'recent':
+        out.sort((a, b) => year(b).compareTo(year(a)));
+      case 'alphabetical':
+        out.sort((a, b) => (a['title'] ?? '')
+            .toString()
+            .toLowerCase()
+            .compareTo((b['title'] ?? '').toString().toLowerCase()));
+    }
+    return out;
+  }
+
+  /// Filter-only browsing: no text query, so the catalogue endpoint is asked
+  /// directly and honours genre, sort, format and year.
+  Future<void> _browseFilters() async {
+    if (c.text.trim().length >= 2) {
+      await go();
+      return;
+    }
+    final requestId = ++_requestId;
+    setState(() {
+      loading = true;
+      error = null;
+    });
+    try {
+      final found = await Api.browse(
+        genre: genreSlug ?? '',
+        sort: sortKey,
+        limit: 36,
+        format: formatKey,
+        yearBefore: olderOnly ? 2015 : null,
+      );
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        results = found;
+        error = found.isEmpty ? 'Nothing matches these filters yet.' : null;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        results = [];
+        error = 'Filters are unavailable. Check your connection.';
       });
     } finally {
       if (mounted && requestId == _requestId) setState(() => loading = false);
@@ -3032,6 +3592,8 @@ class _SearchTabState extends State<SearchTab> {
               ),
             ]),
           ),
+          // Genres sit directly under the search field, with the catalogue
+          // filters one tap away so search and browse share the same controls.
           if (genres.isNotEmpty)
             SizedBox(
               height: 44,
@@ -3055,6 +3617,83 @@ class _SearchTabState extends State<SearchTab> {
                       onSelected: (_) => _pickGenre(slug));
                 },
               ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Row(children: [
+              TextButton.icon(
+                onPressed: () =>
+                    setState(() => filtersOpen = !filtersOpen),
+                icon: Icon(
+                    filtersOpen
+                        ? Icons.filter_alt
+                        : Icons.filter_alt_outlined,
+                    size: 18),
+                label: const Text('Filters'),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  '${_sorts[sortKey] ?? 'Popular'} · '
+                  '${_formats[formatKey] ?? 'Any type'}'
+                  '${olderOnly ? ' · Older classics' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: muted, fontSize: 11.5),
+                ),
+              ),
+              if (filtersOpen)
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      sortKey = 'popular';
+                      formatKey = '';
+                      olderOnly = false;
+                    });
+                    _browseFilters();
+                  },
+                  child: const Text('Reset'),
+                ),
+            ]),
+          ),
+          if (filtersOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Wrap(spacing: 7, runSpacing: 7, children: [
+                  for (final entry in _sorts.entries)
+                    ChoiceChip(
+                      label: Text(entry.value),
+                      selected: sortKey == entry.key,
+                      onSelected: (_) {
+                        setState(() => sortKey = entry.key);
+                        _browseFilters();
+                      },
+                    ),
+                ]),
+                const SizedBox(height: 8),
+                Wrap(spacing: 7, runSpacing: 7, children: [
+                  for (final entry in _formats.entries)
+                    ChoiceChip(
+                      label: Text(entry.value),
+                      selected: formatKey == entry.key,
+                      onSelected: (_) {
+                        setState(() => formatKey = entry.key);
+                        _browseFilters();
+                      },
+                    ),
+                  FilterChip(
+                    label: const Text('Older classics'),
+                    selected: olderOnly,
+                    onSelected: (v) {
+                      setState(() => olderOnly = v);
+                      _browseFilters();
+                    },
+                  ),
+                ]),
+              ]),
             ),
           if (loading || genreBusy) const LinearProgressIndicator(color: amber),
           Expanded(

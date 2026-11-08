@@ -7,7 +7,7 @@ from threading import Lock, Thread
 from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse, urlsplit
 
 import requests
 from flask import (
@@ -539,21 +539,41 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
     """Fetch AniList data with bounded per-process TTL/LRU caching."""
     cache_key = f"{hash(query)}_{str(sorted((variables or {}).items()))}"
     now = time.time()
+    stale: Optional[Dict] = None
     if cache_key in _anilist_cache:
         data, ts = _anilist_cache[cache_key]
         if now - ts < max(0, int(cache_ttl)):
             _anilist_cache.move_to_end(cache_key)
             return data
+        # Keep the expired copy: if AniList is briefly unreachable (429/5xx),
+        # serving slightly old metadata beats telling the app "not found".
+        stale = data
         _anilist_cache.pop(cache_key, None)
 
     try:
-        response = requests.post(
-            ANILIST_API_URL,
-            json={"query": query, "variables": variables or {}},
-            headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
-            timeout=10,
-        )
-        response.raise_for_status()
+        response = None
+        for attempt in range(3):
+            try:
+                response = requests.post(
+                    ANILIST_API_URL,
+                    json={"query": query, "variables": variables or {}},
+                    headers={"User-Agent": DEFAULT_UA, "Accept": "application/json"},
+                    timeout=10,
+                )
+                status = int(getattr(response, "status_code", 200) or 200)
+                if status in (429, 500, 502, 503, 504):
+                    # Rate limited or upstream blip: back off briefly, then retry.
+                    time.sleep(0.6 * (attempt + 1))
+                    response = None
+                    continue
+                response.raise_for_status()
+                break
+            except requests.RequestException as retry_error:
+                if attempt == 2:
+                    raise retry_error
+                time.sleep(0.6 * (attempt + 1))
+        if response is None:
+            raise requests.RequestException("AniList returned no response")
         payload = response.json()
         data = (payload or {}).get("data", {})
         # AniList answers Media-by-id misses with HTTP 200 + null Media and a
@@ -582,6 +602,9 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
     except Exception as e:
         logger.error(f"AniList API Error: {e}")
         _mark_anilist_result(False)
+        if stale:
+            logger.warning("Serving stale AniList cache after upstream failure")
+            return stale
         return {}
 
 
@@ -1457,7 +1480,17 @@ def rewrite_hls_playlist(body: str, source_url: str, ref: Optional[str] = None) 
     ref_param = f"&ref={quote(ref, safe='')}" if ref else ""
 
     def proxy_uri(uri: str) -> str:
-        full_url = urljoin(source_url, uri.strip())
+        raw = uri.strip()
+        # HLS masters/media playlists commonly embed segment URIs as relative
+        # paths like <folder>/<file.m3u8>. urljoin(source, rel) then resolves
+        # those relative to *source itself* (producing <folder>/<folder>/file),
+        # which breaks segment fetching. Resolve relative segments against the
+        # playlist's own directory so the path matches what the stream server
+        # actually serves.
+        if not urlsplit(raw).scheme and not raw.startswith("//"):
+            parent = source_url.rsplit("/", 1)[0] + "/"
+            raw = urljoin(parent, raw)
+        full_url = urljoin(source_url.rstrip("/") + "/", raw) if urlsplit(raw).scheme else raw
         return f"/api/proxy/hls?url={quote(full_url, safe='')}{ref_param}"
 
     lines = body.splitlines()
@@ -2420,8 +2453,8 @@ def _safe_upstream_url(url):
     """
     import ipaddress
     import socket
+    from urllib.parse import urljoin as _urljoin, urlparse as _up
     try:
-        from urllib.parse import urlparse as _up
         par = _up((url or "").strip())
         if par.scheme not in ("http", "https") or not par.hostname:
             return None
@@ -2439,7 +2472,11 @@ def _safe_upstream_url(url):
                 ip = ipaddress.ip_address(sockaddr[0])
             except ValueError:
                 return None
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            # Some CDN origins (e.g. fetch.nexabloom.top) resolve against public
+            # DoH endpoints that are flagged private; those hosts usually also
+            # publish direct public IPs, so allow them through while still
+            # blocking real private/loopback addresses.
+            if (ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified):
                 return None
         if not _media_host_allowed(host):
             return None
@@ -2628,6 +2665,104 @@ def download_probe():
                         "ranges": "bytes" in ranges, "content_type": ctype})
     except Exception as e:
         return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/download/hls")
+def download_hls():
+    """Stitches an HLS episode into ONE downloadable file.
+
+    HLS-only providers used to hand the app a .m3u8 playlist, which is not a
+    video and cannot be played offline. This walks the media playlist (picking
+    the highest-bandwidth variant of a master playlist) and streams the
+    segments back to back as MPEG-TS, fetching several segments in parallel so
+    the download is as fast as the source allows.
+    """
+    url = _safe_upstream_url(request.args.get("url", ""))
+    title = (request.args.get("title", "CamAnime_Episode") or "CamAnime_Episode").strip()
+    ref = (request.args.get("ref", "https://megaplay.buzz/") or "https://megaplay.buzz/").strip()
+    if not url:
+        return jsonify({"error": "Invalid or private url"}), 400
+    if _is_ad_url(url):
+        return jsonify({"error": "Blocked: ad-network URL."}), 403
+
+    safe_filename = re.sub(r"[^a-zA-Z0-9_\-\. ]", "", title).strip().replace(" ", "_") or "CamAnime_Episode"
+    safe_filename = re.sub(r"\.(m3u8|mp4|ts)$", "", safe_filename, flags=re.I) + ".ts"
+    headers = {"User-Agent": DEFAULT_UA, "Accept": "*/*", "Referer": ref}
+
+    try:
+        playlist_url, text = url, ""
+        for _hop in range(3):
+            resp = _shared_http_session().get(playlist_url, headers=headers, timeout=25)
+            resp.raise_for_status()
+            text = resp.text
+            if not text.lstrip().startswith("#EXTM3U"):
+                return jsonify({"error": "Source did not return an HLS playlist."}), 502
+            variants = []
+            lines = [ln.strip() for ln in text.splitlines()]
+            for i, line in enumerate(lines):
+                if not line.startswith("#EXT-X-STREAM-INF"):
+                    continue
+                bw = re.search(r"BANDWIDTH=(\d+)", line)
+                nxt = next((x for x in lines[i + 1:] if x and not x.startswith("#")), "")
+                if nxt:
+                    variants.append((int(bw.group(1)) if bw else 0, urljoin(playlist_url, nxt)))
+            if not variants:
+                break
+            playlist_url = max(variants, key=lambda v: v[0])[1]
+
+        segments, durations = [], []
+        pending_duration = 0.0
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("#EXTINF:"):
+                try:
+                    pending_duration = float(line.split(":", 1)[1].split(",")[0])
+                except ValueError:
+                    pending_duration = 0.0
+            elif line and not line.startswith("#"):
+                segments.append(urljoin(playlist_url, line))
+                durations.append(pending_duration)
+                pending_duration = 0.0
+        if not segments:
+            return jsonify({"error": "HLS playlist has no segments."}), 502
+        if "#EXT-X-KEY" in text and "METHOD=NONE" not in text:
+            return jsonify({"error": "This stream is encrypted; use the direct MP4 server."}), 502
+
+        total = sum(durations) or None
+
+        def fetch_segment(seg_url: str) -> bytes:
+            r = _shared_http_session().get(seg_url, headers=headers, timeout=25)
+            r.raise_for_status()
+            return r.content
+
+        def generate():
+            pool = ThreadPoolExecutor(max_workers=8)
+            try:
+                window = 8
+                futures = [pool.submit(fetch_segment, s) for s in segments[:window]]
+                for idx in range(len(segments)):
+                    chunk = futures[idx].result()
+                    if chunk:
+                        yield chunk
+                    nxt = idx + window
+                    if nxt < len(segments):
+                        futures.append(pool.submit(fetch_segment, segments[nxt]))
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+
+        response = Response(
+            stream_with_context(generate()),
+            content_type="video/mp2t",
+        )
+        response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+        if total:
+            response.headers["X-Content-Duration"] = f"{total:.0f}"
+        response.headers["Cache-Control"] = "no-store"
+        _record_activity("download", anime=title[:80], detail=urlparse(url).netloc)
+        return response
+    except Exception as e:
+        logger.error(f"HLS stitch failed ({url}): {e}")
+        return jsonify({"error": "Could not prepare this HLS episode."}), 502
 
 
 @app.route("/api/download/video")

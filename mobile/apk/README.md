@@ -4,7 +4,7 @@ Built APKs from the current `mobile/camanime_app` source tree (Flutter release b
 
 | File | Version | SHA-256 |
 |---|---|---|
-| `CamAnime-2.6.1.apk` | 2.6.1 (versionCode 12) | `d3d74c07d1412a9675f750a2bc79e570e9a48ffa77541633460943521d1e5f48` |
+| `CamAnime-2.6.1.apk` | 2.6.1 (versionCode 12) | `4494b0c295974891bee4ece0a4338db5cea943492acca3636f301e8568b059b5` |
 
 `CamAnime-2.6.1.apk.sha256` carries the same digest for automated verification. The `CamAnime-Review/` copy is the same build used for review handoff.
 

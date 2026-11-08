@@ -343,6 +343,26 @@ class WatchProgress {
     return b;
   }
 
+  /// Anime ids this device has watched, most recently touched first. Used to
+  /// learn a taste profile for Explore without any account.
+  static Future<List<String>> recentAnimeIds({int limit = 8}) async {
+    final data = await _load();
+    final scored = <MapEntry<String, int>>[];
+    data.forEach((animeId, episodes) {
+      if (episodes is! Map) return;
+      var newest = 0;
+      episodes.forEach((_, entry) {
+        if (entry is Map) {
+          final t = int.tryParse('${entry['updated'] ?? 0}') ?? 0;
+          if (t > newest) newest = t;
+        }
+      });
+      if (newest > 0) scored.add(MapEntry(animeId, newest));
+    });
+    scored.sort((a, b) => b.value.compareTo(a.value));
+    return scored.take(limit).map((e) => e.key).toList();
+  }
+
   static Future<void> save({
     required String animeId,
     required String animeTitle,

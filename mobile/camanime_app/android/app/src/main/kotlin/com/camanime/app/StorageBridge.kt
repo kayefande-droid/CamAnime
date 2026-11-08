@@ -46,6 +46,18 @@ class StorageBridge(private val activity: Activity) {
                         delete(activity, location)
                         result.success(true)
                     }
+                    "setProfilePic" -> {
+                        val bytes = call.argument<ByteArray>("bytes")
+                        if (bytes == null) {
+                            result.error(
+                                "INVALID_ARGUMENTS",
+                                "bytes",
+                                "A PNG/JPG byte array is required."
+                            )
+                        } else {
+                            result.success(setProfilePic(activity, bytes))
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -219,7 +231,35 @@ class StorageBridge(private val activity: Activity) {
             "ts" -> "video/mp2t"
             "mkv" -> "video/x-matroska"
             "webm" -> "video/webm"
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
             else -> "video/mp4"
+        }
+
+        private fun setProfilePic(activity: Activity, bytes: ByteArray): Boolean {
+            return try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "profile_avatar.png")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CamAnime")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+                val uri = activity.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+                ) ?: return false
+                activity.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(bytes)
+                } ?: return false
+                activity.contentResolver.update(
+                    uri,
+                    ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) },
+                    null,
+                    null
+                )
+                true
+            } catch (_: Exception) {
+                false
+            }
         }
 
         private fun safeSegment(raw: String?, fallback: String): String {

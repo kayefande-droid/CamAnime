@@ -61,6 +61,10 @@ class DownloadTask {
   /// Advertised pixel height of the saved file (0 when the provider is vague).
   final int height;
 
+  /// Episode runtime in minutes from the catalogue (0 when unknown), so the
+  /// Library can show real play time instead of just a file size.
+  final int durationMinutes;
+
   /// Set the moment the file is complete, so the Library can say exactly when
   /// the episode became watchable offline.
   int completedAt;
@@ -91,6 +95,7 @@ class DownloadTask {
     this.localName,
     this.season = '',
     this.height = 0,
+    this.durationMinutes = 0,
     this.completedAt = 0,
     this.devicePath,
     this.received = 0,
@@ -106,6 +111,14 @@ class DownloadTask {
   String get displayTitle => '$animeTitle · Ep $episode';
 
   String get qualityLabel => height > 0 ? '${height}p' : 'Auto';
+
+  String get durationLabel {
+    if (durationMinutes <= 0) return '';
+    if (durationMinutes < 60) return '$durationMinutes min';
+    final h = durationMinutes ~/ 60;
+    final m = durationMinutes % 60;
+    return m == 0 ? '${h}h' : '${h}h ${m}m';
+  }
 
   /// "Completed · 2.4 GB · 12:41" for the Library, empty while still running.
   String get completedLabel {
@@ -131,6 +144,7 @@ class DownloadTask {
         'image': image,
         'local_name': localName,
         'season': season,
+        'duration_min': durationMinutes,
         'height': height,
         'completed_at': completedAt,
         'device_path': devicePath,
@@ -153,6 +167,7 @@ class DownloadTask {
         image: (json['image'] ?? '').toString(),
         localName: json['local_name']?.toString(),
         season: (json['season'] ?? '').toString(),
+        durationMinutes: int.tryParse('${json['duration_min'] ?? 0}') ?? 0,
         height: int.tryParse('${json['height'] ?? 0}') ?? 0,
         completedAt: int.tryParse('${json['completed_at'] ?? 0}') ?? 0,
         devicePath: json['device_path']?.toString(),
@@ -524,6 +539,7 @@ class DownloadManager extends ChangeNotifier {
     String image = '',
     String season = '',
     int height = 0,
+    int durationMinutes = 0,
   }) async {
     await init();
     if (_root == null) throw const FileSystemException('Storage unavailable');
@@ -558,6 +574,7 @@ class DownloadManager extends ChangeNotifier {
       image: image,
       season: season.trim(),
       height: height,
+      durationMinutes: durationMinutes,
       total: 0,
       stage: DownloadStage.queued,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
@@ -952,6 +969,7 @@ class DownloadManager extends ChangeNotifier {
       animeTitle: task.animeTitle,
       episode: task.episode,
       taskId: task.id,
+      imageUrl: task.image,
     ));
     // Exported copy (public Downloads) is best effort and never blocks saying
     // "completed": the in-app offline file is already playable.
@@ -976,11 +994,13 @@ class DownloadManager extends ChangeNotifier {
     if (task.stage != DownloadStage.completed) return null;
     final file = completedFile(task);
     if (file == null) return null;
-    final season = task.season.trim();
+    // One folder per anime in device storage: every saved episode of a series
+    // lands together in `Download/CamAnime/<Anime title>/`, so any offline media
+    // player can walk the folder and pick up the next episode on its own.
     final location = await DeviceStorage.save(
       sourcePath: file.path,
       folder: _safeName(task.animeTitle),
-      subfolder: season.isEmpty ? '' : _safeName(season),
+      subfolder: '',
       fileName: task.fileName,
     );
     if (location != null && location.isNotEmpty) {

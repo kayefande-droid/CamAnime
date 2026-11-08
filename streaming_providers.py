@@ -19,8 +19,10 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, unquote, urljoin, urlparse
 
@@ -30,6 +32,15 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
 logger = logging.getLogger(__name__)
+
+# Resolved episode bundles are expensive (provider scrapes + stream decryption)
+# and are requested repeatedly: the player, the download button and auto-next
+# all ask for the same episode. Keep recent bundles briefly so the second tap
+# is instant, while still expiring provider tokens quickly.
+_BUNDLE_CACHE: "OrderedDict[str, Tuple[float, Dict]]" = OrderedDict()
+_BUNDLE_CACHE_MAX = 256
+_BUNDLE_CACHE_TTL = 240
+_BUNDLE_CACHE_LOCK = threading.RLock()
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -146,29 +157,53 @@ class StreamingProvider:
         self.timeout = timeout
         self.cache: OrderedDict[str, Tuple[object, float]] = OrderedDict()
         self.cache_duration = 1800  # 30 minutes
+        # Episode resolution runs on several threads at once (quality variants
+        # and both providers); the bounded LRU is shared, so serialise it.
+        self._cache_lock = threading.RLock()
 
     def _cache_get(self, key: str, ttl: Optional[int] = None):
-        entry = self.cache.get(key)
-        if entry is None:
-            return None
-        data, timestamp = entry
-        max_age = ttl if ttl is not None else self.cache_duration
-        if time.time() - timestamp >= max_age:
-            self.cache.pop(key, None)
-            return None
-        self.cache.move_to_end(key)
-        return data
+        with self._cache_lock:
+            entry = self.cache.get(key)
+            if entry is None:
+                return None
+            data, timestamp = entry
+            max_age = ttl if ttl is not None else self.cache_duration
+            if time.time() - timestamp >= max_age:
+                self.cache.pop(key, None)
+                return None
+            self.cache.move_to_end(key)
+            return data
 
     def _cache_set(self, key: str, value: object):
-        now = time.time()
-        cutoff = now - self.cache_duration
-        for old_key, (_old_value, timestamp) in list(self.cache.items()):
-            if timestamp < cutoff:
-                self.cache.pop(old_key, None)
-        self.cache[key] = (value, now)
-        self.cache.move_to_end(key)
-        while len(self.cache) > self.CACHE_MAX_ENTRIES:
-            self.cache.popitem(last=False)
+        with self._cache_lock:
+            now = time.time()
+            cutoff = now - self.cache_duration
+            for old_key, (_old_value, timestamp) in list(self.cache.items()):
+                if timestamp < cutoff:
+                    self.cache.pop(old_key, None)
+            self.cache[key] = (value, now)
+            self.cache.move_to_end(key)
+            while len(self.cache) > self.CACHE_MAX_ENTRIES:
+                self.cache.popitem(last=False)
+
+    def _parallel_session(self) -> requests.Session:
+        """A session private to the calling thread.
+
+        requests.Session is not documented as thread-safe, and stream resolution
+        now runs concurrently, so each worker gets its own pool with the same
+        headers/cookies instead of sharing one connection pool.
+        """
+        local = getattr(self, "_thread_local", None)
+        if local is None:
+            local = threading.local()
+            self._thread_local = local
+        session = getattr(local, "session", None)
+        if session is None:
+            session = requests.Session()
+            session.headers.update(dict(self.session.headers))
+            session.cookies.update(self.session.cookies)
+            local.session = session
+        return session
 
 
 class AnimeHeavenProvider(StreamingProvider):
@@ -492,6 +527,16 @@ class AnimeHeavenProvider(StreamingProvider):
         except Exception as e:
             logger.error(f"[AnimeHeaven] gate.php error ({episode_key}): {e}")
             return {"sources": [], "subtitles": [], "provider": "animeheaven", "error": str(e)}
+
+    def resolve_stream(self, src: Dict) -> Optional[Dict]:
+        """One-shot resolve: prefers any direct URL, otherwise returns the embed.
+        Mirrors the anikoto.resolved_* helper contract so a generic stream can be
+        resolved to {m3u8, embed_url, subtitles, intro, outro} in the same pool."""
+        if src.get("url"):
+            return {"m3u8": src["url"], "embed_url": src.get("url"), "referer": src.get("referer", "https://animeheaven.me/")}
+        if src.get("embed_url"):
+            return {"embed_url": src["embed_url"], "referer": src.get("referer", "https://animeheaven.me/")}
+        return None
 
     def browse_catalog(self, feed: str = "new") -> List[Dict]:
         """
@@ -881,12 +926,13 @@ class AnikotoProvider(StreamingProvider):
         if cached is not None:
             return cached
 
+        session = self._parallel_session()
         try:
             params = {"get": link_id}
             if sv_id:
                 params["sv"] = sv_id
             ep_referer = f"{self.base_url}/watch/{slug}/ep-{ep_num}"
-            resp = self.session.get(
+            resp = session.get(
                 f"{self.base_url}/ajax/server",
                 params=params,
                 headers={"X-Requested-With": "XMLHttpRequest", "Referer": ep_referer},
@@ -908,7 +954,7 @@ class AnikotoProvider(StreamingProvider):
             host = parsed.netloc
             embed_referer = f"https://{host}/"
 
-            html_resp = self.session.get(
+            html_resp = session.get(
                 norm_url,
                 headers={"User-Agent": DEFAULT_UA, "Referer": self.base_url + "/"},
                 timeout=self.timeout,
@@ -928,7 +974,7 @@ class AnikotoProvider(StreamingProvider):
                 }
 
             file_id = m_file.group(1)
-            src_resp = self.session.get(
+            src_resp = session.get(
                 f"https://{host}/stream/getSources",
                 params={"id": file_id},
                 headers={
@@ -1086,6 +1132,19 @@ class StreamingManager:
         self._mapping_cache_timestamps: Dict[str, float] = {}
         self._mapping_cache_max = 128
         self._mapping_cache_ttl = 900
+        self._mapping_cache_lock = threading.RLock()
+        self.bundle_cache_ttl = _BUNDLE_CACHE_TTL
+
+    def clear_caches(self) -> None:
+        """Drop resolved bundles and provider caches (used between test runs)."""
+        with _BUNDLE_CACHE_LOCK:
+            _BUNDLE_CACHE.clear()
+        with self._mapping_cache_lock:
+            self._mapping_cache.clear()
+            self._mapping_cache_timestamps.clear()
+        for provider in self.providers.values():
+            with provider._cache_lock:
+                provider.cache.clear()
 
     def resolve_anime_mapping(
         self,
@@ -1095,16 +1154,26 @@ class StreamingManager:
         heaven_override: Optional[str] = None,
     ) -> Dict:
         cache_key = f"map_{anilist_id}_{heaven_override or ''}"
-        cached_at = self._mapping_cache_timestamps.get(cache_key, 0)
-        if cache_key in self._mapping_cache and time.time() - cached_at < self._mapping_cache_ttl:
-            self._mapping_cache.move_to_end(cache_key)
-            return self._mapping_cache[cache_key]
-        self._mapping_cache.pop(cache_key, None)
-        self._mapping_cache_timestamps.pop(cache_key, None)
+        with self._mapping_cache_lock:
+            cached_at = self._mapping_cache_timestamps.get(cache_key, 0)
+            if cache_key in self._mapping_cache and time.time() - cached_at < self._mapping_cache_ttl:
+                self._mapping_cache.move_to_end(cache_key)
+                return self._mapping_cache[cache_key]
+            self._mapping_cache.pop(cache_key, None)
+            self._mapping_cache_timestamps.pop(cache_key, None)
 
         clean_titles = [t for t in titles if t]
-        heaven_id = heaven_override or self.animeheaven.find_best_id(clean_titles)
-        anikoto_slug = self.anikoto.find_best_slug(clean_titles)
+        # Both providers search independently; running them together halves the
+        # cold-start mapping time that used to delay the first play/download.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ak_future = pool.submit(self.anikoto.find_best_slug, clean_titles)
+            if heaven_override:
+                heaven_id = heaven_override
+            else:
+                heaven_id = pool.submit(
+                    self.animeheaven.find_best_id, clean_titles
+                ).result()
+            anikoto_slug = ak_future.result()
 
         mapping = {
             "anilist_id": anilist_id,
@@ -1113,12 +1182,13 @@ class StreamingManager:
             "heaven_id": heaven_id,
             "anikoto_slug": anikoto_slug,
         }
-        self._mapping_cache[cache_key] = mapping
-        self._mapping_cache_timestamps[cache_key] = time.time()
-        self._mapping_cache.move_to_end(cache_key)
-        while len(self._mapping_cache) > self._mapping_cache_max:
-            expired_key, _ = self._mapping_cache.popitem(last=False)
-            self._mapping_cache_timestamps.pop(expired_key, None)
+        with self._mapping_cache_lock:
+            self._mapping_cache[cache_key] = mapping
+            self._mapping_cache_timestamps[cache_key] = time.time()
+            self._mapping_cache.move_to_end(cache_key)
+            while len(self._mapping_cache) > self._mapping_cache_max:
+                expired_key, _ = self._mapping_cache.popitem(last=False)
+                self._mapping_cache_timestamps.pop(expired_key, None)
         return mapping
 
     def get_full_episode_bundle(
@@ -1135,6 +1205,16 @@ class StreamingManager:
         subtitles, and direct download links for a specific anime episode.
         """
         preferred_audio = preferred_audio if preferred_audio in ("sub", "dub") else "sub"
+        cache_key = f"{anilist_id}|{ep_num}|{preferred_audio}|{heaven_override or ''}"
+        cache_ttl = self.bundle_cache_ttl
+        if cache_ttl > 0:
+            with _BUNDLE_CACHE_LOCK:
+                entry = _BUNDLE_CACHE.get(cache_key)
+                if entry is not None and time.time() - entry[0] < cache_ttl:
+                    _BUNDLE_CACHE.move_to_end(cache_key)
+                    return entry[1]
+                if entry is not None:
+                    _BUNDLE_CACHE.pop(cache_key, None)
         mapping = self.resolve_anime_mapping(anilist_id, titles, mal_id, heaven_override)
         heaven_id = mapping.get("heaven_id")
         anikoto_slug = mapping.get("anikoto_slug")
@@ -1195,12 +1275,21 @@ class StreamingManager:
                 # Resolve top Sub and top Dub server eagerly so playback is instant,
                 # and include remaining servers with on-demand or embed URLs
                 resolved_per_audio = {"sub": 0, "dub": 0}
-                for srv in ak_servers:
+                # Resolve the top two servers per audio variant concurrently:
+                # each scrape takes 1-2 s, so serial resolution used to add 5 s
+                # to the first play/download of every episode.
+                _candidates = []
+                for _audio_key in ("sub", "dub"):
+                    _candidates.extend(
+                        [s for s in ak_servers if s.get("type", "sub") == _audio_key][:2]
+                    )
+                with ThreadPoolExecutor(max_workers=4) as _pool:
+                    _resolved_streams = list(
+                        _pool.map(self.anikoto.resolve_server_stream, _candidates)
+                    )
+                for srv, stream_data in zip(_candidates, _resolved_streams):
                     audio = srv.get("type", "sub")
-                    if audio not in resolved_per_audio:
-                        continue
-                    if resolved_per_audio[audio] < 2:
-                        stream_data = self.anikoto.resolve_server_stream(srv)
+                    if audio in resolved_per_audio:
                         if stream_data:
                             resolved_per_audio[audio] = resolved_per_audio.get(audio, 0) + 1
                             m3u8 = stream_data.get("m3u8")
@@ -1215,7 +1304,10 @@ class StreamingManager:
                             ]
                             if m3u8:
                                 hls_proxy = f"/api/proxy/hls?url={quote(m3u8, safe='')}&ref={quote(ref, safe='')}"
-                                hls_dl = f"/api/download/video?url={quote(m3u8, safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num} {audio.upper()}', safe='')}&ref={quote(ref, safe='')}"
+                                # HLS is stitched server-side into one .ts file: a raw
+                                # playlist cannot be played offline, so the app must
+                                # receive a real media download.
+                                hls_dl = f"/api/download/hls?url={quote(m3u8, safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num} {audio.upper()}', safe='')}&ref={quote(ref, safe='')}"
                                 servers.append({
                                     "id": f"anikoto-{audio}-{srv['name'].lower()}-{resolved_per_audio[audio]}",
                                     "name": f"CamStream {srv['name']} ({audio.upper()})",
@@ -1337,7 +1429,7 @@ class StreamingManager:
                 "provider": "AnimeHeaven resolver",
             })
 
-        return {
+        bundle = {
             "anilist_id": anilist_id,
             "mal_id": mal_id,
             "episode": ep_num,
@@ -1354,6 +1446,13 @@ class StreamingManager:
                 servers[0] if servers else None,
             ),
         }
+        if cache_ttl > 0:
+            with _BUNDLE_CACHE_LOCK:
+                _BUNDLE_CACHE[cache_key] = (time.time(), bundle)
+                _BUNDLE_CACHE.move_to_end(cache_key)
+                while len(_BUNDLE_CACHE) > _BUNDLE_CACHE_MAX:
+                    _BUNDLE_CACHE.popitem(last=False)
+        return bundle
 
     # Backwards-compatible methods
     def search(self, query: str, provider: Optional[str] = None) -> Dict:

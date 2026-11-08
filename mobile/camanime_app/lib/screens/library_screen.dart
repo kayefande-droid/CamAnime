@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../core/cam_ui.dart';
 import '../core/device_storage.dart';
 import '../core/downloads.dart';
+import '../core/models.dart';
 import 'player_screen.dart';
 
 /// Library = live download queue + offline episodes, folded into one folder
@@ -20,6 +21,9 @@ class _LibraryTabState extends State<LibraryTab> {
   bool _started = false;
   final Set<String> _expanded = {};
 
+  /// Where each downloaded series was left off: folder key -> episode + ms.
+  Map<String, Map<String, dynamic>> _resume = const {};
+
   @override
   void initState() {
     super.initState();
@@ -28,7 +32,46 @@ class _LibraryTabState extends State<LibraryTab> {
 
   Future<void> _start() async {
     await _manager.init();
-    if (mounted) setState(() => _started = true);
+    if (!mounted) return;
+    setState(() => _started = true);
+    await _loadResume();
+  }
+
+  /// Reads the saved position for every anime in the library, so a folder can
+  /// offer "Continue ep 7" instead of making the user remember.
+  Future<void> _loadResume() async {
+    final next = <String, Map<String, dynamic>>{};
+    for (final folder in _manager.folders) {
+      String id = '';
+      for (final task in folder.tasks) {
+        final candidate = '${task.animeId}'.trim();
+        if (candidate.isNotEmpty && candidate != '0') {
+          id = candidate;
+          break;
+        }
+      }
+      if (id.isEmpty) {
+        final title = folder.tasks.isEmpty
+            ? ''
+            : folder.tasks.first.animeTitle.trim();
+        if (title.isEmpty) continue;
+        id = 'title:$title';
+      }
+      final latest = await WatchProgress.latest(id);
+      if (latest != null) next[folder.key] = latest;
+    }
+    if (!mounted) return;
+    setState(() => _resume = next);
+  }
+
+  String _clock(int ms) {
+    final total = (ms / 1000).round();
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final sec = total % 60;
+    final mm = m.toString().padLeft(h > 0 ? 2 : 1, '0');
+    final ss = sec.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
   }
 
   @override
@@ -240,7 +283,9 @@ class _LibraryTabState extends State<LibraryTab> {
               const SizedBox(height: 3),
               Text(
                 'Episode ${task.episode} · ${task.audio.toUpperCase()} · '
-                '${task.qualityLabel} · ${task.stage.label}',
+                '${task.qualityLabel}'
+                '${task.durationLabel.isEmpty ? '' : ' · ${task.durationLabel}'} · '
+                '${task.stage.label}',
                 style: TextStyle(
                     color: task.stage == DownloadStage.waitingNetwork
                         ? CamColors.accent
@@ -386,6 +431,15 @@ class _LibraryTabState extends State<LibraryTab> {
                         icon: Icons.smartphone_rounded,
                         color: CamColors.success,
                       ),
+                    if (_resume[folder.key] != null) ...[
+                      const SizedBox(width: 6),
+                      MetaPill(
+                        'RESUME EP ${_resume[folder.key]!['ep']} · '
+                        '${_clock(int.tryParse('${_resume[folder.key]!['posMs']}') ?? 0)}',
+                        icon: Icons.play_arrow_rounded,
+                        color: CamColors.accent,
+                      ),
+                    ],
                   ]),
                 ]),
           ),
@@ -440,7 +494,8 @@ class _LibraryTabState extends State<LibraryTab> {
                     fontWeight: FontWeight.w700, fontSize: 12.5)),
             const SizedBox(height: 2),
             Text(
-              '${compactBytes(task.total)} · ${task.qualityLabel} · '
+              '${compactBytes(task.total)} · ${task.qualityLabel}'
+              '${task.durationLabel.isEmpty ? '' : ' · ${task.durationLabel}'} · '
               '${task.completedLabel}',
               style: const TextStyle(color: CamColors.inkDim, fontSize: 10),
             ),
@@ -498,15 +553,40 @@ class _LibraryTabState extends State<LibraryTab> {
     ));
   }
 
-  void _playFile(File file, DownloadTask task) {
+  Future<void> _playFile(File file, DownloadTask task) async {
     final partial = file.path.endsWith('.part');
-    Navigator.push(
+    // Everything saved for this anime (same title + season) becomes the offline
+    // queue, so finishing an episode rolls straight into the next one on disk.
+    final queue = <EpisodeSource>[];
+    var start = 0;
+    for (final folder in _manager.folders) {
+      if (folder.key != '${task.animeTitle}|${task.season.trim()}') continue;
+      for (final episode in folder.tasks) {
+        final playable = _manager.playableFile(episode);
+        if (playable == null) continue;
+        if (episode.id == task.id) start = queue.length;
+        queue.add(EpisodeSource(
+          url: playable.path,
+          label: '${episode.animeTitle} — Ep ${episode.episode}',
+          animeId: '${episode.animeId}',
+          animeTitle: episode.animeTitle,
+          episode: episode.episode,
+          image: episode.image,
+          height: episode.height,
+        ));
+      }
+      break;
+    }
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => PlayerScreen(
           url: file.path,
           label: '${task.displayTitle}${partial ? ' (downloading)' : ''}',
           localFile: true,
+          episode: task.episode,
+          playlist: queue,
+          startIndex: start,
           onOpenAnime: (id, title) => Navigator.push(
             context,
             MaterialPageRoute(
@@ -515,6 +595,7 @@ class _LibraryTabState extends State<LibraryTab> {
         ),
       ),
     );
+    await _loadResume();
   }
 
   Future<void> _confirmRemove(DownloadTask task) async {
