@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -34,6 +36,161 @@ class SettingsScreen extends StatefulWidget {
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
+
+/// Notification bell + inbox: shows unread count badge and the list of
+/// announcements published by the CamAnime team.
+class NotificationBellScreen extends StatefulWidget {
+  const NotificationBellScreen({super.key});
+
+  @override
+  State<NotificationBellScreen> createState() => _NotificationBellScreenState();
+}
+
+class _NotificationBellScreenState extends State<NotificationBellScreen> {
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final r = await http
+          .get(Uri.parse('$apiHost/api/announcements'))
+          .timeout(const Duration(seconds: 12));
+      final data = json.decode(r.body) as Map<String, dynamic>;
+      final list = (data['announcements'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (!mounted) return;
+      setState(() {
+        _items = list;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = Theme.of(context).colorScheme.primary;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notifications'),
+        actions: [
+          TextButton(
+              onPressed: _loading ? null : _load,
+              child: const Text('Refresh')),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 48, color: CamColors.inkDim),
+                      const SizedBox(height: 12),
+                      Text(_error!, style: const TextStyle(color: CamColors.inkDim)),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                          onPressed: _load,
+                          child: const Text('Retry')),
+                    ],
+                  ),
+                )
+              : _items.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.notifications_none_outlined,
+                              size: 56, color: CamColors.inkDim),
+                          SizedBox(height: 12),
+                          Text('No notifications yet',
+                              style: TextStyle(color: CamColors.inkDim)),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) {
+                          final item = _items[index];
+                          final title = item['title']?.toString() ?? 'CamAnime';
+                          final body = item['body']?.toString() ?? '';
+                          final ts = item['t'] as int? ?? 0;
+                          final dt = ts > 0
+                              ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
+                              : null;
+                          return InkWell(
+                            onTap: () {
+                              // Open the app to the relevant place; for now open home.
+                              // The tap is a no-op if the message was already seen.
+                            },
+                            child: Card(
+                              margin: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.notifications_active,
+                                            size: 18, color: accent),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(title,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 14)),
+                                        ),
+                                        if (dt != null)
+                                          Text(_rel(dt),
+                                              style: const TextStyle(
+                                                  color: CamColors.inkDim,
+                                                  fontSize: 11)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(body,
+                                        style: const TextStyle(
+                                            color: CamColors.inkDim,
+                                            fontSize: 12.5,
+                                            height: 1.4)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+    );
+  }
+
+  String _rel(DateTime t) {
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    return '${diff.inDays}d ago';
+  }  }
+
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _manager = DownloadManager.instance;
@@ -463,6 +620,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right_rounded,
                     color: CamColors.inkDim),
                 onTap: widget.onCheckUpdate,
+              ),
+              _tile(
+                icon: Icons.notifications_outlined,
+                title: 'Notifications',
+                subtitle: 'Announcements from the CamAnime team',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const NotificationBellScreen())),
               ),
             ]),
           ],

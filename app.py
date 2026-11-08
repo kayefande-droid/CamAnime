@@ -1790,10 +1790,11 @@ def search():
         return redirect(url_for("home"))
 
     # Brand search lands on the homepage, not an empty results page. This covers
-    # the official brand spelling and the common misspelling / search variation
-    # "camanjme" without creating a duplicate page for the typo.
+    # the official brand spelling plus the common misspelling / search variation
+    # "camanjme" and the hyphenated form "cam-anime" -- without creating a
+    # duplicate page for the typo.
     brand_norm = re.sub(r"[^A-Za-z]", "", query or "").lower()
-    if brand_norm in ("camanime", "camanime", "cam-anime", "camanime"):
+    if brand_norm in ("camanime", "camanjme", "cam-anime"):
         return redirect(url_for("home"))
 
     filters = _web_catalog_filters(query)
@@ -3262,8 +3263,8 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.9.1"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 20
+APP_VERSION = "2.10.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 21
 import app_version  # noqa: E402 — version policy store, declared after routes
 import releases  # noqa: E402 — verified release inventory + blocked telemetry
 
@@ -3889,7 +3890,10 @@ def api_admin_announce():
         return jsonify({"status": "error", "error": "Admin only."}), 403
     d = _post_data()
     try:
-        a = platform.post_announcement(d.get("title", ""), d.get("body", ""), u.get("name") or u.get("email"))
+        a = platform.post_announcement(
+            d.get("title", ""), d.get("body", ""),
+            u.get("name") or u.get("email"),
+            d.get("action", ""))
         # One publish action covers every surface: website banner, app feed and
         # an OS notification on registered app installs when FCM is configured.
         notice = {"available": False, "targets": 0, "delivered": 0,

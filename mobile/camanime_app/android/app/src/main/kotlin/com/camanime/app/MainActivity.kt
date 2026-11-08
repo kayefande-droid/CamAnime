@@ -19,9 +19,11 @@ class MainActivity : FlutterActivity() {
     private val notificationsChannel = "camanime/notifications"
     private val pipChannel = "camanime/pip"
     private val playerChannel = "camanime/player"
+    private val updateChannel = "camanime/update"
 
     private var navigation: MethodChannel? = null
     private var pip: MethodChannel? = null
+    private var update: MethodChannel? = null
     private var pendingAdvert: Map<String, String>? = null
     /** True while the miniplayer is playing, i.e. worth floating. */
     private var pipArmed = false
@@ -95,7 +97,9 @@ class MainActivity : FlutterActivity() {
                             this,
                             call.argument<String>("title") ?: "CamAnime",
                             call.argument<String>("body") ?: "",
-                            call.argument<String>("id") ?: "camanime-announcement"
+                            call.argument<String>("id") ?: "camanime-announcement",
+                            call.argument<String>("version"),
+                            call.argument<String>("action")
                         )
                         result.success(true)
                     }
@@ -145,6 +149,24 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // In-app auto-update triggered from a notification tap / scheduled alarm.
+        // The Android side invokes "startNow"; Dart runs the download, install and
+        // restart, then the freshly installed app shows the whats-new dialog.
+        update = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            updateChannel
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startNow" -> {
+                        deliverUpdateIntent(intent)
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        }
+
         // Player brightness: Android cannot set system brightness from an app,
         // but it can dim its own window, which is exactly what a video player
         // needs. -1 restores the system setting on exit.
@@ -185,6 +207,8 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        // Honor a pending update launch before showing any advert.
+        deliverUpdateIntent(intent)
         deliverAdvert(intent)
     }
 
@@ -237,6 +261,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        deliverUpdateIntent(intent)
         deliverAdvert(intent)
     }
 
@@ -249,6 +274,15 @@ class MainActivity : FlutterActivity() {
         navigation?.invokeMethod("openAdvert", advert)
         intent.removeExtra("advert_anime_id")
         intent.removeExtra("advert_anime_title")
+    }
+
+    /**
+     * When a live-update notification or the scheduled alarm launches the app with
+     * `start_update = true`, hand off to Dart so it can download, install and restart.
+     */
+    private fun deliverUpdateIntent(intent: Intent?) {
+        if (intent?.getBooleanExtra("start_update", false) != true) return
+        update?.invokeMethod("startNow", null)
     }
 
     private fun requestNotificationPermission() {

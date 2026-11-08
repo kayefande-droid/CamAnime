@@ -20,6 +20,7 @@
 
 # The worker the app schedules by class reference.
 -keep class com.camanime.app.AdvertWorker { <init>(...); }
+-keep class com.camanime.app.UpdateAlarmWorker { <init>(...); }
 
 # Foreground download service is declared in the manifest.
 -keep class com.camanime.app.DownloadKeepAliveService { *; }

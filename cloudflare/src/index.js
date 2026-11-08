@@ -91,7 +91,7 @@ function clientBuild(request) {
   return Number.isFinite(value) ? value : null;
 }
 
-const APK_SHA256 = "09D22D735FB278C77424509055DAB9293599834B4F08E81B44D57725C064FE6D";
+const APK_SHA256 = "BE98B7115A533E9497F47324D7CEF1FA786CCA7A187DF644C3C209F1481A1096";
 
 function updateRequiredResponse(build) {
   const retired = build <= DISCONTINUED_BUILD;
@@ -100,8 +100,8 @@ function updateRequiredResponse(build) {
     code: "APP_UPDATE_REQUIRED",
     reason: retired ? "discontinued" : "unsupported",
     force_update: true,
-    latest_version: "2.9.1",
-    latest_version_code: 20,
+    latest_version: "2.10.0",
+    latest_version_code: 21,
     minimum_supported_version: "2.9.0",
     minimum_supported_version_code: MIN_SUPPORTED_BUILD,
     discontinued_at_or_below_version: "2.7.0",

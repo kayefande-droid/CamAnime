@@ -162,6 +162,14 @@ def _init() -> None:
           catalogue_verified INTEGER NOT NULL DEFAULT 0
         );
         """)
+        # Add the live-update action flag to announcements if it does not exist yet.
+        # SQLite has no ADD COLUMN IF NOT EXISTS, so we try once and ignore the
+        # duplicate-column error on older installs — the column is harmless either way.
+        try:
+            conn.execute("ALTER TABLE announcements ADD COLUMN action TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError as _e:
+            if "duplicate column" not in str(_e).lower():
+                raise
         anime_cache_columns = {row["name"] for row in conn.execute("PRAGMA table_info(anime_cache)")}
         if "catalogue_verified" not in anime_cache_columns:
             conn.execute("ALTER TABLE anime_cache ADD COLUMN catalogue_verified INTEGER NOT NULL DEFAULT 0")
@@ -331,12 +339,13 @@ def list_announcements(limit: int = 10):
     _init()
     with _db() as conn:
         return [{"id": r["id"], "title": r["title"], "body": r["body"],
-                 "author": r["author"], "t": r["t"]}
+                 "author": r["author"], "t": r["t"],
+                 "action": (r["action"] or "").strip()}
                 for r in conn.execute("SELECT * FROM announcements ORDER BY t DESC LIMIT ?",
                                       (max(1, min(int(limit or 10), 20)),))]
 
 
-def post_announcement(title: str, body: str, author: str):
+def post_announcement(title: str, body: str, author: str, action: str = ""):
     title = (title or "").strip()[:120]
     body = (body or "").strip()[:2000]
     if not title or not body:
@@ -345,10 +354,11 @@ def post_announcement(title: str, body: str, author: str):
     aid = secrets.token_hex(6)
     now = int(time.time())
     with _db() as conn:
-        conn.execute("INSERT INTO announcements(id,title,body,author,t) VALUES (?,?,?,?,?)",
-                     (aid, title, body, author or "kayefande-droid & co.", now))
+        conn.execute(
+            "INSERT INTO announcements(id,title,body,author,t,action) VALUES (?,?,?,?,?,?)",
+            (aid, title, body, author or "kayefande-droid & co.", now, (action or "").strip()))
         conn.execute("DELETE FROM announcements WHERE id NOT IN (SELECT id FROM announcements ORDER BY t DESC LIMIT 50)")
-    return {"id": aid, "title": title, "body": body, "author": author, "t": now}
+    return {"id": aid, "title": title, "body": body, "author": author, "t": now, "action": (action or "").strip()}
 
 
 # ─── auth ────────────────────────────────────────────────────────────────────

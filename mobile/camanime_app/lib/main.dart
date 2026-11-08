@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,7 +27,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.9.1';
+const String appVersion = '2.10.0';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 // ── Website-mirrored palette ───────────────────────────
@@ -87,8 +88,7 @@ class AppMode {
 /// user experiences as an app restart landing them in the requested mode.
 final ValueNotifier<String> appMode = ValueNotifier<String>(AppMode.stream);
 
-/// Lets an advert-notification tap open a detail screen from any tab.
-final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 
 void _openAdvertFromNotification(String animeId, String title) {
   if (animeId.isEmpty) return;
@@ -125,6 +125,20 @@ Future<void> main() async {
   unawaited(Api.warmup());
   // Ask the server whether this build may still use protected services.
   unawaited(VersionGate.check());
+  // Honor a notification tap or the scheduled two-minute alarm that asks the app
+  // to start the live update now.
+  unawaited(() async {
+    try {
+      const updateCh = MethodChannel('camanime/update');
+      updateCh.setMethodCallHandler((call) async {
+        if (call.method == 'startNow') {
+          await AppUpdater.startUpdateNow();
+          return null;
+        }
+        throw MissingPluginException();
+      });
+    } catch (_) {}
+  }());
 }
 
 class CamAnimeApp extends StatefulWidget {
@@ -192,7 +206,69 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
     if (p.getBool('tutorial_done') != true) {
       if (mounted) setState(() => showTutorial = true);
     }
+    await _showWhatsNewIfNeeded();
     _autoCheckUpdate();
+  }
+
+  Future<void> _showWhatsNewIfNeeded() async {
+    final w = await AppUpdater.whatsNew();
+    if (!w.show || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: card,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 6,
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0x1A087BFF),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.info_outline, size: 18, color: const Color(0xFF087BFF)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('CamAnime ${w.version}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text('What is new', style: TextStyle(fontSize: 11.5, color: muted, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Text(
+              w.notes.trim().isEmpty
+                  ? 'We tightened up the app behind the scenes. Your library and downloads are unchanged.'
+                  : w.notes,
+              style: const TextStyle(color: muted, fontSize: 12.5, height: 1.55),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF087BFF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                Navigator.of(context, rootNavigator: true).pop();
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   /// Launch/resume update check, throttled to once every six hours so opening
@@ -420,6 +496,12 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
                                 setState(() => showTutorial = true),
                             onCheckUpdate: () => _checkUpdate(manual: true))));
                   },
+                  onNotifications: () async {
+                    final nav = appNavigatorKey.currentState;
+                    if (nav == null) return;
+                    await nav.push(MaterialPageRoute(
+                        builder: (_) => const NotificationBellScreen()));
+                  },
                 ),
               ),
               const Positioned(
@@ -637,11 +719,13 @@ class _FloatingNav extends StatelessWidget {
   final List<(String, IconData, IconData)> tabs;
   final ValueChanged<int> onTab;
   final VoidCallback onSettings;
+  final VoidCallback onNotifications;
   const _FloatingNav(
       {required this.tab,
       required this.tabs,
       required this.onTab,
-      required this.onSettings});
+      required this.onSettings,
+      required this.onNotifications});
 
   @override
   Widget build(BuildContext context) {
@@ -671,6 +755,11 @@ class _FloatingNav extends StatelessWidget {
               height: 24,
               margin: const EdgeInsets.symmetric(horizontal: 2),
               color: CamColors.line,
+            ),
+            // Notification bell: shows a badge when there are unread announcements.
+            _BellButton(
+              onPressed: onNotifications,
+              color: accent,
             ),
             IconButton(
               tooltip: 'App settings',
@@ -720,6 +809,106 @@ class _FloatingNav extends StatelessWidget {
                   letterSpacing: 0.1,
                   color: selected ? accent : CamColors.inkDim)),
         ]),
+      ),
+    );
+  }
+}
+
+/// Notification bell with unread badge.
+class _BellButton extends StatefulWidget {
+  final VoidCallback onPressed;
+  final Color color;
+  const _BellButton({required this.onPressed, required this.color});
+
+  @override
+  State<_BellButton> createState() => _BellButtonState();
+}
+
+class _BellButtonState extends State<_BellButton> {
+  int _count = 0;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final data = await Api.announcements();
+      final list = (data['announcements'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      // Count unread: an announcement is unread until the user opens the
+      // notification bell; for simplicity we treat everything as unread until
+      // the bell is opened.
+      final seenIds = await _seenIds();
+      final unseen = list.where((item) {
+        return !seenIds.contains(item['id']?.toString() ?? '');
+      }).toList();
+      if (!mounted) return;
+      setState(() {
+        _count = unseen.length;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _count = 0;
+      });
+    }
+  }
+
+  Future<Set<String>> _seenIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList('seen_announcement_ids') ?? <String>[]).toSet();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final showBadge = _count > 0;
+    return InkWell(
+      onTap: widget.onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 40,
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: widget.color.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+        ),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(Icons.notifications_outlined,
+                size: 22, color: widget.color),
+            if (showBadge || _loading)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    _loading ? '?' : (_count > 99 ? '99+' : '$_count'),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

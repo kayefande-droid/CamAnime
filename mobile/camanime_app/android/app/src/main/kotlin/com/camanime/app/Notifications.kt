@@ -76,23 +76,36 @@ object Notifications {
         manager.createNotificationChannel(channel)
     }
 
-    /** Admin announcement pushed through the app feed (no Firebase needed). */
+    /**
+     * Admin announcement pushed through the app feed (no Firebase needed).
+     *
+     * When [action] is "update" the notification carries the app logo as both the
+     * small icon and the large icon, taps start the in-app update immediately, and a
+     * second notification is scheduled two minutes later so the user has a short
+     * window to read the message before the app begins updating.
+     */
     fun announcement(
         context: Context,
         title: String,
         body: String,
-        notificationKey: String
+        notificationKey: String,
+        version: String?,
+        action: String?
     ) {
         if (body.isBlank()) return
         ensureAnnouncementChannel(context)
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
                 ?: return
+        val startUpdate = action == "update"
+        val appIcon = android.graphics.drawable.Icon.createWithResource(
+            context, com.camanime.app.R.mipmap.ic_launcher)
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: Intent(context, MainActivity::class.java)
         launch.apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("open_announcements", true)
+            if (startUpdate) putExtra("start_update", true)
         }
         val pending = PendingIntent.getActivity(
             context,
@@ -101,21 +114,97 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(context, ANNOUNCE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(com.camanime.app.R.mipmap.ic_launcher)
+            .setLargeIcon(appIcon)
             .setContentTitle(title.ifBlank { "CamAnime" })
             .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    _updateBody(title, body, version, startUpdate)))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setCategory(
+                if (startUpdate) NotificationCompat.CATEGORY_STATUS
+                else NotificationCompat.CATEGORY_MESSAGE)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
         try {
             manager.notify(notificationKey.hashCode() and 0x7fffffff, notification)
         } catch (_: SecurityException) {
             // Permission revoked: the announcement is still in the app feed.
+        }
+        if (startUpdate && version != null) {
+            UpdateAlarmWorker.schedule(context, version, notificationKey)
+        }
+    }
+
+    private fun _updateBody(
+        title: String,
+        body: String,
+        version: String?,
+        startUpdate: Boolean
+    ): String {
+        val head = if (title.isBlank()) "CamAnime" else title
+        val vline = version?.let { "CamAnime $it" } ?: "CamAnime"
+        val base = if (startUpdate) {
+            "$head\n$vline is ready to install.\n\n$body"
+        } else {
+            "$head\n\n$body"
+        }
+        return base.trim()
+    }
+
+    /**
+     * Notification that fires two minutes after a live-update announcement, with the
+     * app logo and a tap that starts the in-app update.
+     */
+    fun updateAlarm(
+        context: Context,
+        version: String,
+        notificationKey: String
+    ) {
+        ensureAnnouncementChannel(context)
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(context, MainActivity::class.java)
+        launch.apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("start_update", true)
+        }
+        val pending = PendingIntent.getActivity(
+            context,
+            notificationKey.hashCode(),
+            launch,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val appIcon = android.graphics.drawable.Icon.createWithResource(
+            context, com.camanime.app.R.mipmap.ic_launcher)
+        val notification = NotificationCompat.Builder(context, ANNOUNCE_CHANNEL_ID)
+            .setSmallIcon(com.camanime.app.R.mipmap.ic_launcher)
+            .setLargeIcon(appIcon)
+            .setContentTitle("Live update going on")
+            .setContentText("CamAnime $version is ready to install.")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "CamAnime $version is ready to install. " +
+                        "Tap to update now and restart."))
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setTicker("CamAnime $version is ready to install")
+            .build()
+        try {
+            manager.notify(
+                notificationKey.hashCode() and 0x7fffffff, notification)
+        } catch (_: SecurityException) {
+            // Permission revoked: the in-app update dialog still appears.
         }
     }
 
@@ -284,8 +373,11 @@ object Notifications {
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val appIcon = android.graphics.drawable.Icon.createWithResource(
+            context, com.camanime.app.R.mipmap.ic_launcher)
         val notification = NotificationCompat.Builder(context, ANNOUNCE_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_menu_rotate)
+            .setSmallIcon(com.camanime.app.R.mipmap.ic_launcher)
+            .setLargeIcon(appIcon)
             .setContentTitle("Live update going on")
             .setContentText("CamAnime $version is being downloaded in the background.")
             .setStyle(
@@ -300,6 +392,7 @@ object Notifications {
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setTicker("CamAnime $version is being downloaded")
             .build()
         try {
             manager.notify(notificationKey.hashCode() and 0x7fffffff, notification)

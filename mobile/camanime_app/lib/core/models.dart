@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Backend is the CamAnime website itself — always on, no manual linking.
@@ -8,6 +9,11 @@ const String apiHost = String.fromEnvironment(
   'CAMANIME_API',
   defaultValue: 'https://camanime.onrender.com',
 );
+
+/// Global navigator key used by background-triggered actions (notification taps,
+/// scheduled updates) to show dialogs and snacks even when no build context is
+/// directly available.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 /// One playable episode, carrying enough context for resume and back-to-back
 /// playback without leaking UI state through globals.

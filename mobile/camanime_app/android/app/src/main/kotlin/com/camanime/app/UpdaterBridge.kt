@@ -39,6 +39,7 @@ class UpdaterBridge(private val activity: Activity) {
                     "permissionSettings" -> result.success(bridge.openPermissionSettings())
                     "versionName" -> result.success(bridge.versionName())
                     "restart" -> result.success(bridge.restart())
+                    "startForegroundForUpdate" -> result.success(bridge.startForegroundForUpdate())
                     else -> result.notImplemented()
                 }
             }
@@ -95,6 +96,22 @@ class UpdaterBridge(private val activity: Activity) {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * Starts the foreground keep-alive so a large update APK download is not killed
+     * by the system while the app is in the background.
+     */
+    private fun startForegroundForUpdate(): Boolean = try {
+        val intent = Intent(activity, DownloadKeepAliveService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity.startForegroundService(intent)
+        } else {
+            activity.startService(intent)
+        }
+        true
+    } catch (_: Exception) {
+        false
     }
 
     /** Brings CamAnime back to the front after an update check. */

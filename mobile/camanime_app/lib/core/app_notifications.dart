@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Heads-up notifications for finished downloads.
@@ -74,11 +76,26 @@ class AppNotifications {
         seen.add(id);
       }
       if (newest == null) return;
+      final action = (newest['action'] ?? '').toString();
+      String? version;
+      if (action == 'update') {
+        try {
+          final uri = Uri.parse('https://camanime.onrender.com/api/version');
+          final r = await http.get(uri).timeout(const Duration(seconds: 10));
+          if (r.statusCode == 200) {
+            final v = jsonDecode(r.body) as Map<String, dynamic>;
+            version = v['app_version']?.toString();
+          }
+        } catch (_) {}
+      }
       await _channel.invokeMethod<void>('announcement', {
         'id': newest['id'].toString(),
         'title': (newest['title'] ?? 'CamAnime').toString(),
         'body': (newest['body'] ?? '').toString(),
+        if (version != null && version.isNotEmpty) 'version': version,
+        if (action.isNotEmpty) 'action': action,
       });
+      // Mark this announcement seen so the bell and future launches stay quiet.
       await prefs.setStringList(
           _seenAnnouncementsKey, seen.take(80).toList(growable: false));
     } catch (_) {

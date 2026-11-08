@@ -40,6 +40,10 @@ class PlayerScreen extends StatefulWidget {
   /// Set when the mini-player hands its live session back to the full player.
   final MiniPlayback? handoff;
 
+  /// Preferred aspect ratio for the video surface when the source does not report
+  /// one. 16:9 is the default for most anime streams; 4:3 is still common for
+  /// older or low-res episodes that do not publish a real aspect ratio.
+
   const PlayerScreen({
     super.key,
     required this.url,
@@ -63,103 +67,45 @@ class PlayerScreen extends StatefulWidget {
   final String? audio;
   final Future<String?> Function(String newAudio)? onAudioSwitch;
 
+  // -- Deprecated explicitAspect kept for binary compatibility with callers --
+
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
 class _PlayerScreenState extends State<PlayerScreen>
     with WidgetsBindingObserver {
+  Timer? _hideTimer;
+  int? _dragMs;
   VideoPlayerController? _video;
-  String? _error;
-  bool _loading = true;
-  bool _switching = false;
-  bool _advancing = false;
-  int _urlIndex = 0;
-  String _attempt = '';
-  bool _autoplayNext = true;
-  bool _resumeEnabled = true;
-  int _preferredServer = 0;
-  EpisodeSource? _variant;
-  bool _dataSaver = false;
-  bool _qualityFallbackTried = false;
 
   // Control overlay.
   bool _showControls = true;
-  Timer? _hideTimer;
-  bool _ended = false;
-  int? _dragMs;
+  bool _switching = false;
 
-  double _speed = 1.0;
-  double _volume = 1.0;
-  double _brightness = 1.0;
-  bool _fullscreen = false;
+  String _currentAudio = 'sub';
   bool _autoSkipIntro = true;
   bool _autoSkipOutro = true;
   bool _introSkipped = false;
   bool _outroHandled = false;
-  String _currentAudio = 'sub';
-
-  void _switchAudio(String newAudio) async {
-    if (newAudio == _currentAudio || widget.onAudioSwitch == null) return;
-    setState(() {
-      _switching = true;
-      _currentAudio = newAudio;
-    });
-    try {
-      final newUrl = await widget.onAudioSwitch!(newAudio);
-      if (!mounted) return;
-      if (newUrl != null) {
-        await _disposePlayback();
-        final controller = widget.localFile
-            ? VideoPlayerController.file(File(newUrl))
-            : VideoPlayerController.networkUrl(Uri.parse(newUrl));
-        await controller.initialize().timeout(const Duration(seconds: 15));
-        if (!mounted) {
-          await controller.dispose();
-          return;
-        }
-        _video = controller;
-        _video!.addListener(_onTick);
-        if (widget.resume &&
-            _progressId.isNotEmpty &&
-            current.episode != null) {
-          final at =
-              await WatchProgress.position(_progressId, current.episode!);
-          if (at != null && at > 0) {
-            await _video!.seekTo(Duration(seconds: at));
-          }
-        }
-        await _video!.play();
-        setState(() {
-          _loading = false;
-          _error = null;
-          _switching = false;
-          _attempt = '';
-        });
-      } else if (mounted) {
-        setState(() {
-          _switching = false;
-          _error = 'Could not switch audio.';
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _switching = false;
-          _error = 'Could not switch audio.';
-        });
-      }
-    }
-  }
-  static const MethodChannel _playerChannel = MethodChannel('camanime/player');
+  double _speed = 1.0;
+  double _volume = 1.0;
+  double _brightness = 1.0;
+  bool _fullscreen = false;
+  bool _ended = false;
+  bool _loading = true;
+  String? _error;
 
   int _posMs = 0;
   int _durMs = 0;
   int _lastSaveMs = 0;
+  int _urlIndex = 0;
+  String _attempt = '';
 
   /// Guard against runaway automatic episode chains.
   int _autoHops = 0;
   bool _closing = false;
+  bool _advancing = false;
 
   /// Quality variants belong to one episode; cleared whenever the player moves
   /// on so a chip can never switch back to the previous episode.
@@ -169,9 +115,17 @@ class _PlayerScreenState extends State<PlayerScreen>
   int index = 0;
   List<Map> _recommended = const [];
   bool _recsLoading = false;
+  bool _autoplayNext = true;
+  bool _resumeEnabled = true;
+  int _preferredServer = 0;
+  bool _dataSaver = false;
+  bool _qualityFallbackTried = false;
 
   bool _awake = false;
   late bool _local;
+  EpisodeSource? _variant;
+
+  static const MethodChannel _playerChannel = MethodChannel('camanime/player');
 
   EpisodeSource get current => playlist[index];
 
@@ -243,6 +197,27 @@ class _PlayerScreenState extends State<PlayerScreen>
     _loadRecommendationsWhenIdle();
   }
 
+  @override
+  void deactivate() {
+    super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _closing = true;
+    _hideTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _releaseAwake();
+    unawaited(_saveProgress(force: true));
+    _disposePlayback();
+    // Leave the device exactly as it was found: system brightness and normal
+    // orientation are restored when the player closes.
+    _playerChannel.invokeMethod('resetBrightness');
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
   Future<void> _boot() async {
     final p = await SharedPreferences.getInstance();
     if (!mounted) return;
@@ -272,6 +247,59 @@ class _PlayerScreenState extends State<PlayerScreen>
     await _loadCurrent();
   }
 
+  void _switchAudio(String newAudio) async {
+    if (newAudio == _currentAudio || widget.onAudioSwitch == null) return;
+    setState(() {
+      _switching = true;
+      _currentAudio = newAudio;
+    });
+    try {
+      final newUrl = await widget.onAudioSwitch!(newAudio);
+      if (!mounted) return;
+      if (newUrl != null) {
+        await _disposePlayback();
+        final controller = widget.localFile
+            ? VideoPlayerController.file(File(newUrl))
+            : VideoPlayerController.networkUrl(Uri.parse(newUrl));
+        await controller.initialize().timeout(const Duration(seconds: 15));
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _video = controller;
+        _video!.addListener(_onTick);
+        if (widget.resume &&
+            _progressId.isNotEmpty &&
+            current.episode != null) {
+          final at =
+              await WatchProgress.position(_progressId, current.episode!);
+          if (at != null && at > 0) {
+            await _video!.seekTo(Duration(seconds: at));
+          }
+        }
+        await _video!.play();
+        setState(() {
+          _loading = false;
+          _error = null;
+          _switching = false;
+          _attempt = '';
+        });
+      } else if (mounted) {
+        setState(() {
+          _switching = false;
+          _error = 'Could not switch audio.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _switching = false;
+          _error = 'Could not switch audio.';
+        });
+      }
+    }
+  }
+
   /// Continues the episode the mini-player was playing, on its own controller.
   void _adopt(MiniPlayback live) {
     final controller = live.controller;
@@ -288,15 +316,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     _applySpeed();
     _scheduleHide();
     if (!controller.value.isPlaying) unawaited(controller.play());
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      _saveProgress(force: true);
-      _releaseAwake();
-    }
   }
 
   Future<void> _holdAwake() async {
@@ -504,32 +523,31 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  /// Episode-only intro/outro handling, for streaming and downloaded files.
-  ///
-  /// Openings and endings are not published as metadata, so this uses the
-  /// conventional anime layout (opening inside the first ~90s, ending in the
-  /// final ~80s). It runs at most once per episode load, never for films, and
-  /// both halves can be turned off in Playback settings.
   void _maybeAutoSkip(int pos, int duration) {
-    if (duration < 120000) return;
-    final episodic = current.episode != null || playlist.length > 1;
-    if (!episodic) return;
-    if (_autoSkipIntro &&
-        !_introSkipped &&
-        duration > 300000 &&
-        pos > 4000 &&
-        pos < 92000) {
+    if (!_autoSkipIntro) return;
+    if (_introSkipped) return;
+    if (duration <= 300000) return;
+    if (pos > 4000 && pos < 92000) {
       _introSkipped = true;
       unawaited(_seekTo(90000));
-      _snack('Intro skipped');
-      return;
     }
     if (_autoSkipOutro &&
         !_outroHandled &&
         _canHaveNext &&
-        duration - pos <= 80000) {
+        duration - pos <= 80000 &&
+        pos > 40000) {
       _outroHandled = true;
       unawaited(_goNext(auto: true));
+      return;
+    }
+    if (_autoSkipOutro &&
+        !_outroHandled &&
+        !_canHaveNext &&
+        duration - pos <= 80000 &&
+        pos > 40000) {
+      _outroHandled = true;
+      unawaited(_seekTo(duration - 15000));
+      _snack('Ending reached');
     }
   }
 
@@ -606,6 +624,8 @@ class _PlayerScreenState extends State<PlayerScreen>
       durMs: dur,
     );
   }
+
+
 
   Future<void> _selectQuality(int height) async {
     EpisodeSource? best;
@@ -851,22 +871,6 @@ class _PlayerScreenState extends State<PlayerScreen>
     }
   }
 
-  @override
-  void dispose() {
-    _closing = true;
-    _hideTimer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    _releaseAwake();
-    unawaited(_saveProgress(force: true));
-    _disposePlayback();
-    // Leave the device exactly as it was found: system brightness and normal
-    // orientation are restored when the player closes.
-    _playerChannel.invokeMethod('resetBrightness');
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    super.dispose();
-  }
-
   String _clock(int ms) {
     if (ms <= 0) return '--:--';
     final total = ms ~/ 1000;
@@ -878,6 +882,7 @@ class _PlayerScreenState extends State<PlayerScreen>
   }
 
   @override
+
   Widget build(BuildContext context) {
     if (_fullscreen) {
       // Immersive mode keeps the same player, but gives every available pixel
@@ -971,6 +976,7 @@ class _PlayerScreenState extends State<PlayerScreen>
       ),
     );
   }
+
 
   Widget _surface({bool fill = false}) {
     final v = _video;

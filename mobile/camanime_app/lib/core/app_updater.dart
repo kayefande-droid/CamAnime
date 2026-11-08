@@ -4,8 +4,10 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
@@ -181,6 +183,132 @@ class AppUpdater {
     } catch (_) {}
   }
 
+  /// Keep the download alive in the background so a large APK is not killed by
+  /// the system while the app is not on screen.
+  static Future<void> startForegroundForUpdate() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<bool>('startForegroundForUpdate');
+    } catch (_) {}
+  }
+
+  /// Shared-prefs keys for the post-update "what's new" dialog.
+  static const String _kWhatsNew = 'show_whats_new';
+  static const String _kWhatsNewVersion = 'whats_new_version';
+  static const String _kWhatsNewNotes = 'whats_new_notes';
+
+  /// Reads and clears the post-update "what's new" flag. Returns the version and
+  /// release notes the freshly installed app should show; returns (show: false)
+  /// when nothing is pending.
+  static Future<({bool show, String version, String notes})> whatsNew() async {
+    final p = await SharedPreferences.getInstance();
+    if (p.getBool(_kWhatsNew) != true) return (show: false, version: '', notes: '');
+    final version = p.getString(_kWhatsNewVersion) ?? '';
+    final notes = p.getString(_kWhatsNewNotes) ?? '';
+    await p.setBool(_kWhatsNew, false);
+    return (show: true, version: version, notes: notes);
+  }
+
+  /// Starts the update now — used when the user taps a live-update notification or
+  /// the scheduled two-minute alarm fires. Downloads the APK in the foreground,
+  /// verifies its SHA-256, installs and restarts; saves the release notes so the
+  /// freshly installed app can show a what's-new dialog on first launch.
+  static Future<void> startUpdateNow() async {
+    final ctx = appNavigatorKey.currentContext;
+    if (ctx == null) return;
+    final navigator = Navigator.of(ctx, rootNavigator: true);
+    final messenger = ScaffoldMessenger.of(ctx);
+    bool snackOk() => messenger.mounted;
+
+    // Start the foreground keep-alive so the download survives backgrounding.
+    await startForegroundForUpdate();
+
+    final installed = await installedVersion();
+    final info = await check(current: installed);
+    if (info == null) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('No update available now.')));
+      return;
+    }
+
+    var ok = await canInstall();
+    if (!ok) {
+      await openPermissionSettings();
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Install unknown apps permission needed.')));
+      return;
+    }
+
+    bool disposed = false;
+    void dismiss() {
+      if (!disposed) {
+        disposed = true;
+        navigator.pop();
+      }
+    }
+
+    final barrier = Dialog(
+      backgroundColor: const Color(0xFF0A0D14),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.system_update,
+                  size: 40, color: Color(0xFF087BFF)),
+              const SizedBox(height: 14),
+              const Text('Updating CamAnime',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text('Downloading CamAnime ${info.version}…',
+                  style: const TextStyle(color: Color(0xFFB7C3D9))),
+              const SizedBox(height: 14),
+              const LinearProgressIndicator()
+            ]),
+        ),
+      ),
+    );
+
+    if (!navigator.mounted) return;
+    navigator.push(dialogRoute(barrier));
+
+    final file = await download(info, onProgress: (p) {
+      UpdateState.progress.value = p;
+    });
+    UpdateState.progress.value = null;
+
+    if (!navigator.mounted) return;
+    dismiss();
+
+    if (file == null) {
+      if (snackOk()) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Update download failed. Try again later.')));
+      }
+      return;
+    }
+
+    final installedNow = await install(file);
+    if (!installedNow) {
+      if (snackOk()) {
+        messenger.showSnackBar(
+            const SnackBar(content: Text('Install was not started. Try again.')));
+      }
+      return;
+    }
+
+    // Remember the release notes for the freshly installed app to show.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kWhatsNew, true);
+    await prefs.setString(_kWhatsNewVersion, info.version);
+    await prefs.setString(_kWhatsNewNotes, info.notes);
+
+    // Restart into the newly installed app.
+    await restart();
+  }
+
   /// Real installed version, so a stale constant can never hide an update.
   static Future<String> installedVersion() async {
     if (!Platform.isAndroid) return '';
@@ -210,4 +338,14 @@ class UpdateInfo {
 /// Small listenable the UI can watch while an update installs.
 class UpdateState {
   static final ValueNotifier<double?> progress = ValueNotifier<double?>(null);
+}
+
+/// Pushes a dialog onto the root navigator without needing a build context on the
+/// material tree.
+Route<void> dialogRoute(Widget child) {
+  return PageRouteBuilder<void>(
+    pageBuilder: (context, animation, secondaryAnimation) => child,
+    barrierColor: Colors.black54,
+    barrierDismissible: false,
+  );
 }
