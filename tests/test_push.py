@@ -96,7 +96,7 @@ def fcm(monkeypatch):
     server.server_close()
 
 
-def app_headers(build=18, version="2.9.0", install="install-push-01"):
+def app_headers(build=19, version="2.9.0", install="install-push-01"):
     return {
         "X-CamAnime-Version": version,
         "X-CamAnime-Build": str(build),
@@ -198,7 +198,7 @@ def test_admin_notify_actually_delivers_to_outdated_devices(api, fcm):
                 json={"token": "outdated-token-" + "d" * 30},
                 headers=outdated)
 
-    current = app_headers(build=18, install="install-new-78")
+    current = app_headers(build=19, install="install-new-78")
     client.get("/api/app/ping", headers=current)
     client.post("/api/app/push-token",
                 json={"token": "current-token-" + "e" * 30},

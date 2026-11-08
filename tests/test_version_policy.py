@@ -24,7 +24,7 @@ def api(tmp_path, monkeypatch):
         sys.path.remove(str(ROOT))
 
 
-def app_headers(build, version="2.7.0", install="install-test-0001"):
+def app_headers(build, version="2.9.0", install="install-test-0001"):
     return {
         "X-CamAnime-Version": version,
         "X-CamAnime-Build": str(build),
@@ -45,7 +45,7 @@ def test_version_endpoint_is_reachable_from_an_outdated_build(api):
     assert res.status_code == 200
     body = res.get_json()
     assert body["policy"]["latest_version"] == "2.9.0"
-    assert body["policy"]["minimum_supported_version_code"] == 17
+    assert body["policy"]["minimum_supported_version_code"] == 19
     assert body["required"] is True
 
 
@@ -63,13 +63,13 @@ def test_outdated_build_gets_structured_426_on_protected_api(api):
     # of the generic "outdated" wording.
     assert body["discontinued"] is True
     assert "discontinued" in body["message"].lower()
-    assert res.headers["X-CamAnime-Min-Build"] == "17"
+    assert res.headers["X-CamAnime-Min-Build"] == "19"
 
 
 def test_supported_build_is_allowed(api):
     client = api.app.test_client()
     res = client.post("/api/public/stream/download", json={"kind": "stream"},
-                      headers=app_headers(17))
+                      headers=app_headers(19))
     assert res.status_code == 200
 
 

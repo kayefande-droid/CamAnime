@@ -71,7 +71,7 @@ def test_version_endpoint_flags_old_builds_without_blocking_the_check(api):
 
 
 def test_supported_build_is_not_flagged_as_discontinued(api):
-    res = api.app.test_client().get("/api/app/ping", headers=headers(17, "2.7.0"))
+    res = api.app.test_client().get("/api/app/ping", headers=headers(19, "2.9.0"))
     body = res.get_json()
     assert body["required"] is False
     assert body["policy"]["discontinued"] is False

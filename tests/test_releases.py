@@ -82,7 +82,7 @@ def test_blocked_request_is_recorded_for_the_dashboard(api):
 
 
 def test_supported_build_not_flagged_or_blocked(api):
-    res = api.app.test_client().get("/api/app/ping", headers=app_headers(17, "2.7.0"))
+    res = api.app.test_client().get("/api/app/ping", headers=app_headers(19, "2.9.0"))
     body = res.get_json()
     assert body["required"] is False
     assert body["policy"]["reason"] == ""

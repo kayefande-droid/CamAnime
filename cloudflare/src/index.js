@@ -72,7 +72,7 @@ export default {
   },
 };
 
-const MIN_SUPPORTED_BUILD = 17; // 2.7.0 — lowest verified release above 2.6.5
+const MIN_SUPPORTED_BUILD = 19; // 2.9.0 — mandatory genuine-quality release
 const DISCONTINUED_BUILD = 16; // 2.6.5
 const PROTECTED_PREFIXES = [
   "/api/proxy/",
@@ -100,7 +100,7 @@ function updateRequiredResponse(build) {
     force_update: true,
     latest_version: "2.9.0",
     latest_version_code: 19,
-    minimum_supported_version: "2.7.0",
+    minimum_supported_version: "2.9.0",
     minimum_supported_version_code: MIN_SUPPORTED_BUILD,
     discontinued_at_or_below_version: "2.6.5",
     discontinued_at_or_below_version_code: DISCONTINUED_BUILD,

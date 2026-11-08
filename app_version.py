@@ -25,8 +25,8 @@ import camanime_platform as platform
 DEFAULT_POLICY = {
     "latest_version": "2.9.0",
     "latest_version_code": 19,
-    "minimum_supported_version": "2.7.0",
-    "minimum_supported_version_code": 17,
+    "minimum_supported_version": "2.9.0",
+    "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
@@ -46,6 +46,13 @@ DEFAULT_POLICY = {
 # minimum. 2.6.5 was versionCode 16, so 16 and anything below it is refused.
 DISCONTINUED_AT_OR_BELOW_VERSION = "2.6.5"
 DISCONTINUED_AT_OR_BELOW_VERSION_CODE = 16
+
+# 2.9.0 is the mandatory release for the genuine-provider-quality update. This
+# floor upgrades policy rows created by older deployments (which still said
+# 2.7.0/build 17) so every existing install is moved to 2.9.0 without an
+# operator having to edit the row by hand.
+MANDATORY_MINIMUM_VERSION = "2.9.0"
+MANDATORY_MINIMUM_VERSION_CODE = 19
 
 DISCONTINUED_MESSAGE = (
     "CamAnime 2.6.5 and older are discontinued and can no longer stream or "
@@ -145,6 +152,14 @@ def get_policy() -> Dict:
                 (DEFAULT_POLICY["latest_version"],
                  DEFAULT_POLICY["latest_version_code"],
                  DEFAULT_POLICY["release_notes"], now),
+            )
+            row = conn.execute("SELECT * FROM version_policy WHERE id=1").fetchone()
+        if int(row["minimum_supported_version_code"]) < MANDATORY_MINIMUM_VERSION_CODE:
+            conn.execute(
+                "UPDATE version_policy SET minimum_supported_version=?,"
+                " minimum_supported_version_code=?, updated=?, updated_by='release-floor'"
+                " WHERE id=1",
+                (MANDATORY_MINIMUM_VERSION, MANDATORY_MINIMUM_VERSION_CODE, now),
             )
             row = conn.execute("SELECT * FROM version_policy WHERE id=1").fetchone()
     return {

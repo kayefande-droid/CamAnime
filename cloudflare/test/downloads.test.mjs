@@ -44,7 +44,7 @@ test("blocked builds lose streaming and downloads on this host too", async () =>
     const body = await res.json();
     assert.equal(body.status, "update_required");
     assert.equal(body.reason, "discontinued");
-    assert.equal(body.minimum_supported_version_code, 17);
+    assert.equal(body.minimum_supported_version_code, 19);
     assert.ok(body.download_urls.render.includes("/get/android"));
     assert.ok(body.download_urls.cloudflare.includes("/get/android"));
   }
