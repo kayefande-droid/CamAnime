@@ -25,7 +25,7 @@ class UpdateAlarmWorker(
                 .setInitialDelay(2, TimeUnit.MINUTES)
                 .addTag(key)
                 .setInputData(
-                    android.content.Data.Builder()
+                    androidx.work.Data.Builder()
                         .putString("version", version)
                         .putString("key", key)
                         .build()

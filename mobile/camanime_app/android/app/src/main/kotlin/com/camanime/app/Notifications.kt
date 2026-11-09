@@ -22,6 +22,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
+/** Companion stable id so update notices can be posted and dismissed together. */
+private const val UPDATE_NOTIFICATION_ID = 71001
+
 /**
  * Heads-up notifications that land above whatever app is on screen.
  *
@@ -71,6 +74,8 @@ object Notifications {
         ).apply {
             description = "News and notices published by the CamAnime team."
             enableVibration(true)
+            enableLights(true)
+            setShowBadge(true)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
         }
         manager.createNotificationChannel(channel)
@@ -384,8 +389,7 @@ object Notifications {
                 NotificationCompat.BigTextStyle()
                     .bigText(
                         "CamAnime $version is being downloaded in the background. "
-                            + "Tap to open the app.")
-            )
+                            + "Tap to open the app."))
             .setAutoCancel(true)
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -395,9 +399,26 @@ object Notifications {
             .setTicker("CamAnime $version is being downloaded")
             .build()
         try {
-            manager.notify(notificationKey.hashCode() and 0x7fffffff, notification)
+            manager.notify(UPDATE_NOTIFICATION_ID, notification)
         } catch (_: SecurityException) {
             // Permission revoked: the in-app update dialog still appears.
+        }
+    }
+
+    /**
+     * Clears the "Live update going on" heads-up notification posted by
+     * [updateInProgress]. Safe to call more than once; a missing notification is
+     * a no-op rather than an error.
+     */
+    fun dismissUpdateInProgress(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                ?: return
+        try {
+            manager.cancel(UPDATE_NOTIFICATION_ID)
+        } catch (_: SecurityException) {
+            // Permission revoked: the notice is moot anyway.
         }
     }
 

@@ -103,12 +103,16 @@ void _openAdvertFromNotification(String animeId, String title) {
           animeId: animeId, title: title.isEmpty ? 'Anime' : title)));
 }
 
+typedef AnimeDetailLauncher = DetailScreen Function(String id, String title);
+
+final AnimeDetailLauncher _animeDetailLauncher = 
+    (id, title) => DetailScreen(animeId: id, title: title);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   DownloadManager.instance.headersProvider = Api.headers;
-  AnimeDetailLauncher.builder =
-      (id, title) => DetailScreen(animeId: id, title: title);
   appMode.value = await AppMode.get();
+
   // Draw the first frame first. Reading the download queue and scanning the
   // legacy library is disk work; awaiting it before runApp delayed the first
   // frame long enough for Android to show "CamAnime isn't responding" on a
@@ -1611,7 +1615,7 @@ class _TutorialOverlayState extends State<TutorialOverlay> {
     ],
     [
       'Watch in the app',
-      'Episodes stream with the same servers as the website — English sub & English dub, straight in the app.'
+      'Episodes stream with the same servers as the website — SUB & DUB, straight in the app.'
     ],
     [
       'Downloads from CamAnime',
@@ -2729,7 +2733,7 @@ class _DetailScreenState extends State<DetailScreen> {
   String audio = 'sub';
 
   /// Provider-published audio for this title, learned from a real episode
-  /// bundle. Null means "not checked yet", so English dub (DUB) stays selectable until the
+  /// bundle. Null means "not checked yet", so DUB stays selectable until the
   /// server has actually reported whether the provider lists it.
   bool? _dubAvailable;
 
@@ -2751,9 +2755,7 @@ class _DetailScreenState extends State<DetailScreen> {
   void _noteAudioFallback(Map<String, dynamic> bundle, int ep) {
     if (bundle['audio_fallback'] != true || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-          'No English-dub track is published for episode $ep — '
-          'playing English subtitles (SUB) instead. '
+      content: Text('No provider dub for episode $ep — playing SUB. '
           'CamAnime only offers audio the source actually publishes.'),
     ));
   }
@@ -2941,7 +2943,7 @@ class _DetailScreenState extends State<DetailScreen> {
       sources.add(EpisodeSource(
         url: list.first.url,
         mirrors: list.skip(1).map((s) => s.url).toList(),
-        label: '$title — Ep $ep (English ${_sourceAudio(bundle)})',
+        label: '$title — Ep $ep (${_sourceAudio(bundle).toUpperCase()})',
         animeId: widget.animeId,
         episode: ep,
         animeTitle: title,
@@ -3174,7 +3176,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   color: CamColors.accent),
               title: Text(option.qualityLabel),
               subtitle: Text(
-                'English ${option.audio.toUpperCase()} · ${option.label}',
+                '${option.audio.toUpperCase()} · ${option.label}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -3477,7 +3479,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   resume: true,
                   fetchEpisode: _sourceForEpisode,
                   label:
-                      '$title — Ep $ep (English ${_sourceAudio(bundle)})',
+                      '$title — Ep $ep (${_sourceAudio(bundle).toUpperCase()})',
                   onOpenAnime: _openAnime,
                   animeId: widget.animeId,
                   audio: audio,
@@ -3496,8 +3498,8 @@ class _DetailScreenState extends State<DetailScreen> {
       _applyAudioAvailability(bundle);
       if (bundle['audio_fallback'] == true && audio == 'dub' && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('No provider English-dub track is listed for this episode — '
-                'an English subtitle (SUB) file will be saved.')));
+            content: Text('No provider dub for this episode — a SUB file will '
+                'be saved.')));
       }
       final options =
           downloadOptions(bundle, preferredAudio: audio, absolute: Api.abs);
@@ -3666,9 +3668,9 @@ class _DetailScreenState extends State<DetailScreen> {
                         if (_dubAvailable == false) ...[
                           const SizedBox(height: 6),
                           const Text(
-                            'No provider English-dub track is published for this title yet. '
-                            'English subtitles (SUB) are used automatically when an '
-                            'English-dub track does not exist.',
+                            'No provider dub is published for this title yet. '
+                            'SUB is used automatically when a DUB track does '
+                            'not exist.',
                             style: TextStyle(
                                 color: CamColors.inkDim,
                                 fontSize: 10.5,
@@ -5267,12 +5269,12 @@ class _AudioSeasonBar extends StatelessWidget {
               const ButtonSegment(
                   value: 'sub',
                   icon: Icon(Icons.closed_caption_rounded, size: 14),
-                  label: Text('English SUB')),
+                  label: Text('SUB')),
               ButtonSegment(
                   value: 'dub',
                   enabled: dubAvailable != false,
                   icon: Icon(Icons.headphones_rounded, size: 14),
-                  label: Text('English DUB')),
+                  label: Text('DUB')),
             ],
             selected: {audio},
             showSelectedIcon: false,
