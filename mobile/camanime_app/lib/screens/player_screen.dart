@@ -278,6 +278,10 @@ class _PlayerScreenState extends State<PlayerScreen>
           }
         }
         await _video!.play();
+        _snack(
+            _currentAudio == 'dub'
+                ? 'Now playing English dub (DUB)'
+                : 'Now playing English subtitles (SUB)');
         setState(() {
           _loading = false;
           _error = null;
@@ -1657,7 +1661,7 @@ class _PlayerScreenState extends State<PlayerScreen>
           builder: (_) => PlayerScreen(
             url: urls.first,
             mirrors: urls.skip(1).toList(),
-            label: '$title — Ep 1 (SUB)',
+            label: '$title — Ep 1 (English SUB)',
             onOpenAnime: widget.onOpenAnime,
             animeId: widget.animeId,
             audio: widget.audio,
@@ -1718,12 +1722,15 @@ class _AudioSwitchButton extends StatelessWidget {
                 color: Colors.white,
               ),
               const SizedBox(width: 5),
-              Text(
-                currentAudio.toUpperCase(),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800),
+              Tooltip(
+                message: currentAudio == 'sub' ? 'English subtitles (SUB)' : 'English dub (DUB)',
+                child: Text(
+                  currentAudio.toUpperCase(),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800),
+                ),
               ),
               if (enabled) ...
                 [

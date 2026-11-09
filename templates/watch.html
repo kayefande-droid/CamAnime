@@ -556,7 +556,7 @@
             <!-- Episode sources listed by configured providers; audio options vary by episode. -->
             <div class="server-deck">
                 <div class="server-row">
-                    <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> SUB SERVERS:</span>
+                    <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> ENGLISH SUB SERVERS:</span>
                     {% for srv in servers if srv.audio == 'sub' %}
                     <button type="button"
                             class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
@@ -571,7 +571,7 @@
 
                 {% if bundle.audio_availability.dub %}
                 <div class="server-row">
-                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> PROVIDER-LISTED DUB SERVERS:</span>
+                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> PROVIDER-LISTED ENGLISH DUB SERVERS:</span>
                     {% for srv in servers if srv.audio == 'dub' %}
                     <button type="button"
                             class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
@@ -584,7 +584,7 @@
                     {% endfor %}
                 </div>
                 {% elif preferred_audio == 'dub' %}
-                <p id="audioAvailabilityNotice" role="status" style="color:var(--text-muted);font-size:.84rem;">No provider-listed dub is available for this episode. Playing available original audio instead.</p>
+                <p id="audioAvailabilityNotice" role="status" style="color:var(--text-muted);font-size:.84rem;">No provider-listed English dub is available for this episode. Playing English subtitles (SUB) instead.</p>
                 {% endif %}
                 <p role="note" style="color:var(--text-muted);font-size:.8rem;margin:.6rem 0 0;">Quality and dub availability are read from the provider for this exact episode. Choices the source does not publish are never shown or invented.</p>
             </div>
@@ -594,7 +594,7 @@
         <aside class="episode-sidebar">
             <div class="sidebar-head">
                 <span class="sidebar-title">Released episodes ({{ total_episodes }})</span>
-                <span style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">{{ preferred_audio | upper }}</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">English {{ preferred_audio | upper }}</span>
             </div>
             <input type="text" class="ep-search-box" placeholder="Filter episode number..." oninput="filterRailEpisodes(this.value)">
             <div class="ep-rail-list" id="epRailList">
@@ -627,7 +627,7 @@
                     <div class="dl-row">
                         <div class="dl-meta">
                             <span class="dl-name">{{ dl.label }}</span>
-                            <span class="dl-sub">{{ dl.provider }} • {{ dl.quality }} • {{ dl.audio }}</span>
+                            <span class="dl-sub">{{ dl.provider }} • {{ dl.quality }} • English {{ dl.audio | upper }}</span>
                         </div>
                         <a href="{{ dl.url }}" class="dl-action" {% if dl.direct %}download{% else %}target="_blank" rel="noopener"{% endif %}>
                             <i class="fas fa-download"></i> {{ 'Direct MP4 Download' if dl.direct else 'Open Mirror' }}
@@ -1171,7 +1171,7 @@
         });
         switchServer(INITIAL_SERVER);
         if ({{ 'true' if bundle.audio_fallback else 'false' }}) {
-            showPlayerError('No provider-listed dub is available for this episode. Playing available original audio instead.');
+            showPlayerError('No provider-listed English dub is available for this episode. Playing English subtitles (SUB) instead.');
         }
         recordWatchHistory();
         const activeEp = document.querySelector('#epRailList .ep-rail-item.current');

@@ -139,8 +139,8 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     </div>
     <div class="lab" style="font-weight:700;font-size:.95rem;margin:.4rem 0 .5rem">Default audio</div>
     <div class="seg" id="audioSeg">
-      <button type="button" data-audio="sub"><i class="fas fa-closed-captioning"></i> SUB</button>
-      <button type="button" data-audio="dub"><i class="fas fa-headphones"></i> DUB</button>
+      <button type="button" data-audio="sub"><i class="fas fa-closed-captioning"></i> English SUB</button>
+      <button type="button" data-audio="dub"><i class="fas fa-headphones"></i> English DUB</button>
     </div>
   </div>
 
@@ -295,7 +295,7 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     });
   }
   document.querySelectorAll('#audioSeg button').forEach(function (b) {
-    b.onclick = function () { set('camanime-audio', b.dataset.audio); paintAudio(); say('Default audio: ' + b.dataset.audio.toUpperCase() + '.'); };
+    b.onclick = function () { set('camanime-audio', b.dataset.audio); paintAudio(); say('Default audio: English ' + b.dataset.audio.toUpperCase() + '.'); };
   });
 
   // Guest name

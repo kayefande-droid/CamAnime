@@ -265,7 +265,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _tile(
                 icon: Icons.tune_rounded,
                 title: 'Recommended at a glance',
-                subtitle: 'SUB audio \u00b7 smallest published download \u00b7 '
+                subtitle: 'English subtitles (SUB) \u00b7 smallest published download \u00b7 '
                     'data-saver streaming \u00b7 save to device \u00b7 autoplay on',
               ),
             ]),
@@ -292,13 +292,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _tile(
                 icon: Icons.translate_rounded,
                 title: 'Default audio',
-                subtitle: 'DUB plays only where the provider publishes it; '
-                    'otherwise SUB is used',
+                subtitle: 'English dub (DUB) plays only where the provider publishes it; '
+                    'otherwise English subtitles (SUB) are used',
                 trailing: SegmentedButton<String>(
                   showSelectedIcon: false,
                   segments: const [
-                    ButtonSegment(value: 'sub', label: Text('SUB')),
-                    ButtonSegment(value: 'dub', label: Text('DUB')),
+                    ButtonSegment(value: 'sub', label: Text('English SUB')),
+                    ButtonSegment(value: 'dub', label: Text('English DUB')),
                   ],
                   selected: {audio},
                   onSelectionChanged: (value) async {
@@ -654,7 +654,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// One tap puts every choice back to what works best on a phone: SUB audio,
+  /// One tap puts every choice back to what works best on a phone: English subtitles (SUB),
   /// 480p downloads to keep files small, data-saver streaming, autoplay on,
   /// saved copies in device storage, and the download-complete alert on.
   Future<void> _applyRecommended() async {

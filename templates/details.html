@@ -626,10 +626,10 @@
                 {% if anime.episodes %}
                 {% set first_episode = anime.episodes | map(attribute='num') | min %}
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=sub" class="btn-watch">
-                    <i class="fas fa-play"></i> Check Ep {{ first_episode }} (SUB)
+                    <i class="fas fa-play"></i> Check Ep {{ first_episode }} (English SUB)
                 </a>
                 <a href="/watch/{{ anime.id }}/{{ first_episode }}?audio=dub" class="btn-outline">
-                    <i class="fas fa-headphones"></i> Try Dub on Ep {{ first_episode }}
+                    <i class="fas fa-headphones"></i> Try English Dub on Ep {{ first_episode }}
                 </a>
                 {% else %}
                 <span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>
