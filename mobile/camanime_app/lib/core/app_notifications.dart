@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 /// Heads-up notifications for finished downloads.
 ///
@@ -132,6 +132,16 @@ class AppNotifications {
       await _channel.invokeMethod<void>('updateInProgress', {
         'version': version,
       });
+    } catch (_) {}
+  }
+
+  /// Dismisses the "Live update going on" heads-up notification if one is
+  /// showing. Safe to call even when no update is in flight; the native side is
+  /// a no-op when the notification channel or notification is absent.
+  static Future<void> dismissUpdateInProgress() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<void>('dismissUpdateInProgress');
     } catch (_) {}
   }
 }

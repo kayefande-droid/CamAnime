@@ -39,6 +39,10 @@ class UpdaterBridge(private val activity: Activity) {
                     "permissionSettings" -> result.success(bridge.openPermissionSettings())
                     "versionName" -> result.success(bridge.versionName())
                     "restart" -> result.success(bridge.restart())
+                    "dismissUpdateInProgress" -> {
+                        Notifications.dismissUpdateInProgress(bridge.activity)
+                        result.success(true)
+                    }
                     "startForegroundForUpdate" -> result.success(bridge.startForegroundForUpdate())
                     else -> result.notImplemented()
                 }

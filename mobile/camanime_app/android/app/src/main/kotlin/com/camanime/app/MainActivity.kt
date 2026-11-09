@@ -125,6 +125,10 @@ class MainActivity : FlutterActivity() {
                         )
                         result.success(true)
                     }
+                    "dismissUpdateInProgress" -> {
+                        Notifications.dismissUpdateInProgress(this)
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }

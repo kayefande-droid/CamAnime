@@ -218,6 +218,7 @@ class _UpdateRequiredScreenState extends State<UpdateRequiredScreen> {
     final info = UpdateInfo(
       version: widget.policy.latestVersion,
       apkUrl: widget.policy.resolvedDownloadUrl,
+      apkBytes: null,
       notes: widget.policy.releaseNotes,
     );
     final file = await AppUpdater.download(info, onProgress: (p) {

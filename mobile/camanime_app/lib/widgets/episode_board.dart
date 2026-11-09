@@ -121,8 +121,7 @@ class _EpisodeBoardState extends State<EpisodeBoard> {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'No episode list has been published for this title yet. '
-              'Numbers are never invented — you can still try Episode 1.',
+              'No episode list has been published for this title yet.',
               style: TextStyle(
                   color: CamColors.inkDim, fontSize: 11.5, height: 1.45),
             ),
@@ -356,7 +355,7 @@ class _EpisodeBoardState extends State<EpisodeBoard> {
                       )
                     else
                       Text(
-                        'Ep $ep · Tap to play',
+                        'Episode $ep',
                         style: const TextStyle(
                             fontSize: 10.5, color: CamColors.inkDim),
                       ),
@@ -483,15 +482,14 @@ class _EpisodeBoardState extends State<EpisodeBoard> {
     }
     return IconButton(
       tooltip: 'Download episode $ep',
-      visualDensity: VisualDensity.compact,
-      icon: Icon(
-        playablePart
-            ? Icons.download_done_rounded
-            : Icons.download_for_offline_outlined,
-        size: 20,
-        color: playablePart ? CamColors.accent : CamColors.inkDim,
-      ),
-      onPressed: () => widget.onDownload(ep),
+      visualDensity: VisualDensity.compact,              icon: Icon(
+              playablePart
+                  ? Icons.download_done_rounded
+                  : Icons.download_for_offline_outlined,
+              size: 20,
+              color: playablePart ? CamColors.accent : CamColors.inkDim,
+            ),
+            onPressed: () => widget.onDownload(ep),
     );
   }
 }

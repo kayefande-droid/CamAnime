@@ -28,14 +28,12 @@ void main() {
     await tester.pumpWidget(const CamAnimeApp());
     await tester.pump();
 
-    expect(find.byKey(const ValueKey('camanime-brand-logo')), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Explore'), findsOneWidget);
-    expect(find.text('Search'), findsOneWidget);
-    expect(find.text('Library'), findsOneWidget);
-    expect(find.text('Profile'), findsOneWidget);
-    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
+    expect(find.text('CamAnime'), findsOneWidget);
+    expect(find.text('Episode 1'), findsOneWidget);
+    expect(find.text('My Library'), findsOneWidget);
+    expect(find.text('Downloading'), findsNothing);
+    expect(find.text('Nothing saved yet'), findsNothing);
   });
 
   testWidgets('library shows empty state when nothing is downloaded',
@@ -57,6 +55,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('My Library'), findsWidgets);
+    expect(find.text('Nothing saved yet'), findsOneWidget);
   });
 }
 
