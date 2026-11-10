@@ -1,0 +1,62 @@
+name: Shorebird Patch (Android)
+
+# Manual only: publishes a Dart-only over-the-air patch to an existing release.
+# Use after a release from shorebird-release.yml is live for users.
+on:
+  workflow_dispatch:
+    inputs:
+      release-version:
+        description: "Release to patch (e.g. 2.11.0+22, or latest)"
+        required: true
+        default: latest
+        type: string
+      track:
+        description: "Track/channel to publish to (blank = CLI default)"
+        required: false
+        type: string
+      dry-run:
+        description: "Build and check without publishing the patch"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: shorebird-patch-${{ inputs.release-version }}
+  cancel-in-progress: false
+
+jobs:
+  patch-android:
+    name: Patch Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Build Shorebird patch
+        id: shorebird_patch
+        uses: shorebirdtech/shorebird-patch@v1
+        with:
+          platform: android
+          release-version: ${{ inputs.release-version }}
+          track: ${{ inputs.track }}
+          working-directory: ./mobile/camanime_app
+          args: ${{ inputs.dry-run && '--dry-run' || '' }}
+
+      - name: Record patch number
+        run: |
+          echo "Patch number: ${{ steps.shorebird_patch.outputs.patch-number }}" >> "$GITHUB_STEP_SUMMARY"

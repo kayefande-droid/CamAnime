@@ -1012,7 +1012,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         /// swallowing the entire screen. Reduced ratio ensures subtitles are visible.
         if (fill) {
           final maxAspect = 10.0 / 16.0;
-          final usedAspect = v?.value?.aspectRatio ?? 16.0 / 9.0;
+          final usedAspect = v?.value.aspectRatio ?? 16.0 / 9.0;
           final windowAspect = usedAspect <= maxAspect
               ? usedAspect
               : maxAspect;

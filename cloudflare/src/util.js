@@ -87,3 +87,25 @@ export function clearSessionCookie() {
 }
 
 export const BRAND = "CamAnime";
+
+/**
+ * Parse an HTTP `Range: bytes=…` header into R2 range options.
+ *
+ * Accepts `bytes=0-99`, `bytes=100-` and `bytes=-500` (suffix). Anything else
+ * returns null so the caller serves the whole object instead of guessing.
+ */
+export function parseByteRange(header) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || "").trim());
+  if (!match) return null;
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) return null;
+  if (!rawStart) {
+    const suffix = Number(rawEnd);
+    return suffix > 0 ? { suffix } : null;
+  }
+  const offset = Number(rawStart);
+  if (!Number.isFinite(offset)) return null;
+  if (!rawEnd) return { offset };
+  const length = Number(rawEnd) - offset + 1;
+  return length > 0 ? { offset, length } : null;
+}

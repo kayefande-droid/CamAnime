@@ -88,6 +88,9 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "init", "enable" -> {
                         Notifications.ensureCompleteChannel(this)
+                        // FCM posts on this channel; create it before any token is
+                        // registered so the first push is not dropped.
+                        Notifications.ensureUpdatesChannel(this)
                         requestNotificationPermission()
                         result.success(true)
                     }

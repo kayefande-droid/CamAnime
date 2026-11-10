@@ -18,6 +18,24 @@
     "traces": { "enabled": true, "head_sampling_rate": 0.01 }
   },
 
+  // Defaults the worker reads at runtime. Override per environment in the
+  // dashboard (Settings → Variables) without editing code.
+  "vars": {
+    "APP_VERSION": "2.11.0",
+    // Leave empty to keep /admin a 404, matching the Render origin's
+    // CAMANIME_ADMIN_PATH policy. Set it to serve the private dashboard.
+    "ADMIN_PATH": "",
+    // Public identifier of the Firebase project used for FCM (not a secret;
+    // the service-account key is set with `wrangler secret put FCM_SERVICE_ACCOUNT`).
+    "FCM_PROJECT_ID": ""
+  },
+
+  // Hourly new-episode digest. FCM delivers to devices with the app closed or
+  // the screen off; a run with nothing airing sends nothing at all.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+
   "d1_databases": [
     {
       "binding": "DB",
@@ -27,12 +45,19 @@
     }
   ],
 
-  "r2_buckets": [
-    {
-      "binding": "FILES",
-      "bucket_name": "camanime-files"
-    }
-  ],
+  // R2 is NOT yet activated on account e808f37c…: the API answers
+  // "Please enable R2 through the Cloudflare Dashboard", and a Wrangler deploy
+  // with an R2 binding fails while the bucket does not exist. Every FILES use
+  // in src/ is already guarded (`if (env.FILES)`), so the worker runs without
+  // it: downloads fall back to the static asset bundle and then to the Render
+  // 302. Re-enable this binding after activating R2 and creating the bucket.
+  //
+  // "r2_buckets": [
+  //   {
+  //     "binding": "FILES",
+  //     "bucket_name": "camanime-files"
+  //   }
+  // ],
 
   "assets": {
     "directory": "../static",

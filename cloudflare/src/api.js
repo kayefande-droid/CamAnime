@@ -1,5 +1,5 @@
 /** CamAnime edge API: community, library/history, counters, announcements, admin, downloads, streaming proxy. */
-import { json } from "./util.js";
+import { json, parseByteRange } from "./util.js";
 import { currentUser, requireAdmin } from "./auth.js";
 
 const time = () => Math.floor(Date.now() / 1000);
@@ -202,19 +202,86 @@ export async function downloadList(env) {
   });
 }
 
+/** Only objects under this prefix are publicly downloadable. */
+const DOWNLOAD_PREFIX = "downloads/";
+
+/**
+ * Public file download (APK and admin uploads).
+ *
+ * Keys are confined to `downloads/` so a guessed name cannot reach any other
+ * object in the bucket, and Range requests are served as 206 so the Android
+ * download manager can resume on a mobile connection.
+ */
 export async function downloadFile(env, request, key) {
   if (!env.FILES) return new Response("R2 storage binding not configured.", { status: 503 });
-  const obj = await env.FILES.get(key);
+
+  let safeKey;
+  try {
+    safeKey = decodeURIComponent(String(key || "")).replace(/^\/+/, "");
+  } catch {
+    return new Response("Not found.", { status: 404 });
+  }
+  if (!safeKey.startsWith(DOWNLOAD_PREFIX) || safeKey.includes("..")) {
+    return new Response("Not found.", { status: 404 });
+  }
+
+  const wantsHead = request.method === "HEAD";
+  const range = parseByteRange(request.headers.get("range"));
+  let obj = null;
+  try {
+    obj = wantsHead
+      ? await env.FILES.head(safeKey)
+      : await env.FILES.get(safeKey, range ? { range } : undefined);
+  } catch {
+    obj = null;
+  }
   if (!obj) return new Response("Not found.", { status: 404 });
+
   const headers = new Headers();
-  obj.writeHttpMetadata(headers);
+  obj.writeHttpMetadata?.(headers);
   headers.set("etag", obj.httpEtag);
-  headers.set("content-disposition", `attachment; filename="${key.replace(/^downloads\//, "").replace(/"/g, "")}"`);
-  return new Response(obj.body, { headers });
+  headers.set("accept-ranges", "bytes");
+  headers.set(
+    "content-disposition",
+    `attachment; filename="${safeKey.replace(DOWNLOAD_PREFIX, "").replace(/"/g, "")}"`,
+  );
+
+  const ranged = range && obj.range;
+  if (ranged) {
+    const start = obj.range.offset;
+    const length = obj.range.length;
+    headers.set("content-range", `bytes ${start}-${start + length - 1}/${obj.size}`);
+    headers.set("content-length", String(length));
+  } else {
+    headers.set("content-length", String(obj.size));
+  }
+
+  return new Response(wantsHead ? null : obj.body, {
+    status: ranged ? 206 : 200,
+    headers,
+  });
 }
 
 /* ── streaming proxy with Range support + SSRF host allowlist (no Render dependency) ── */
-const PROXY_HOSTS = /(anilist\.co|r2\.dev|megaplay\.buzz|vidlink\.pro|vidsrc\.cc|animeheaven\.me|nekostream\.site|anikoto\.net)$/i;
+// Hosts this deployment is allowed to fetch for the app. Matched on label
+// boundaries (`h === suffix || h.endsWith("." + suffix)`), never as a raw
+// suffix: the previous regex let `evil-anilist.co` or `notr2.dev` through.
+const PROXY_HOSTS = [
+  "anilist.co",
+  "r2.dev",
+  "megaplay.buzz",
+  "vidlink.pro",
+  "vidsrc.cc",
+  "animeheaven.me",
+  "nekostream.site",
+  "anikoto.net",
+];
+
+function hostAllowed(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/\.$/, "");
+  if (!host) return false;
+  return PROXY_HOSTS.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+}
 
 function proxyTarget(urlText) {
   let u;
@@ -223,11 +290,23 @@ function proxyTarget(urlText) {
   } catch {
     return null;
   }
-  if (u.protocol !== "https:" || !PROXY_HOSTS.test(u.hostname)) return null; // SSRF guard
+  if (u.protocol !== "https:") return null; // SSRF guard
+  if (u.username || u.password) return null; // never forward embedded credentials
+  if (!hostAllowed(u.hostname)) return null;
   return u;
 }
 
+const PROXY_TIMEOUT_MS = 20000;
+
+function methodNotAllowed() {
+  return new Response("Method not allowed.", {
+    status: 405,
+    headers: { allow: "GET, HEAD", "access-control-allow-origin": "*" },
+  });
+}
+
 export async function proxyMedia(env, request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
   const url = new URL(request.url);
   const target = proxyTarget(url.searchParams.get("u") || "");
   if (!target) return new Response("Blocked: proxy target host not allowed.", { status: 403 });
@@ -235,22 +314,29 @@ export async function proxyMedia(env, request) {
   for (const h of ["range", "if-none-match", "if-modified-since"]) {
     if (request.headers.get(h)) headers.set(h, request.headers.get(h));
   }
-  const upstream = await fetch(target.toString(), { headers });
+  const upstream = await fetch(target.toString(), {
+    headers,
+    signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+  });
   const out = new Headers();
   for (const h of ["content-type", "content-length", "content-range", "accept-ranges", "etag", "last-modified", "cache-control"]) {
     if (upstream.headers.get(h)) out.set(h, upstream.headers.get(h));
   }
   if (!out.has("accept-ranges")) out.set("accept-ranges", "bytes"); // seeks keep working
   out.set("access-control-allow-origin", "*"); // developer API streams are embedded cross-origin
-  return new Response(upstream.body, { status: upstream.status, headers: out });
+  return new Response(request.method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    headers: out,
+  });
 }
 
 /** HLS playlist rewriter: segments/HLS URLs go back through /api/proxy/media. */
 export async function proxyHls(env, request) {
+  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed();
   const url = new URL(request.url);
   const target = proxyTarget(url.searchParams.get("u") || "");
   if (!target) return new Response("Blocked: proxy target host not allowed.", { status: 403 });
-  const res = await fetch(target.toString());
+  const res = await fetch(target.toString(), { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
   const type = (res.headers.get("content-type") || "").toLowerCase();
   if (!/mpegurl|text\/plain/.test(type)) {
     const headers = new Headers();
@@ -259,18 +345,26 @@ export async function proxyHls(env, request) {
     }
     headers.set("accept-ranges", "bytes");
     headers.set("access-control-allow-origin", "*");
-    return new Response(res.body, { status: res.status, headers });
+    return new Response(request.method === "HEAD" ? null : res.body, {
+      status: res.status,
+      headers,
+    });
   }
   const text = await res.text();
   const baseDir = target.href.slice(0, target.href.lastIndexOf("/") + 1);
+  // Nested playlists must come back through the rewriter, or their own
+  // relative segment URIs break; everything else is a byte-range fetch.
+  const proxied = (raw) => {
+    const abs = new URL(raw, baseDir).href;
+    const kind = /\.m3u8(\?|$)|mpegurl/i.test(abs) ? "hls" : "media";
+    return `/api/proxy/${kind}?u=${encodeURIComponent(abs)}`;
+  };
   const out = text.split("\n").map((line) => line.trim()).map((line) => {
     if (!line || line.startsWith("#")) {
-      // rewrite any URI="" attribute back through the proxy
-      return line.replace(/URI="([^"]+)"/, (_m, u) =>
-        `URI="/api/proxy/media?u=${encodeURIComponent(new URL(u, baseDir).href)}"`);
+      // rewrite every URI="" attribute back through the proxy
+      return line.replace(/URI="([^"]+)"/g, (_m, u) => `URI="${proxied(u)}"`);
     }
-    const abs = new URL(line, baseDir).href;
-    return `/api/proxy/media?u=${encodeURIComponent(abs)}`;
+    return proxied(line);
   });
   return new Response(out.join("\n"), {
     status: 200,

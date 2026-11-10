@@ -14,6 +14,17 @@ import { getComments } from "./api.js";
 import { alQuery } from "./anilist.js";
 import { episodeBundle } from "./providers.js";
 import { route as mediaRoute } from "./media.js";
+import {
+  APK_SHA256,
+  LATEST_BUILD,
+  LATEST_VERSION,
+  MIN_SUPPORTED_BUILD,
+  MIN_SUPPORTED_VERSION,
+  RELEASE_NOTES,
+  buildIsBlocked,
+  downloadUrls,
+  releasePolicy,
+} from "./release.js";
 
 const CARD_FIELDS = `
   id
@@ -239,12 +250,39 @@ export async function route(env, request, url, parts) {
   }
 
   if (p1 === "version") {
+    // Shape read by lib/core/app_updater.dart: app_version, apk_url, sha256,
+    // whats_new. apk_url must live on this worker's own host — the updater
+    // rejects a URL whose host differs from the configured API host.
+    const app = downloadUrls(url.origin);
     return json({
-      app_version: env.APP_VERSION || "2.9.0",
+      app_version: LATEST_VERSION,
+      version_code: LATEST_BUILD,
+      latest_version: LATEST_VERSION,
+      latest_version_code: LATEST_BUILD,
+      minimum_supported_version: MIN_SUPPORTED_VERSION,
+      minimum_supported_version_code: MIN_SUPPORTED_BUILD,
+      apk_url: app.cloudflare,
+      sha256: APK_SHA256,
+      whats_new: RELEASE_NOTES,
       platform: "cloudflare-workers",
       download_url: "/get/android",
       architecture: "workers+d1+r2",
-    });
+    }, 200, { "cache-control": "public, max-age=60" });
+  }
+
+  // Version gate polled at launch and on resume by lib/core/version_gate.dart.
+  // 200 { required, policy } when the build is allowed; 426 { ...policy }
+  // when it must be refused. No binding is touched, so this answers even when
+  // D1 or R2 is degraded.
+  if (p1 === "app" && p2 === "ping") {
+    const build = parseInt(request.headers.get("X-CamAnime-Build") || "", 10);
+    const policy = releasePolicy(url.origin, build);
+    const blocked = buildIsBlocked(build);
+    return json(
+      blocked ? policy : { required: false, policy },
+      blocked ? 426 : 200,
+      { "cache-control": "no-store" },
+    );
   }
 
   if (p1 === "v1" && p2 === "catalog" && p3 === "home") {

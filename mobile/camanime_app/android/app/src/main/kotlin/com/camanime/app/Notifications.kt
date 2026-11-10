@@ -41,6 +41,13 @@ object Notifications {
     const val COMPLETE_CHANNEL_ID = "camanime_downloads_complete"
     const val ANNOUNCE_CHANNEL_ID = "camanime_announcements"
 
+    /**
+     * Channel the Cloudflare worker targets for Firebase messages
+     * (`android.notification.channel_id`). It must exist on the device before a
+     * push arrives, otherwise Android drops the notification silently on O+.
+     */
+    const val UPDATES_CHANNEL_ID = "camanime_updates"
+
     private val posterExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -55,6 +62,25 @@ object Notifications {
         ).apply {
             description =
                 "Tells you when an episode is saved and ready to watch offline."
+            enableVibration(true)
+            enableLights(true)
+            setShowBadge(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    fun ensureUpdatesChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager =
+            context.getSystemService(NotificationManager::class.java) ?: return
+        val channel = NotificationChannel(
+            UPDATES_CHANNEL_ID,
+            "CamAnime updates",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description =
+                "New episodes, new anime, app updates and service notices."
             enableVibration(true)
             enableLights(true)
             setShowBadge(true)

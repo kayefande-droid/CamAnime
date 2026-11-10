@@ -1,0 +1,67 @@
+name: Shorebird Release (Android)
+
+# Manual only: creates the baseline release that later patches are diffed against.
+# It uploads Dart artifacts to Shorebird; it does NOT touch Play Store or the
+# Cloudflare-hosted APK. Uploading the output is a separate, deliberate step.
+on:
+  workflow_dispatch:
+    inputs:
+      flutter-version:
+        description: "Flutter version to build with (blank = Shorebird's latest supported)"
+        required: false
+        type: string
+      dry-run:
+        description: "Build and check without uploading to Shorebird"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: shorebird-release
+  cancel-in-progress: false
+
+jobs:
+  release-android:
+    name: Release Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Shorebird
+        uses: shorebirdtech/setup-shorebird@v1
+        with:
+          cache: true
+
+      - name: Build Shorebird release
+        id: shorebird_release
+        uses: shorebirdtech/shorebird-release@v1
+        with:
+          platform: android
+          flutter-version: ${{ inputs.flutter-version || 'latest' }}
+          working-directory: ./mobile/camanime_app
+          args: ${{ inputs.dry-run && '--dry-run' || '' }}
+
+      - name: Record release version
+        run: |
+          echo "Release version: ${{ steps.shorebird_release.outputs.release-version }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shorebird-release-android
+          path: |
+            mobile/camanime_app/build/app/outputs/**/*.aab
+            mobile/camanime_app/build/app/outputs/**/*.apk
+          if-no-files-found: warn
+          retention-days: 14

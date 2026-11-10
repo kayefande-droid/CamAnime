@@ -15,6 +15,9 @@ import 'core/ad_notifications.dart';
 import 'core/app_updater.dart';
 import 'core/version_gate.dart';
 import 'core/app_notifications.dart';
+import 'core/app_config.dart';
+import 'core/firebase_boot.dart';
+import 'core/push.dart';
 import 'core/cam_ui.dart';
 import 'core/downloads.dart';
 import 'core/mini_player.dart';
@@ -103,13 +106,13 @@ void _openAdvertFromNotification(String animeId, String title) {
           animeId: animeId, title: title.isEmpty ? 'Anime' : title)));
 }
 
-typedef AnimeDetailLauncher = DetailScreen Function(String id, String title);
-
-final AnimeDetailLauncher _animeDetailLauncher = 
-    (id, title) => DetailScreen(animeId: id, title: title);
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Installed before runApp so a push delivered during launch is handled.
+  PushService.registerBackgroundHandler();
+  // Firebase must be ready before Firebase Messaging is used. A broken config
+  // leaves `FirebaseBoot.ready == false` and the app still launches.
+  await FirebaseBoot.init();
   DownloadManager.instance.headersProvider = Api.headers;
   appMode.value = await AppMode.get();
 
@@ -129,6 +132,10 @@ Future<void> main() async {
   unawaited(Api.warmup());
   // Ask the server whether this build may still use protected services.
   unawaited(VersionGate.check());
+  // Server-owned banners, maintenance mode and feature switches.
+  unawaited(RemoteConfig.refresh());
+  // FCM registration. A build with no Firebase config simply stays quiet.
+  unawaited(PushService.init());
   // Honor a notification tap or the scheduled two-minute alarm that asks the app
   // to start the live update now.
   unawaited(() async {
@@ -178,7 +185,27 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
         unawaited(MiniPlayer.close());
       }
     });
+    // A notification tap can arrive before the first frame is up, so the link
+    // is kept in the service and drained here once navigation exists.
+    PushService.pendingLink.addListener(_openPendingPushLink);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openPendingPushLink());
     _firstRun();
+  }
+
+  /// Opens the anime/episode carried by a tapped push notification.
+  /// Only `/watch/<id>/<ep>` and `/anime/<id>` are accepted; anything else is
+  /// dropped rather than fed to the router.
+  void _openPendingPushLink() {
+    final link = PushService.pendingLink.value;
+    if (link == null || link.isEmpty || !mounted) return;
+    PushService.pendingLink.value = null;
+    final parts = Uri.tryParse(link)?.pathSegments ?? const <String>[];
+    if (parts.length < 2) return;
+    if (parts[0] != 'watch' && parts[0] != 'anime') return;
+    final id = parts[1];
+    if (id.isEmpty) return;
+    appNavigatorKey.currentState?.push(MaterialPageRoute(
+        builder: (_) => DetailScreen(animeId: id, title: 'Anime')));
   }
 
   @override
@@ -189,11 +216,14 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
     unawaited(DownloadManager.instance.kick());
     unawaited(Api.warmup());
     unawaited(VersionGate.check());
+    unawaited(RemoteConfig.refresh());
+    unawaited(PushService.init());
     unawaited(_autoCheckUpdate());
   }
 
   @override
   void dispose() {
+    PushService.pendingLink.removeListener(_openPendingPushLink);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

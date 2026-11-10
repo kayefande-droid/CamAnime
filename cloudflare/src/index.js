@@ -1,11 +1,14 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext } from "./catalog.js";
 import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage } from "./pages.js";
-import { html, json } from "./util.js";
+import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
 import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
+import * as appapi from "./appapi.js";
+import { fcmConfigured } from "./push.js";
+import { MIN_SUPPORTED_BUILD, releasePolicy } from "./release.js";
 
 function segments(pathname) {
   return pathname.split("/").filter(Boolean);
@@ -29,14 +32,14 @@ export default {
       }
     }
 
-    // Same release policy as the Render origin: a build at or below 2.6.5
-    // cannot stream or download here either. Version headers are only a hint,
-    // but the enforcement itself is server-side and cannot be skipped by a
-    // modified client.
+    // Same release policy as the Render origin: a build below the supported
+    // minimum (2.9.0 / build 19) cannot stream or download here either.
+    // Version headers are only a hint, but the enforcement itself is
+    // server-side and cannot be skipped by a modified client.
     if (PROTECTED_PREFIXES.some((p) => path.startsWith(p))) {
       const build = clientBuild(request);
       if (build !== null && build < MIN_SUPPORTED_BUILD) {
-        return updateRequiredResponse(build);
+        return updateRequiredResponse(build, url.origin);
       }
     }
 
@@ -70,10 +73,22 @@ export default {
       return html(errorPage(status, message), status);
     }
   },
+
+  /**
+   * Cloudflare Cron Trigger (see `triggers.crons` in wrangler.jsonc). Sends the
+   * hourly new-episode digest to devices that opted into `new_episodes`, which
+   * reaches phones with the app closed or the screen off. Skips silently when
+   * nothing aired, during quiet hours, or when FCM is not configured.
+   */
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      appapi.hourlyDigest(env).catch((err) =>
+        console.error(JSON.stringify({ message: "digest failed", error: String(err) })),
+      ),
+    );
+  },
 };
 
-const MIN_SUPPORTED_BUILD = 19; // 2.9.0 — mandatory genuine-quality release
-const DISCONTINUED_BUILD = 17; // 2.7.0
 const PROTECTED_PREFIXES = [
   "/api/proxy/",
   "/api/download/",
@@ -91,45 +106,67 @@ function clientBuild(request) {
   return Number.isFinite(value) ? value : null;
 }
 
-const APK_SHA256 = "BE98B7115A533E9497F47324D7CEF1FA786CCA7A187DF644C3C209F1481A1096";
-
-function updateRequiredResponse(build) {
-  const retired = build <= DISCONTINUED_BUILD;
-  return json({
-    status: "update_required",
-    code: "APP_UPDATE_REQUIRED",
-    reason: retired ? "discontinued" : "unsupported",
-    force_update: true,
-    latest_version: "2.10.0",
-    latest_version_code: 21,
-    minimum_supported_version: "2.9.0",
-    minimum_supported_version_code: MIN_SUPPORTED_BUILD,
-    discontinued_at_or_below_version: "2.7.0",
-    discontinued_at_or_below_version_code: DISCONTINUED_BUILD,
-    download_url: "https://camanime.onrender.com/get/android",
-    download_urls: {
-      render: "https://camanime.onrender.com/get/android",
-      cloudflare: "https://camanjme.camanime.workers.dev/get/android",
-    },
-    sha256: APK_SHA256,
-    message: retired
-      ? "CamAnime 2.7.0 and older are discontinued and can no longer stream "
-        + "or download anime. Install the current CamAnime from the official "
-        + "website to continue."
-      : "Your CamAnime version is no longer supported. Please update from the "
-        + "official website to continue.",
-  }, 426);
+function updateRequiredResponse(build, origin) {
+  return json(releasePolicy(origin, build), 426);
 }
 
+const APK_KEY = "downloads/CamAnime.apk";
+const APK_TYPE = "application/vnd.android.package-archive";
+
+/**
+ * Installer download.
+ *
+ * R2 (`FILES`) first: the APK is far larger than the 25 MiB per-asset cap of
+ * Workers Static Assets, so it is deliberately excluded from the asset bundle
+ * by `static/.assetsignore`. Serving it from R2 is what makes this host a real
+ * mirror instead of a redirect to Render. Range requests are honoured so the
+ * Android download manager can resume a dropped mobile connection.
+ */
 async function serveApk(request, env) {
-  if (env.ASSETS) {
+  const range = parseByteRange(request.headers.get("range"));
+  const wantsHead = request.method === "HEAD";
+
+  if (env.FILES) {
+    try {
+      const obj = wantsHead
+        ? await env.FILES.head(APK_KEY)
+        : await env.FILES.get(APK_KEY, range ? { range } : undefined);
+      if (obj) {
+        const headers = new Headers();
+        obj.writeHttpMetadata?.(headers);
+        headers.set("content-type", APK_TYPE);
+        headers.set("content-disposition", 'attachment; filename="CamAnime.apk"');
+        headers.set("accept-ranges", "bytes");
+        headers.set("cache-control", "public, max-age=3600");
+        headers.set("etag", obj.httpEtag);
+
+        const ranged = range && obj.range;
+        if (ranged) {
+          const start = obj.range.offset;
+          const length = obj.range.length;
+          headers.set("content-range", `bytes ${start}-${start + length - 1}/${obj.size}`);
+          headers.set("content-length", String(length));
+        } else {
+          headers.set("content-length", String(obj.size));
+        }
+        return new Response(wantsHead ? null : obj.body, {
+          status: ranged ? 206 : 200,
+          headers,
+        });
+      }
+    } catch {
+      // Missing object or R2 hiccup: keep trying the cheaper fallbacks below.
+    }
+  }
+
+  if (env.ASSETS && !range) {
     try {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = "/downloads/CamAnime.apk";
       const asset = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
       if (asset.ok) {
         const headers = new Headers(asset.headers);
-        headers.set("Content-Type", "application/vnd.android.package-archive");
+        headers.set("Content-Type", APK_TYPE);
         headers.set("Content-Disposition", 'attachment; filename="CamAnime.apk"');
         headers.set("Cache-Control", "public, max-age=3600");
         return new Response(asset.body, { status: 200, headers });
@@ -171,6 +208,11 @@ async function apiRoutes(request, env, url, path) {
     if (method === "POST" && !p3) return developer.createKey(env, request);
     if ((method === "DELETE" || method === "POST") && p3) return developer.revokeKey(env, request, p3);
   }
+
+  // App lifecycle: update manifest, remote config, device registry,
+  // notification dispatch, releases and usage. Additive to the routes above.
+  const appResponse = await appapi.route(env, request, url, parts);
+  if (appResponse) return appResponse;
 
   if (p1 === "auth") {
     if (p2 === "register" && method === "POST") return auth.register(env, request);
@@ -304,6 +346,15 @@ async function pageRoutes(request, env, ctx, path) {
     }
     const data = await (await api.adminData(env, request)).json();
     const countersData = data.counters || {};
+    const [histRows, releaseRows, cfgRow, deviceRow] = await Promise.all([
+      env.DB.prepare("SELECT id,title,category,target,status,sent,failed,created FROM notification_log ORDER BY created DESC LIMIT 10").all(),
+      env.DB.prepare("SELECT version,build,channel,mandatory,published,created FROM app_releases ORDER BY build DESC LIMIT 10").all(),
+      env.DB.prepare("SELECT value FROM remote_config WHERE key = 'app'").first(),
+      env.DB.prepare("SELECT COUNT(*) n FROM devices WHERE token != ''").first(),
+    ]);
+    const pushReady = fcmConfigured(env);
+    let cfg = {};
+    try { cfg = cfgRow ? JSON.parse(cfgRow.value) : {}; } catch { cfg = {}; }
     const inner = `
       <h1 class="section-title">Admin</h1>
       <div class="stat-strip">
@@ -323,6 +374,141 @@ async function pageRoutes(request, env, ctx, path) {
         await fetch('/api/announcements', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: document.getElementById('annTitle').value, body: document.getElementById('annBody').value }) });
       };
       </script>
+      <h2 class="section-title">Push notifications</h2>
+      ${pushReady
+        ? `<p class="muted">FCM ready — ${deviceRow?.n ?? 0} push-enabled devices.</p>`
+        : `<div class="discovery-empty">FCM is not configured on this deployment. Set the <code>FCM_PROJECT_ID</code> variable and the <code>FCM_SERVICE_ACCOUNT</code> secret, then redeploy. Messages are still recorded in the history below.</div>`}
+      <form id="pushForm">
+        <input id="nTitle" placeholder="Title" required style="width:100%;padding:.6rem;border-radius:10px;border:1px solid var(--border-subtle, rgba(255,255,255,.08));background:var(--bg-input,#141926);color:var(--text-primary,#f3f5fa)">
+        <textarea id="nBody" rows="3" placeholder="Message" required style="width:100%;margin-top:.4rem;border-radius:10px;border:1px solid var(--border-subtle, rgba(255,255,255,.08));background:var(--bg-input,#141926);color:var(--text-primary,#f3f5fa)"></textarea>
+        <input id="nImage" placeholder="Image URL (https, optional)" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px;border:1px solid var(--border-subtle, rgba(255,255,255,.08));background:var(--bg-input,#141926);color:var(--text-primary,#f3f5fa)">
+        <input id="nLink" placeholder="Deep link (e.g. /watch/21/1, optional)" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px;border:1px solid var(--border-subtle, rgba(255,255,255,.08));background:var(--bg-input,#141926);color:var(--text-primary,#f3f5fa)">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem">
+          <select id="nCategory" style="padding:.5rem;border-radius:10px">
+            ${appapi.allowedCategories.map((c) => `<option value="${c}">${c}</option>`).join("")}
+          </select>
+          <select id="nTarget" style="padding:.5rem;border-radius:10px">
+            <option value="all">All devices</option>
+            <option value="topic">Topic group</option>
+            <option value="device">Single device</option>
+            <option value="version">App build at least</option>
+          </select>
+          <input id="nTargetValue" placeholder="topic / install id / build" style="flex:1;min-width:10rem;padding:.5rem;border-radius:10px;border:1px solid var(--border-subtle, rgba(255,255,255,.08));background:var(--bg-input,#141926);color:var(--text-primary,#f3f5fa)">
+        </div>
+        <button class="btn-primary" type="submit" style="margin-top:.5rem">Send now</button>
+        <p id="pushOut" class="muted" role="status" aria-live="polite"></p>
+      </form>
+      <script>
+      (function () {
+        var form = document.getElementById('pushForm');
+        if (!form) return;
+        form.onsubmit = async function (e) {
+          e.preventDefault();
+          var out = document.getElementById('pushOut');
+          out.textContent = 'Sending…';
+          var res = await fetch('/api/v1/notifications/send', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              title: document.getElementById('nTitle').value,
+              body: document.getElementById('nBody').value,
+              image: document.getElementById('nImage').value,
+              deep_link: document.getElementById('nLink').value,
+              category: document.getElementById('nCategory').value,
+              target: document.getElementById('nTarget').value,
+              target_value: document.getElementById('nTargetValue').value
+            })
+          });
+          var data = await res.json().catch(function () { return {}; });
+          if (!res.ok) { out.textContent = data.error || ('HTTP ' + res.status); return; }
+          out.textContent = 'Audience ' + data.audience + ' · sent ' + data.sent + ' · failed ' + data.failed +
+            (data.reason ? ' · ' + data.reason : '');
+          if (data.sent > 0) setTimeout(function () { location.reload(); }, 1200);
+        };
+      })();
+      </script>
+
+      <h2 class="section-title">Recent sends</h2>
+      <div class="table-scroll"><table><thead><tr><th>Title</th><th>Category</th><th>Target</th><th>Status</th><th>Sent</th></tr></thead>
+      <tbody>${(histRows.results || []).map((n) => `<tr><td>${esc(n.title)}</td><td>${esc(n.category)}</td><td>${esc(n.target)}</td><td>${esc(n.status)}</td><td>${n.sent}/${n.sent + n.failed}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No notifications sent yet.</td></tr>`}</tbody></table></div>
+
+      <h2 class="section-title">App releases</h2>
+      <div class="table-scroll"><table><thead><tr><th>Version</th><th>Build</th><th>Channel</th><th>Mandatory</th><th>Published</th></tr></thead>
+      <tbody>${(releaseRows.results || []).map((r) => `<tr><td>${esc(r.version)}</td><td>${r.build}</td><td>${esc(r.channel)}</td><td>${r.mandatory ? "yes" : "no"}</td><td>${r.published ? "yes" : "draft"}</td></tr>`).join("") || `<tr><td colspan="5" class="muted">No releases published yet.</td></tr>`}</tbody></table></div>
+      <form id="relForm" style="margin-top:.6rem">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <input id="rVersion" placeholder="2.12.0" required style="padding:.5rem;border-radius:10px">
+          <input id="rBuild" type="number" placeholder="Build 23" required style="padding:.5rem;border-radius:10px;width:8rem">
+          <select id="rChannel" style="padding:.5rem;border-radius:10px"><option value="stable">stable</option><option value="beta">beta</option></select>
+          <input id="rSha" placeholder="sha256 (optional)" style="flex:1;min-width:12rem;padding:.5rem;border-radius:10px">
+        </div>
+        <textarea id="rNotes" rows="2" placeholder="Release notes" style="width:100%;margin-top:.4rem;border-radius:10px"></textarea>
+        <label class="muted" style="display:block;margin-top:.3rem"><input id="rMandatory" type="checkbox"> Mandatory update</label>
+        <button class="btn-primary" type="submit" style="margin-top:.4rem">Publish release</button>
+        <p id="relOut" class="muted" role="status" aria-live="polite"></p>
+      </form>
+      <script>
+      (function () {
+        var form = document.getElementById('relForm');
+        if (!form) return;
+        form.onsubmit = async function (e) {
+          e.preventDefault();
+          var out = document.getElementById('relOut');
+          out.textContent = 'Publishing…';
+          var res = await fetch('/api/v1/releases/publish', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              version: document.getElementById('rVersion').value,
+              build: Number(document.getElementById('rBuild').value),
+              channel: document.getElementById('rChannel').value,
+              sha256: document.getElementById('rSha').value,
+              notes: document.getElementById('rNotes').value,
+              mandatory: document.getElementById('rMandatory').checked
+            })
+          });
+          var data = await res.json().catch(function () { return {}; });
+          out.textContent = res.ok ? 'Published ' + data.version + ' +' + data.build : (data.error || ('HTTP ' + res.status));
+          if (res.ok) setTimeout(function () { location.reload(); }, 1200);
+        };
+      })();
+      </script>
+
+      <h2 class="section-title">Remote configuration</h2>
+      <form id="cfgForm">
+        <label class="muted" style="display:block"><input id="cMaint" type="checkbox" ${cfg.maintenance?.enabled ? "checked" : ""}> Maintenance mode</label>
+        <input id="cMaintMsg" placeholder="Maintenance message" value="${esc(cfg.maintenance?.message || "")}" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px">
+        <input id="cBanner" placeholder="Banner text" value="${esc(cfg.banner?.text || "")}" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px">
+        <input id="cBannerUrl" placeholder="Banner URL" value="${esc(cfg.banner?.url || "")}" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px">
+        <input id="cNotice" placeholder="Update notice" value="${esc(cfg.update_notice || "")}" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px">
+        <input id="cFeatured" placeholder="Featured anime id" value="${esc(cfg.featured_anime_id || "")}" style="width:100%;margin-top:.4rem;padding:.6rem;border-radius:10px">
+        <button class="btn-primary" type="submit" style="margin-top:.4rem">Save configuration</button>
+        <p id="cfgOut" class="muted" role="status" aria-live="polite"></p>
+      </form>
+      <script>
+      (function () {
+        var form = document.getElementById('cfgForm');
+        if (!form) return;
+        form.onsubmit = async function (e) {
+          e.preventDefault();
+          var out = document.getElementById('cfgOut');
+          out.textContent = 'Saving…';
+          var res = await fetch('/api/v1/app/config', {
+            method: 'PUT', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ config: {
+              maintenance: { enabled: document.getElementById('cMaint').checked, message: document.getElementById('cMaintMsg').value },
+              banner: { text: document.getElementById('cBanner').value, url: document.getElementById('cBannerUrl').value },
+              update_notice: document.getElementById('cNotice').value,
+              featured_anime_id: document.getElementById('cFeatured').value
+            } })
+          });
+          var data = await res.json().catch(function () { return {}; });
+          out.textContent = res.ok ? 'Saved' : (data.error || ('HTTP ' + res.status));
+        };
+      })();
+      </script>
+
       <h2 class="section-title">Users</h2>
       <div class="table-scroll"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th></tr></thead>
       <tbody>${(data.users || []).map((u) => `<tr><td>${esc(u.email)}</td><td>${esc(u.name)}</td><td>${esc(u.role)}</td></tr>`).join("")}</tbody></table></div>`;

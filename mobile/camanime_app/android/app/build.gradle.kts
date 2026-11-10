@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application")
+    // Firebase: generates the values FCM reads from android/app/google-services.json.
+    id("com.google.gms.google-services")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -7,7 +9,10 @@ plugins {
 android {
     namespace = "com.camanime.app"
     compileSdk = 36
-    ndkVersion = flutter.ndkVersion
+    // No C/C++ sources or NDK-built plugins in this app. Pinning the NDK made
+    // every build wait on (and fail over) a ~700 MB SDK download, so it is left
+    // to AGP's default: nothing here compiles native code.
+    // ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -19,6 +24,8 @@ android {
         applicationId = "com.camanime.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Firebase Messaging requires API 23 (Android 6.0). The previous
+        // flutter.minSdkVersion (21) cannot satisfy it.
         minSdk = flutter.minSdkVersion
         targetSdk = 36
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
@@ -61,4 +68,10 @@ flutter {
 dependencies {
     // Periodic anime-advert notifications (every 30 minutes = 2 per hour).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+    // Firebase platform: pins every Firebase Android artifact to one BoM so
+    // Messaging, Analytics, Auth and Firestore cannot drift apart.
+    implementation(platform("com.google.firebase:firebase-bom:35.1.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-analytics")
 }

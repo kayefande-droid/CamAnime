@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "697148342938",
+    "project_id": "camanime-9f457",
+    "storage_bucket": "camanime-9f457.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:697148342938:android:c1310427d21949cbb89523",
+        "android_client_info": {
+          "package_name": "com.camanime.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCR0RVqIPpkPfOfycwzm1n920YIsz-Jaew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

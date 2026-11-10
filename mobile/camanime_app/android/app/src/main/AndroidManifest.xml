@@ -54,6 +54,15 @@
             android:name=".DownloadKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- Firebase Cloud Messaging defaults. The channel is created in
+             Notifications.ensureUpdatesChannel (called from MainActivity) and the
+             icon is the launcher icon so a notification never renders blank. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="camanime_updates" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -93,7 +92,7 @@ class AppUpdater {
   static Future<UpdateInfo?> check({required String current}) async {
     try {
       final res = await http
-          .get(Uri.parse(_base() + '/api/version'))
+          .get(Uri.parse('${_base()}/api/version'))
           .timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) return null;
       final data = json.decode(res.body);
