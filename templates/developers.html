@@ -11,7 +11,7 @@
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal','wide','magazine','wall'].indexOf(l)!==-1)document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>
 <link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v11" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v12" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script><link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
@@ -45,29 +45,45 @@
 <header>
   <div class="header-inner">
     <div class="brand-group">
-      <a class="site-logo" href="/">Cam<span style="color:var(--accent,#FFB347)">Anime</span></a>
+      <a href="/" class="site-logo" aria-label="CamAnime — Watch, discover, enjoy">
+        <img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" fetchpriority="high">
+      </a>
       <nav class="nav-links">
-        <a class="nav-link" href="/">Home</a>
-        <a class="nav-link" href="/scraper">Scraper</a>
-        <a class="nav-link active" href="/developers">Developers</a>
-        <a class="nav-link" href="/settings">Settings</a>
-        {{ '<a class="nav-link" href="/settings">Account (' ~ user.name ~ ')</a>'|safe if user else '<a class="nav-link" href="/login">Sign in</a>'|safe }}
+        <a href="/" class="nav-link"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+        <a href="/scraper" class="nav-link"><i class="fas fa-bolt" aria-hidden="true"></i> Scraper</a>
+        <a href="/download" class="nav-link"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
+        <a href="/developers" class="nav-link active"><i class="fas fa-code" aria-hidden="true"></i> Developers</a>
+        <a href="/promo" class="nav-link"><i class="fas fa-image" aria-hidden="true"></i> Promo kit</a>
+        <a href="/settings" class="nav-link"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
       </nav>
     </div>
-    <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()"></button>
+    <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()"><i class="fas fa-bars" aria-hidden="true"></i></button>
+    <div class="header-actions">
+      <form action="/search" method="get" class="search-form">
+        <input type="search" name="q" class="search-input" placeholder="Search anime, seasons, movies..." aria-label="Search anime catalogue" required>
+        <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
+      </form>
+    </div>
   </div>
-  <nav class="mobile-nav" id="mobileNav" aria-label="Menu">
-    <a href="/">Home</a>
-    <a href="/scraper">Scraper</a>
-    <a href="/developers">Developers API</a>
-    <a href="/settings">Settings</a>
-    {{ '<a href="/settings">Account (' ~ user.name ~ ')</a>'|safe if user else '<a href="/login">Sign in</a>'|safe }}
+  <nav class="mobile-nav" id="mobileNav" aria-label="Mobile">
+    <a href="/" onclick="toggleMobileNav(false)">Discover</a>
+    <a href="/scraper" onclick="toggleMobileNav(false)">Scraper</a>
+    <a href="/download" onclick="toggleMobileNav(false)">Apps</a>
+    <a href="/developers" onclick="toggleMobileNav(false)">Developers</a>
+    <a href="/promo" onclick="toggleMobileNav(false)">Promo kit</a>
+    <a href="/settings" onclick="toggleMobileNav(false)">Settings</a>
   </nav>
 </header>
 
 <main class="main-wrap" id="main-content" tabindex="-1">
+  <div class="dev-layout">
+    <aside class="dev-rail" aria-label="On this page">
+      <a href="#docs">Quickstart</a>
+      <a href="#build">Build with it</a>
+      <a href="/settings">Get an API key</a>
+    </aside>
+    <div class="dev-content">
   <header class="dev-hero">
-    <span class="dev-eyebrow">Developer API · Free tier</span>
     <h1>Ship anime playback on your own site with <em>one endpoint</em>.</h1>
     <p class="dev-lede">CamAnime exposes a single streaming provider — AnimeHeaven direct MP4 — behind a key you create here. No iframe, no ads injected into your page, no card, no waiting for approval.</p>
     <div class="hero-ctas">
@@ -204,6 +220,8 @@ document.querySelector("video").src = ep.streams[0].url;</pre>
     </table></div>
     <p class="dev-note">CamAnime does not host these files; it resolves and proxies them from the provider the site already uses. Keep your key private, link back to CamAnime, and respect the provider's terms and your local law. Rate limits exist so one integration cannot take the shared provider offline for the site and the app.</p>
   </section>
+    </div>
+  </div>
 </main>
 
 <footer style="text-align:center;color:var(--text-muted,#64708a);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">

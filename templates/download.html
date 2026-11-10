@@ -43,54 +43,103 @@ a{color:var(--accent, #FFB347)}
 <link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/header-layout.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v11" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v12" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
 </head>
 <body>
-<p style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap"><a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" style="display:block;width:min(230px,70vw);height:auto"></a><a href="/promo">Promo kit</a></p>
-<h1><i class="fas fa-download" style="color:var(--accent, #FFB347)"></i> Download the free CamAnime app</h1>
-<p class="sub">Same account as the website. Hidden in-app library — files only leave the app when you tap <strong>Save to device</strong>. Made by kayefande-droid &amp; co.</p>
-<div class="cards">
-  <div class="card">
-    <h2><i class="fab fa-android" style="color:#34d399"></i> Android <span class="badge">APK</span></h2>
-    {% if apk %}
-    <div class="meta">CamAnime {{ app_version }} (build {{ app_build }}) · CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
-    {% else %}
-    <div class="meta">CamAnime {{ app_version }} (build {{ app_build }}) — download starts straight from the latest release.</div>
-    {% endif %}
-    <a class="btn" href="/get/android"><i class="fas fa-mobile-alt"></i> Install App</a>
-    <a class="direct" href="/get/android" download="CamAnime.apk"><i class="fas fa-download"></i> Direct link: CamAnime.apk — tap to start downloading</a>
-    <label class="meta" for="android-download-url">Copyable download URL</label>
-    <div class="copy-row"><input id="android-download-url" type="text" readonly value="{{ request.url_root.rstrip('/') }}/get/android" aria-label="Direct CamAnime Android APK URL"><button type="button" id="copy-android-url" aria-describedby="copy-android-status">Copy link</button></div>
-    <div id="copy-android-status" class="copy-status" role="status" aria-live="polite"></div>
-    <a class="direct" href="{{ cloudflare_url }}/get/android" download="CamAnime.apk"><i class="fas fa-cloud"></i> Cloudflare mirror: direct APK from {{ cloudflare_url | replace('https://', '') }}</a>
-    <label class="meta" for="cloudflare-download-url">Cloudflare-hosted APK URL</label>
-    <div class="copy-row"><input id="cloudflare-download-url" type="text" readonly value="{{ cloudflare_url }}/get/android" aria-label="Cloudflare-hosted CamAnime Android APK URL"><button type="button" id="copy-cloudflare-url" aria-describedby="copy-cloudflare-status">Copy link</button></div>
-    <div id="copy-cloudflare-status" class="copy-status" role="status" aria-live="polite"></div>
-    
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header>
+  <div class="header-inner">
+    <div class="brand-group">
+      <a href="/" class="site-logo" aria-label="CamAnime — Watch, discover, enjoy">
+        <img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy" fetchpriority="high">
+      </a>
+      <nav class="nav-links">
+        <a href="/" class="nav-link"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+        <a href="/scraper" class="nav-link"><i class="fas fa-bolt" aria-hidden="true"></i> Scraper</a>
+        <a href="/download" class="nav-link active"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
+        <a href="/developers" class="nav-link"><i class="fas fa-code" aria-hidden="true"></i> Developers</a>
+        <a href="/promo" class="nav-link"><i class="fas fa-image" aria-hidden="true"></i> Promo kit</a>
+        <a href="/settings" class="nav-link"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
+      </nav>
+    </div>
+    <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()"><i class="fas fa-bars" aria-hidden="true"></i></button>
+    <div class="header-actions">
+      <form action="/search" method="get" class="search-form">
+        <input type="search" name="q" class="search-input" placeholder="Search anime, seasons, movies..." aria-label="Search anime catalogue" required>
+        <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
+      </form>
+    </div>
   </div>
-  <div class="card">
-    <h2><i class="fab fa-windows" style="color:#7C61D4"></i> Windows <span class="badge">.NET</span></h2>
-    {% if winapp %}
-    <div class="meta">{{ winapp.name }} · {{ winapp.size }} · updated {{ winapp.updated }}</div>
-    {% else %}
-    <div class="meta">Windows builds ship with every release — grab the latest below.</div>
-    {% endif %}
-    <a class="btn" href="/get/windows"><i class="fas fa-laptop"></i> Install App</a>
-    <a class="direct" href="/get/windows" download="CamAnime-Windows.zip"><i class="fas fa-download"></i> Direct link: CamAnime-Windows.zip — tap to start downloading</a>
-    
-  </div>
-</div>
-<h2 style="font-family:'Syne';margin-top:2rem">Build on your own PC in minutes</h2>
-<ol>
-  <li><strong>Automatic updates:</strong> the app checks the website on launch, downloads the new release and hands it to Android's installer. Library, downloads and watch history are preserved.</li>
-  <li><strong>Android:</strong> install Flutter → <code>cd mobile/camanime_app &amp;&amp; flutter pub get &amp;&amp; flutter build apk --release</code> → file lands in <code>build/app/outputs/flutter-apk/app-release.apk</code>.</li>
-  <li><strong>Windows:</strong> install .NET 8 SDK → <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code> → <code>CamAnime.exe</code>.</li>
-  <li>Point the app at your site URL, sign in with your website account — one shared user database.</li>
-</ol>
-<p style="margin-top:1.5rem;color:var(--text-muted, #64708a);font-size:.82rem">Free anime streaming website for Cameroon &amp; worldwide fans · CamAnime</p>
+  <nav class="mobile-nav" id="mobileNav" aria-label="Mobile">
+    <a href="/" onclick="toggleMobileNav(false)">Discover</a>
+    <a href="/scraper" onclick="toggleMobileNav(false)">Scraper</a>
+    <a href="/download" onclick="toggleMobileNav(false)">Apps</a>
+    <a href="/developers" onclick="toggleMobileNav(false)">Developers</a>
+    <a href="/promo" onclick="toggleMobileNav(false)">Promo kit</a>
+    <a href="/settings" onclick="toggleMobileNav(false)">Settings</a>
+  </nav>
+</header>
+
+<main class="main-wrap dl-main" id="main-content" tabindex="-1">
+  <section class="dl-hero">
+    <div class="dl-hero-copy">
+      <h1>Download the CamAnime app</h1>
+      <p class="dl-lede">Same account, watchlist and resume points as the website, with downloads that play offline. Files only leave the app when you tap Save to device.</p>
+      <div class="dl-actions">
+        <a class="btn-primary" href="/get/android" download><i class="fas fa-mobile-alt" aria-hidden="true"></i> Install for Android</a>
+        <a class="dl-secondary" href="/get/windows" download><i class="fas fa-laptop" aria-hidden="true"></i> Windows build</a>
+      </div>
+    </div>
+    <dl class="dl-facts">
+      <div><dt>Version</dt><dd>CamAnime {{ app_version }} (build {{ app_build }})</dd></div>
+      {% if apk %}<div><dt>Android file</dt><dd>{{ apk.size }}, updated {{ apk.updated }}</dd></div>{% endif %}
+      <div><dt>Account</dt><dd>One sign-in for the site and the app</dd></div>
+    </dl>
+  </section>
+
+  <section class="dl-platforms" aria-label="Available apps">
+    <article class="dl-platform">
+      <header class="dl-platform-head"><h2>Android</h2><span class="dl-tag">APK</span></header>
+      <p class="dl-platform-note">The app checks for a new release on launch and hands it to Android's installer.</p>
+      <a class="btn-primary" href="/get/android" download>Install App</a>
+      <a class="dl-link" href="/get/android" download>Direct link: CamAnime.apk</a>
+      <div class="dl-copy">
+        <label for="android-download-url">Copyable download URL</label>
+        <div class="copy-row"><input id="android-download-url" type="text" readonly value="{{ request.url_root.rstrip('/') }}/get/android" aria-label="Direct CamAnime Android APK URL"><button type="button" id="copy-android-url" aria-describedby="copy-android-status">Copy link</button></div>
+        <div id="copy-android-status" class="copy-status" role="status" aria-live="polite"></div>
+      </div>
+      <div class="dl-copy">
+        <label for="cloudflare-download-url">Cloudflare-hosted APK URL</label>
+        <div class="copy-row"><input id="cloudflare-download-url" type="text" readonly value="{{ cloudflare_url }}/get/android" aria-label="Cloudflare-hosted CamAnime Android APK URL"><button type="button" id="copy-cloudflare-url" aria-describedby="copy-cloudflare-status">Copy link</button></div>
+        <div id="copy-cloudflare-status" class="copy-status" role="status" aria-live="polite"></div>
+      </div>
+    </article>
+
+    <article class="dl-platform">
+      <header class="dl-platform-head"><h2>Windows</h2><span class="dl-tag">.NET</span></header>
+      {% if winapp %}
+      <p class="dl-platform-note">{{ winapp.name }}, {{ winapp.size }}, updated {{ winapp.updated }}.</p>
+      {% else %}
+      <p class="dl-platform-note">Windows builds ship with every release.</p>
+      {% endif %}
+      <a class="btn-primary" href="/get/windows" download>Install App</a>
+      <a class="dl-link" href="/get/windows" download>Direct link: CamAnime-Windows.zip</a>
+    </article>
+  </section>
+
+  <section class="dl-build" id="build">
+    <h2>Build it yourself</h2>
+    <ol class="dl-steps">
+      <li><strong>Automatic updates.</strong> The app checks this site on launch, downloads the new release and hands it to Android's installer. Library, downloads and watch history are preserved.</li>
+      <li><strong>Android.</strong> Install Flutter, then <code>cd mobile/camanime_app &amp;&amp; flutter pub get &amp;&amp; flutter build apk --release</code>. The APK lands in <code>build/app/outputs/flutter-apk/app-release.apk</code>.</li>
+      <li><strong>Windows.</strong> Install the .NET 8 SDK, then <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code>.</li>
+      <li>Point the app at your site URL and sign in with your website account. One shared user database.</li>
+    </ol>
+  </section>
+</main>
 <script>
 (() => {
   // Same behaviour for the Render URL and the Cloudflare mirror URL.

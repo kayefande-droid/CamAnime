@@ -317,3 +317,130 @@ body .hero-title { margin-block: .5rem 1rem; }
 body .hero-meta-row { margin-top: .75rem; }
 body .hero-desc { margin-top: .55rem; }
 body .hero-ctas { margin-top: 1.25rem; }
+
+/* ── 10. Download page: a release sheet ─────────────────────────────────────
+   The page answers three questions in order: what is this, which file do I
+   want, and how do I get it. Facts sit beside the headline so the version and
+   file size are visible before any button. */
+body .dl-main { padding-block: clamp(1.5rem, 4vw, 3rem) clamp(2.5rem, 6vw, 4rem); }
+
+body .dl-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  align-items: start;
+  padding-bottom: clamp(1.25rem, 3vw, 2rem);
+  border-bottom: 1px solid var(--ca-hair);
+}
+body .dl-hero h1 {
+  margin: 0 0 .8rem;
+  font-family: var(--ca-font-display);
+  font-size: clamp(1.9rem, 1.1rem + 3vw, 3.1rem);
+  line-height: 1.06;
+  overflow-wrap: anywhere;
+}
+body .dl-lede { margin: 0 0 1.35rem; max-width: 58ch; color: var(--text-muted); }
+body .dl-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+body .dl-actions .btn-primary,
+body .dl-actions .dl-secondary { min-height: 2.75rem; }
+body .dl-secondary {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .6rem 1.1rem;
+  border: 1px solid var(--ca-hair-strong);
+  border-radius: var(--ca-radius-control);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+body .dl-secondary:hover,
+body .dl-secondary:focus-visible { border-color: var(--accent); }
+
+body .dl-facts {
+  display: grid; gap: .75rem; margin: 0;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--ca-hair);
+  border-radius: var(--ca-radius-panel);
+  background: var(--ca-sheen);
+}
+body .dl-facts div { display: grid; gap: .1rem; }
+body .dl-facts dt { font-size: .74rem; color: var(--text-muted); }
+body .dl-facts dd { margin: 0; font-size: .92rem; font-variant-numeric: tabular-nums; }
+
+body .dl-platforms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1rem;
+  margin-block: clamp(1.5rem, 3vw, 2.5rem);
+}
+body .dl-platform {
+  display: grid; gap: .7rem; align-content: start;
+  padding: clamp(1.1rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--ca-hair);
+  border-radius: var(--ca-radius-panel);
+  background: var(--ca-sheen);
+}
+body .dl-platform-head { display: flex; align-items: center; gap: .6rem; }
+body .dl-platform-head h2 { margin: 0; font-family: var(--ca-font-display); font-size: 1.25rem; }
+body .dl-tag {
+  padding: .15rem .5rem;
+  border: 1px solid var(--ca-hair-strong);
+  border-radius: 999px;
+  font-size: .7rem;
+  color: var(--text-muted);
+}
+body .dl-platform-note { margin: 0; font-size: .9rem; color: var(--text-muted); }
+body .dl-platform .btn-primary { justify-self: start; }
+body .dl-link { font-size: .88rem; }
+body .dl-copy { display: grid; gap: .35rem; }
+body .dl-copy label { font-size: .74rem; color: var(--text-muted); }
+
+body .dl-build { padding-top: clamp(1rem, 2vw, 1.5rem); border-top: 1px solid var(--ca-hair); }
+body .dl-build h2 { margin: 0 0 1rem; font-family: var(--ca-font-display); font-size: clamp(1.4rem, 1rem + 1.4vw, 2rem); }
+body .dl-steps { display: grid; gap: .85rem; max-width: 78ch; margin: 0; padding-left: 1.2rem; }
+body .dl-steps li { line-height: 1.55; }
+body .dl-steps code {
+  padding: .1rem .35rem;
+  border-radius: 6px;
+  background: var(--ca-hair);
+  font-family: var(--ca-font-mono);
+  font-size: .84em;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  body .dl-hero { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── 11. Developers: docs with a rail of its own ───────────────────────────
+   Reference material people read rather than scan, so it gets a persistent
+   contents rail on desktop and a plain stack on phones. */
+body .dev-layout {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  align-items: start;
+}
+body .dev-rail {
+  position: sticky;
+  top: 1.5rem;
+  display: grid;
+  gap: .2rem;
+  padding: .85rem .9rem;
+  border: 1px solid var(--ca-hair);
+  border-radius: var(--ca-radius-panel);
+  background: var(--ca-sheen);
+}
+body .dev-rail a {
+  padding: .35rem .45rem;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: .9rem;
+  text-decoration: none;
+}
+body .dev-rail a:hover,
+body .dev-rail a:focus-visible { color: var(--text-primary); background: var(--ca-hair); }
+body .dev-content { min-width: 0; }
+
+@media (max-width: 980px) {
+  body .dev-layout { grid-template-columns: minmax(0, 1fr); }
+  body .dev-rail { position: static; }
+}
