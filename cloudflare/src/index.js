@@ -8,7 +8,7 @@ import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import { fcmConfigured } from "./push.js";
-import { MIN_SUPPORTED_BUILD, releasePolicy } from "./release.js";
+import { LATEST_BUILD, LATEST_VERSION, MIN_SUPPORTED_BUILD, releasePolicy } from "./release.js";
 import { sitemapXml, sitemapResponse, robotsTxt, withSeo } from "./seo.js";
 
 function segments(pathname) {
@@ -76,6 +76,10 @@ export default {
       return await withSeo(page, url);
     } catch (err) {
       const status = /not found/i.test(String(err && err.message)) ? 404 : 500;
+      if (status === 500) {
+        const fallback = await originFallback(url);
+        if (fallback) return fallback;
+      }
       const message = status === 404 ? "Page not found." : "Something went wrong on the edge.";
       return html(errorPage(status, message), status);
     }
@@ -183,6 +187,44 @@ async function serveApk(request, env) {
     }
   }
   return Response.redirect("https://camanime.onrender.com/get/android", 302);
+}
+
+const ORIGIN = "https://camanime.onrender.com";
+
+/**
+ * Last-resort copy of a page from the Render origin.
+ *
+ * AniList answers Cloudflare's egress with 403, so a native render of a
+ * catalogue page can fail even though the page itself is fine. Rather than
+ * showing a 500 to a visitor, fetch the same path from the origin. This is
+ * only reached after the native render threw, so the Worker still serves
+ * every page it can build itself.
+ */
+async function originFallback(url) {
+  try {
+    const res = await fetch(new URL(url.pathname + url.search, ORIGIN), {
+      headers: { accept: "text/html", "user-agent": "CamAnime-Edge/2.12.0" },
+      signal: AbortSignal.timeout(12000),
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+    if (!(res.headers.get("content-type") || "").includes("text/html")) return null;
+    let body = await res.text();
+    // Keep the mirror's canonical on the mirror, not on the origin.
+    body = body
+      .replace(/(<link rel="canonical" href=")https:\/\/camanime\.onrender\.com/g, `$1${url.origin}`)
+      .replace(/(<meta property="og:url" content=")https:\/\/camanime\.onrender\.com/g, `$1${url.origin}`);
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=120",
+        "x-camanime-source": "origin-fallback",
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function apiRoutes(request, env, url, path) {
@@ -314,6 +356,7 @@ async function pageRoutes(request, env, ctx, path) {
     const files = (await (await api.downloadList(env)).json()).files;
     const inner = `
       <h1 class="section-title">Downloads (R2)</h1>
+      <p class="muted">CamAnime ${LATEST_VERSION} (build ${LATEST_BUILD}) — the current release. The Android APK is also mirrored by the main site.</p>
       <p class="muted">Served from this deployment's own Cloudflare R2 bucket — no Render involvement.</p>
       ${files.length ? `<ul>${files.map((f) => `<li style="margin:.5rem 0"><a href="${f.url}" download>${esc(f.name)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`).join("")}</ul>`
         : `<div class="discovery-empty">No files uploaded yet.</div>`}
