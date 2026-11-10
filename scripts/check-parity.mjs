@@ -22,7 +22,7 @@ const PIN = /(?:href|src)="(\/static\/[^"]+\.(?:css|js))\?v=([^"]+)"/g;
 const LINK = /href="(\/[^"#?]*)"/g;
 const LOC = /<loc>\s*([^<\s]+)\s*<\/loc>/g;
 
-async function load(url, { method = 'GET', timeout = 30000 } = {}) {
+async function attempt(url, { method = 'GET', timeout = 30000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -34,6 +34,18 @@ async function load(url, { method = 'GET', timeout = 30000 } = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+// One retry. A release gate must not fail because a single edge request hiccuped —
+// the earlier run saw a transient 000 from the mirror and reported eight phantom
+// divergences from it.
+async function load(url, options = {}) {
+  const first = await attempt(url, options);
+  if (first.status === 0 || first.status >= 500) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return attempt(url, options);
+  }
+  return first;
 }
 
 const pins = (html) => {
