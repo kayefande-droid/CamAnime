@@ -252,6 +252,21 @@ body .dossier-card {
 }
 
 /* ── 8. Keep the live-schedule tab off the hero copy on small screens ─────── */
+
+/* The drawer partial ships its own <style> in the body with equal-or-higher
+   specificity, so this needs the strongest selector available. Moving the tab
+   is the whole point; it must not sit over the hero title. */
+@media (max-width: 900px) {
+  html body .live-schedule-tab {
+    top: auto !important;
+    bottom: calc(.85rem + env(safe-area-inset-bottom)) !important;
+    left: .55rem !important;
+    min-height: 2.6rem !important;
+    padding: .45rem .6rem !important;
+    border-radius: 999px !important;
+    font-size: .68rem !important;
+  }
+}
 @media (max-width: 900px) {
   /* The drawer is injected with its own style block after this file, so an
      equal-specificity selector loses. The body prefix outranks it. */
