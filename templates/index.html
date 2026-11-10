@@ -47,7 +47,7 @@
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v15" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v16" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -965,15 +965,11 @@
             <img src="{{ slide.banner or slide.image or '/static/brand/camanime-icon.svg' }}" class="hero-backdrop" alt="{{ slide.title }}" decoding="async" referrerpolicy="no-referrer" fetchpriority="{{ 'high' if loop.first else 'auto' }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
             <div class="hero-vignette"></div>
             <div class="hero-body">
-                <div class="hero-kicker">
-                    <i class="fas fa-fire"></i> #{{ loop.index }} Spotlight • {{ slide.status }}
-                </div>
                 {% if loop.first %}<h1 class="hero-title">{{ slide.title }}</h1>{% else %}<div class="hero-title">{{ slide.title }}</div>{% endif %}
                 <div class="hero-meta-row">
                     <span class="meta-pill gold"><i class="fas fa-star"></i> {{ slide.rating }}</span>
                     <span class="meta-pill">{{ slide.format }}</span>
                     <span class="meta-pill">{{ slide.episode }}</span>
-                    <span class="meta-pill subdub">EPISODE AUDIO OPTIONS</span>
                     {% for g in slide.genres[:3] %}
                     <span class="meta-pill">{{ g }}</span>
                     {% endfor %}
@@ -1190,7 +1186,7 @@
             </div>
         </div>
         <div class="anime-grid" id="mvGrid" aria-live="polite" aria-busy="false">
-            {% for it in most_viewed_day %}
+            {% for it in most_viewed_day if it.anime_id and it.anime_id|int > 0 %}
             <a href="/anime/{{ it.anime_id }}" class="anime-card" style="display:flex;flex-direction:column;">
                 <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
                     <span class="mv-rank-num">#{{ loop.index }}</span>
@@ -1706,7 +1702,8 @@
                       if (empty) empty.textContent = 'No plays counted in this window yet — be the first to watch!';
                       return;
                   }
-                  grid.innerHTML = d.items.map((it, i) => `
+                  const validItems = d.items.filter(it => Number.isInteger(Number(it.anime_id)) && Number(it.anime_id) > 0);
+                  grid.innerHTML = validItems.map((it, i) => `
                       <a href="/anime/${it.anime_id}" class="anime-card" style="display:flex;flex-direction:column;">
                           <div style="display:flex;gap:.7rem;align-items:center;padding:.7rem .7rem 0;">
                               <span class="mv-rank-num">#${i + 1}</span>

@@ -778,6 +778,8 @@ def most_watched(since_ts: int = 0, limit: int = 10) -> List[Dict]:
             aid = int(r["anime_id"])
         except (TypeError, ValueError):
             continue
+        if aid < 1:
+            continue
         m = metas.get(aid, {})
         out.append({"anime_id": aid, "plays": r["plays"],
                     "title": m.get("title") or f"Anime #{aid}",

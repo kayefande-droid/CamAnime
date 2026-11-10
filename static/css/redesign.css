@@ -261,10 +261,10 @@ body .dossier-card {
 /* ── 7. Phones: tighten the reworked pieces ───────────────────────────────── */
 @media (max-width: 700px) {
   body .hero-spotlight,
-  body .hero-slide.active { min-height: clamp(400px, 92vw, 520px); }
+  body .hero-slide.active { min-height: clamp(460px, 124vw, 560px); }
   body .hero-title { font-size: clamp(1.75rem, 8vw, 2.4rem); max-width: none; }
   body .hero-body { padding: 1.2rem 1.1rem 2.4rem; }
-  body .hero-desc { -webkit-line-clamp: 2; }
+  body .hero-desc { -webkit-line-clamp: 3; }
   body .hero-dots { right: .9rem; bottom: .9rem; }
   body .anime-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 138px), 1fr)); }
   body .card-title { font-size: .84rem; }
@@ -301,6 +301,8 @@ body .dossier-card {
   }
 
   body .hero-body { padding-bottom: 4.6rem; }
+  body .hero-ctas .btn-primary,
+  body .hero-ctas .btn-secondary { flex: 1 1 auto; justify-content: center; }
 }
 
 /* ── 9. Give hero copy real breathing room ────────────────────────────────────
@@ -491,6 +493,19 @@ body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
 body .ep-rail-item { line-height: 1.2; padding-block: .55rem; overflow: visible; }
 
 body .sidebar-title { text-wrap: balance; }
+
+/* Server labels read as captions, not terminal output, and the server rows keep
+   clear of the schedule tab that sits in the lower-left corner. */
+body .server-row-label {
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: .01em;
+  font-size: .8rem;
+}
+
+@media (min-width: 901px) {
+  body .server-deck { padding-left: 3.25rem; }
+}
 
 /* Phones: the brand mark and the search field share a narrow row. */
 @media (max-width: 700px) {
