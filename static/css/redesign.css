@@ -282,3 +282,18 @@ body .dossier-card {
 
   body .hero-body { padding-bottom: 4.6rem; }
 }
+
+/* ── 9. Give hero copy real breathing room ────────────────────────────────────
+   The reworked hero packs a kicker, a 2–3 line title, a meta row, a synopsis
+   and three actions. At 56vh that stack collided with itself, so the hero gets
+   height back and each block gets an explicit gap rather than relying on the
+   title's line box. */
+@media (min-width: 901px) {
+  body .hero-spotlight,
+  body .hero-slide.active { min-height: clamp(520px, 64vh, 700px); }
+}
+
+body .hero-title { margin-block: .5rem 1rem; }
+body .hero-meta-row { margin-top: .75rem; }
+body .hero-desc { margin-top: .55rem; }
+body .hero-ctas { margin-top: 1.25rem; }
