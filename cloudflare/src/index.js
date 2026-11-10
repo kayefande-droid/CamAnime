@@ -339,17 +339,21 @@ async function pageCacheGet(request) {
   }
 }
 
-async function pageCachePut(request, response) {
+function pageCachePut(request, response, ctx) {
   const cookie = request.headers.get("cookie") || "";
   if (!store || cookie || response.status !== 200) return response;
+  let write;
   try {
     const headers = new Headers(response.headers);
     headers.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
-    await store.put(new Request(request.url, { method: "GET" }),
-      new Response(response.clone().body, { status: 200, headers }));
+    write = store.put(new Request(request.url, { method: "GET" }),
+      new Response(response.clone().body, { status: 200, headers })).catch(() => {});
   } catch {
     // A failed write must never cost the visitor their page.
+    return response;
   }
+  // Never make the visitor wait for the cache write; this response is ready.
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(write);
   return response;
 }
 
@@ -363,7 +367,7 @@ async function pageRoutes(request, env, ctx, path) {
     const cached = await pageCacheGet(request);
     if (cached) return cached;
     const grids = await homeGrids();
-    return pageCachePut(request, html(homePage(grids, user?.name)));
+    return pageCachePut(request, html(homePage(grids, user?.name)), ctx);
   }
 
   if (path === "/search" || path === "/browse") {
@@ -380,7 +384,7 @@ async function pageRoutes(request, env, ctx, path) {
     const anime = await details(p1);
     if (!anime) throw new Error("anime not found");
     const summary = await (await api.ratingSummary(env, request, p1)).json();
-    return pageCachePut(request, html(detailsPage(anime, summary, user)));
+    return pageCachePut(request, html(detailsPage(anime, summary, user)), ctx);
   }
 
   if (p0 === "watch" && p1 && p2) {
