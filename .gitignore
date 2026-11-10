@@ -40,3 +40,7 @@ render_env.json
 
 # local design/QA scratch output
 .judgment/
+.env.local
+.env.*
+!.env.example
+.judgment/shots/

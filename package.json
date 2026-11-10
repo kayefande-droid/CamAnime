@@ -1,0 +1,14 @@
+{
+  "name": "camanime",
+  "private": true,
+  "description": "CamAnime — Flask site on Render plus a Cloudflare Worker mirror sharing one /static tree.",
+  "scripts": {
+    "start": "python app.py",
+    "lint:css": "node scripts/lint-css.mjs",
+    "test": "node --test cloudflare/test/*.test.mjs",
+    "test:worker": "npm --prefix cloudflare test",
+    "parity": "node scripts/check-parity.mjs",
+    "check": "node scripts/lint-css.mjs && node --check static/js/site.js && node --check static/js/motion.js && npm --prefix cloudflare test",
+    "dev:worker": "npm --prefix cloudflare run dev"
+  }
+}
