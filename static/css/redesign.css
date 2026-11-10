@@ -12,6 +12,10 @@
   --ca-hair-strong: var(--ca-hair-strong);
   --ca-wash: var(--ca-wash);
   --ca-radius-panel: 22px;
+  --ca-shade-1: rgba(5, 6, 11, .86);
+  --ca-shade-2: rgba(5, 6, 11, .18);
+  --ca-shade-3: rgba(4, 5, 9, .95);
+  --ca-shade-4: rgba(4, 5, 9, .58);
 }
 
 /* CamAnime — design pass 3 (structural).
@@ -88,8 +92,8 @@ body .hero-backdrop { object-position: center 22%; }
 
 body .hero-vignette {
   background:
-    linear-gradient(to top, var(--bg) 1%, rgba(5, 6, 11, .86) 30%, rgba(5, 6, 11, .18) 74%),
-    linear-gradient(95deg, rgba(4, 5, 9, .95) 8%, rgba(4, 5, 9, .58) 46%, transparent 76%);
+    linear-gradient(to top, var(--bg) 1%, var(--ca-shade-1) 30%, var(--ca-shade-2) 74%),
+    linear-gradient(95deg, var(--ca-shade-3) 8%, var(--ca-shade-4) 46%, transparent 76%);
 }
 
 body .hero-body {
