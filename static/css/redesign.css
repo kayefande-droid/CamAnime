@@ -253,7 +253,9 @@ body .dossier-card {
 
 /* ── 8. Keep the live-schedule tab off the hero copy on small screens ─────── */
 @media (max-width: 900px) {
-  .live-schedule-tab {
+  /* The drawer is injected with its own style block after this file, so an
+     equal-specificity selector loses. The body prefix outranks it. */
+  body .live-schedule-tab {
     top: auto;
     bottom: calc(.85rem + env(safe-area-inset-bottom));
     left: .55rem;
