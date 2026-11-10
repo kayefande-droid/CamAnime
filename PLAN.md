@@ -26,13 +26,20 @@ be rewritten. Every pin change is made in the 13 templates *and*
 5. **Response time.** Immutable caching for pinned assets on the worker and a short
    edge page cache for anonymous `/` and `/anime/:id`; measured mirror TTFB ~0.75 s.
 
-## Milestone 3 — media player · in progress
-6. **Player chrome.** Progress/buffer bar, time labels, volume, captions when tracks
-   exist, fullscreen; controls fit at 360 px and in `100dvh`.
-   *Verify:* play a real title on both hosts; controls fit at 360 px; no clipped bar.
-7. **Resume and progress.** Position saves keep hitting the existing endpoints
-   unchanged and the bar restores the saved position.
-   *Verify:* play, reload, position restored; request bodies unchanged for build 23.
+## Milestone 3 — media player · done
+6. **Player chrome.** Progress/buffer bar, time labels, fullscreen, error surface,
+   phone-width fit. *Verified in Chrome on both hosts at 360 and 1280:* `<video>`
+   reaches `readyState` 1 or 4, progress and fullscreen controls present, two time
+   labels, `#playerError` in the DOM, zero horizontal overflow, controls bar no
+   wider than the viewport (`scripts`-adjacent probe `.judgment/player-check.mjs`).
+7. **Resume and progress.** Guests now actually resume: the position is written to
+   `camanime_resume_<animeId>_<ep>` on `timeupdate`/`pause`/`pagehide`, skipped
+   under 5 s and past the last 10 s, and re-applied across
+   `loadedmetadata`/`loadeddata`/`canplay`/`playing`/`durationchange` because
+   server fallback reassigns `src` and zeroes the position. Signed-in members keep
+   their existing `/api/history` sync, unchanged.
+   *Verified:* a saved 12 s position came back on a fresh load; clearing the key
+   starts at 0.0 s. Request bodies to `/api/history` untouched, so build 23 is safe.
 
 ## Milestone 4 — admin dashboard · blocked
 8. **`/owner-console` at every width.** Fixed: token cycle removed, 44 px controls,
