@@ -345,7 +345,9 @@ function pageCachePut(request, response, ctx) {
   let write;
   try {
     const headers = new Headers(response.headers);
-    headers.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    // A short stale window: long enough to absorb a burst, short enough that a
+    // deploy whose assets changed is picked up within a minute rather than three.
+    headers.set("Cache-Control", "public, max-age=30, stale-while-revalidate=15");
     write = store.put(new Request(request.url, { method: "GET" }),
       new Response(response.clone().body, { status: 200, headers })).catch(() => {});
   } catch {
