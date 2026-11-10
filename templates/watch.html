@@ -1058,7 +1058,7 @@
         videoEl.addEventListener('timeupdate', () => saveResumePoint(false));
         videoEl.addEventListener('pause', () => saveResumePoint(true));
         window.addEventListener('pagehide', () => saveResumePoint(true));
-        videoEl.addEventListener('loadedmetadata', () => {
+        function applyResumePoint() {
             if (resumeApplied) return;
             resumeApplied = true;
             try {
@@ -1066,7 +1066,11 @@
                 const d = videoEl.duration || 0;
                 if (saved > 5 && (!d || saved < d - 10)) videoEl.currentTime = saved;
             } catch (e) {}
-        }, { once: true });
+        }
+        // The <video> preloads metadata, so `loadedmetadata` can fire before this
+        // handler is attached. Apply straight away when metadata is already there.
+        if (videoEl.readyState >= 1) applyResumePoint();
+        else videoEl.addEventListener('loadedmetadata', applyResumePoint, { once: true });
 
         let syncedProgress = false;
         const syncProgress = () => {
