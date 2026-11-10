@@ -50,8 +50,13 @@ be rewritten. Every pin change is made in the 13 templates *and*
 11. **Close the six remaining mismatches.** · done — `download.html` gained
     `base.css` + `header-layout.css`, `developers.html` gained `site.js` +
     `motion.js`, and the worker head gained `release-schedule.js`.
-    *Verify:* `node scripts/check-parity.mjs` exits 0 (it does: pins, version and
-    the 59,434,094-byte APK agree on both hosts).
+    *Verify:* `npm run parity` exits 0.
+
+    The gate compares, in order: the `<head>` asset pins of every page both hosts
+    serve, the advertised app version, the `/get/android` byte count, the status of
+    twelve routes, the internal link inventory and both `/sitemap.xml` sets. It exits
+    1 on any divergence, so it can gate a deploy. Run it after every push to Render
+    and every `wrangler deploy`.
 
 ## Milestone 6 — sub/dub plumbing and providers · not started
 12. **Language truth in the data model.** Each episode records audio tracks and
