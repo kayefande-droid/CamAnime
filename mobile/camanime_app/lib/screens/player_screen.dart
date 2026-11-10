@@ -12,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/cam_ui.dart';
 import '../core/mini_player.dart';
 import '../core/models.dart';
+import '../core/player_ratio.dart';
 
 /// Distraction-free player.
 ///
@@ -92,6 +93,9 @@ class _PlayerScreenState extends State<PlayerScreen>
   double _volume = 1.0;
   double _brightness = 1.0;
   bool _fullscreen = false;
+  /// How the video is framed. Persisted across episodes, fullscreen and app
+  /// restarts; see lib/core/player_ratio.dart for the frame math.
+  PlayerRatio _ratio = PlayerRatio.auto;
   bool _ended = false;
   bool _loading = true;
   String? _error;
@@ -223,6 +227,8 @@ class _PlayerScreenState extends State<PlayerScreen>
     if (!mounted) return;
     _autoplayNext = p.getBool('app_autoplay') ?? true;
     _resumeEnabled = p.getBool('app_resume') ?? true;
+    final savedRatio = PlayerRatio.fromKey(p.getString(PlayerRatioPrefs.key));
+    if (savedRatio != _ratio) setState(() => _ratio = savedRatio);
     _speed = (p.getDouble('player_speed') ?? 1.0).clamp(0.5, 2.0).toDouble();
     _volume = (p.getDouble('player_volume') ?? 1.0).clamp(0.0, 1.0).toDouble();
     _brightness =
@@ -986,10 +992,17 @@ class _PlayerScreenState extends State<PlayerScreen>
   Widget _surface({bool fill = false}) {
     final v = _video;
     final ready = v != null && v.value.isInitialized;
-    final aspect =
+    final videoAspect =
         ready && v.value.aspectRatio > 0 ? v.value.aspectRatio : 16 / 9;
+    // The frame is the black box the video lives in; the ratio mode decides
+    // how big it may be. Fullscreen centres it in every available pixel.
+    final frameAspect = _ratio.frameAspect(
+      videoAspect: videoAspect,
+      screenAspect: MediaQuery.sizeOf(context).aspectRatio,
+      fullscreen: fill,
+    );
     final surface = AspectRatio(
-      aspectRatio: aspect,
+      aspectRatio: frameAspect,
       child: ColoredBox(
         color: Colors.black,
         child: GestureDetector(
@@ -998,34 +1011,37 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (ready) Center(child: VideoPlayer(v)) else _buildPending(),
+              if (ready) _videoFrame(v, videoAspect) else _buildPending(),
               if (ready) _controlsOverlay(),
             ],
           ),
         ),
       ),
     );
-    // In fullscreen the video keeps its own aspect ratio inside every available
-    // pixel (letterboxed), instead of being locked to the inline strip height.        /// In fullscreen use a letterboxed 9:16 portrait window so the top and
-        /// bottom caption scrims stay visible on tall screens (foldables,
-        /// landscape+squished, desktop). Keeps the video readable without
-        /// swallowing the entire screen. Reduced ratio ensures subtitles are visible.
-        if (fill) {
-          final maxAspect = 10.0 / 16.0;
-          final usedAspect = v?.value.aspectRatio ?? 16.0 / 9.0;
-          final windowAspect = usedAspect <= maxAspect
-              ? usedAspect
-              : maxAspect;
-          return Center(
-            child: AspectRatio(
-              aspectRatio: windowAspect,
-              child: surface,
-            ),
-          );
-        }
-        return surface;
+    return fill ? Center(child: surface) : surface;
   }
 
+  /// Paints the texture inside the frame. Contain keeps VideoPlayer's own
+  /// AspectRatio (no crop, no distortion); cover/fill paint onto a
+  /// video-shaped box and let FittedBox scale it to the frame.
+  Widget _videoFrame(VideoPlayerController v, double videoAspect) {
+    if (_ratio.videoFit == BoxFit.contain) {
+      return Center(child: VideoPlayer(v));
+    }
+    return ClipRect(
+      child: SizedBox.expand(
+        child: FittedBox(
+          fit: _ratio.videoFit,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: 1000 * videoAspect,
+            height: 1000,
+            child: VideoPlayer(v),
+          ),
+        ),
+      ),
+    );
+  }
   Widget _buildPending() {
     if (_error != null) {
       return _PlaybackError(
@@ -1230,12 +1246,107 @@ class _PlayerScreenState extends State<PlayerScreen>
                   icon: const Icon(Icons.tune_rounded,
                       color: Colors.white, size: 20),
                 ),
+                if (_fullscreen)
+                  IconButton(
+                    tooltip: 'Screen ratio: ${_ratio.label}',
+                    onPressed: _openRatioSheet,
+                    icon: const Icon(Icons.aspect_ratio_rounded,
+                        color: Colors.white, size: 20),
+                  ),
               ]),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openRatioSheet() async {
+    _hideTimer?.cancel();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: CamColors.surface,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Screen ratio',
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                const Text('Applies instantly. Playback keeps running.',
+                    style: TextStyle(color: CamColors.inkDim, fontSize: 12)),
+                const SizedBox(height: 12),
+                for (final mode in PlayerRatio.values)
+                  _ratioTile(mode, setSheet),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    _scheduleHide();
+  }
+
+  Widget _ratioTile(PlayerRatio mode, StateSetter setSheet) {
+    final active = mode == _ratio;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: active
+            ? CamColors.accent.withValues(alpha: 0.14)
+            : CamColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            _setRatio(mode);
+            setSheet(() {});
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(children: [
+              Icon(mode.icon,
+                  size: 20,
+                  color: active ? CamColors.accent : CamColors.inkDim),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(mode.label,
+                        style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight:
+                                active ? FontWeight.w800 : FontWeight.w600)),
+                    Text(mode.description,
+                        style: const TextStyle(
+                            color: CamColors.inkDim, fontSize: 11.5)),
+                  ],
+                ),
+              ),
+              if (active)
+                const Icon(Icons.check_rounded,
+                    size: 18, color: CamColors.accent),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _setRatio(PlayerRatio mode) {
+    if (mode == _ratio) return;
+    setState(() => _ratio = mode);
+    unawaited(PlayerRatioPrefs.save(mode));
+    _scheduleHide();
   }
 
   Widget _endCard() {
