@@ -73,10 +73,19 @@ CREATE TABLE IF NOT EXISTS push_campaigns (
 """
 
 
+_META_SCHEMA = """
+CREATE TABLE IF NOT EXISTS push_meta (
+  k TEXT PRIMARY KEY,
+  v TEXT NOT NULL,
+  updated INTEGER NOT NULL
+);
+"""
+
 def ensure_schema() -> None:
     with _connect() as conn:
         conn.executescript(_SCHEMA)
         conn.executescript(_CAMPAIGN_SCHEMA)
+        conn.executescript(_META_SCHEMA)
 
 
 def record_campaign(actor: str, title: str, body: str, result: Dict) -> int:
@@ -371,6 +380,54 @@ def _deliver(account: Optional[Dict], targets: List[sqlite3.Row], title: str,
             result["errors"].append(error)
     return result
 
+
+def _meta_get(key: str) -> str:
+    ensure_schema()
+    with _connect() as conn:
+        row = conn.execute("SELECT v FROM push_meta WHERE k=?",
+                            (key,)).fetchone()
+    return str(row["v"]) if row else ""
+
+def _meta_set(key: str, value: str) -> None:
+    ensure_schema()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO push_meta(k,v,updated) VALUES (?,?,?)"
+            " ON CONFLICT(k) DO UPDATE SET v=excluded.v, updated=excluded.updated",
+            (key, str(value), int(time.time())),
+        )
+
+def announce_release_once(version: str, build_code: int, notes: str = "") -> Dict:
+    """Notify every registered install about a build, at most once per build.
+
+    This runs on the server, so it reaches devices whose app is closed or was
+    killed: the notification is posted by the OS from the FCM message, not by
+    the app process. A build is only marked announced once at least one device
+    was reached, so an early deploy cannot silence a release for everybody.
+    """
+    account = _service_account()
+    result: Dict = {"available": account is not None, "targets": 0,
+                    "delivered": 0, "failed": 0, "pruned": 0, "errors": [],
+                    "skipped": False}
+    if account is None:
+        return result
+    try:
+        announced = int(_meta_get("announced_build_code") or 0)
+    except ValueError:
+        announced = 0
+    if int(build_code) <= announced:
+        result["skipped"] = True
+        return result
+    title = f"CamAnime {version} is available"
+    body = (notes or "A new CamAnime build is ready. Tap to update.").strip()[:180]
+    result.update(_deliver(account, all_tokens(), title, body,
+                           {"type": "app_update", "version": str(version),
+                            "build": str(build_code),
+                            "deep_link": "/download"}))
+    if result["targets"]:
+        _meta_set("announced_build_code", str(build_code))
+        record_campaign("release", title, body, result)
+    return result
 
 def send_update_alert(install_ids: List[str], title: str, body: str,
                       data: Optional[Dict] = None) -> Dict:

@@ -213,3 +213,43 @@ def test_admin_notify_actually_delivers_to_outdated_devices(api, fcm):
     assert body["push_registered_devices"] == 1
     assert body["push_delivered"] == 1
     assert body["push_failed"] == 0
+
+
+def test_release_notice_reaches_every_install_once(api, fcm):
+    """One notification per registered install, exactly once per build."""
+    api.push.register("release-a", "release-token-" + "h" * 30)
+    api.push.register("release-b", "release-token-" + "i" * 30)
+
+    first = api.push.announce_release_once("2.12.0", 23, "Ratio controls and a "
+                                           "rebuilt website.")
+    assert first["available"] is True
+    assert first["targets"] == 2 and first["delivered"] == 2
+    assert first["skipped"] is False
+
+    again = api.push.announce_release_once("2.12.0", 23)
+    assert again["skipped"] is True
+    assert again["delivered"] == 0
+
+    campaigns = api.push.list_campaigns()
+    assert campaigns[0]["delivered"] == 2
+    assert campaigns[0]["targets"] == 2
+
+
+def test_release_notice_is_sent_for_the_next_build(api, fcm):
+    api.push.register("release-c", "release-token-" + "j" * 30)
+    assert api.push.announce_release_once("2.12.0", 23)["delivered"] == 1
+    assert api.push.announce_release_once("2.13.0", 24)["delivered"] == 1
+
+
+def test_release_notice_prunes_dead_tokens(api, fcm):
+    api.push.register("release-dead", DEAD)
+    api.push.register("release-live", "release-token-" + "k" * 30)
+    result = api.push.announce_release_once("2.12.0", 23)
+    assert result["delivered"] == 1 and result["pruned"] == 1
+    assert api.push.token_count() == 1
+
+
+def test_release_notice_without_credentials_sends_nothing(api):
+    result = api.push.announce_release_once("2.12.0", 23)
+    assert result["available"] is False
+    assert result["targets"] == 0 and result["delivered"] == 0

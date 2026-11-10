@@ -3255,6 +3255,7 @@ def download_page():
     return render_template("download.html", user=_current_user(), apk=apk,
                            winapp=winapp,
                            app_version=policy["latest_version"],
+                           app_build=policy["latest_version_code"],
                            cloudflare_url=CLOUDFLARE_SITE)
 
 
@@ -3263,10 +3264,41 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.10.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 21
+APP_VERSION = "2.12.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 23
+# The release tag tracks the app version, so a new build can never point
+# /get/android at an older asset (the old default was a stale v1.2.0).
+if not os.environ.get("CAMANIME_RELEASE_TAG"):
+    RELEASE_TAG = f"v{APP_VERSION}"
 import app_version  # noqa: E402 — version policy store, declared after routes
 import releases  # noqa: E402 — verified release inventory + blocked telemetry
+
+
+_release_notice_checked = False
+
+@app.before_request
+def _announce_release_once():
+    """Push the release notice once per process when a new build is live.
+
+    The notification is sent by FCM over the network, so devices receive it
+    with the app closed. Nothing is sent when no service account is set.
+    """
+    global _release_notice_checked
+    # Never fire from the test suite: it would race the recordings.
+    if app.config.get("TESTING"):
+        return
+    if _release_notice_checked:
+        return
+    _release_notice_checked = True
+    try:
+        if not push.available():
+            return
+        policy = app_version.get_policy()
+        Thread(target=push.announce_release_once,
+               args=(policy["latest_version"], policy["latest_version_code"],
+                     policy["release_notes"]), daemon=True).start()
+    except Exception:
+        logger.warning("Release notification check skipped", exc_info=True)
 
 
 def _serve_app_file(local_names, release_name, download_name):

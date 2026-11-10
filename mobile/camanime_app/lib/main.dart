@@ -30,7 +30,7 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.10.0';
+const String appVersion = '2.12.0';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 // ── Website-mirrored palette ───────────────────────────

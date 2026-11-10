@@ -51,9 +51,9 @@ a{color:var(--accent, #FFB347)}
   <div class="card">
     <h2><i class="fab fa-android" style="color:#34d399"></i> Android <span class="badge">APK</span></h2>
     {% if apk %}
-    <div class="meta">CamAnime {{ app_version }} · CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
+    <div class="meta">CamAnime {{ app_version }} (build {{ app_build }}) · CamAnime.apk · {{ apk.size }} · updated {{ apk.updated }}</div>
     {% else %}
-    <div class="meta">APK builds on every release — grab the latest below.</div>
+    <div class="meta">CamAnime {{ app_version }} (build {{ app_build }}) — download starts straight from the latest release.</div>
     {% endif %}
     <a class="btn" href="/get/android"><i class="fas fa-mobile-alt"></i> Install App</a>
     <a class="direct" href="/get/android" download="CamAnime.apk"><i class="fas fa-download"></i> Direct link: CamAnime.apk — tap to start downloading</a>

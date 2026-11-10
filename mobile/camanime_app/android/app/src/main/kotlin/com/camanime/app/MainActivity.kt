@@ -6,6 +6,7 @@ import android.app.PictureInPictureParams
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
+import android.os.Bundle
 import android.util.Rational
 import androidx.core.app.ActivityCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -27,6 +28,17 @@ class MainActivity : FlutterActivity() {
     private var pendingAdvert: Map<String, String>? = null
     /** True while the miniplayer is playing, i.e. worth floating. */
     private var pipArmed = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // FCM posts on this channel. Create it at launch so a release or
+        // episode push that arrives while the app is closed still shows:
+        // Android 8+ drops a notification whose channel does not exist.
+        try {
+            Notifications.ensureUpdatesChannel(this)
+        } catch (_: Exception) {
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

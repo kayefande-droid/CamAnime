@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.11.0";
-export const LATEST_BUILD = 22;
+export const LATEST_VERSION = "2.12.0";
+export const LATEST_BUILD = 23;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,11 +21,11 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "be98b7115a533e9497f47324d7cef1fa786cca7a187df644c3c209f1481a1096";
+  "cb65cdb4d2a8e2a1e9f01a9da8ede8e88e95204fc37299df2e4d18a04eaa85c7";
 
 export const RELEASE_NOTES =
-  "Firebase push notifications, an update screen that installs in place, " +
-  "and playback fixes for fullscreen subtitles.";
+  "Screen ratio controls in the fullscreen player (Auto, Fit, Fill, 16:9, " +
+  "4:3, 21:9, Stretch), a rebuilt responsive site and release notifications.";
 
 export const RENDER_ORIGIN = "https://camanime.onrender.com";
 export const WORKER_ORIGIN = "https://camanjme.camanime.workers.dev";

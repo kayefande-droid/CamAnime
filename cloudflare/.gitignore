@@ -2,3 +2,4 @@ node_modules/
 .wrangler/
 .dev.vars
 .cf-audit.env
+.cf-deploy.env
