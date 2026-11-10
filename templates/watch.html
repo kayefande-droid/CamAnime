@@ -1035,10 +1035,39 @@
         videoEl.addEventListener('loadeddata', () => {
             if (currentServer) markServerHealthy(currentServer);
         });
-        // Device-synced watch history for signed-in users (guests keep localStorage)
-        try {
-            const pos = parseFloat(videoEl.currentTime || '0');
-        } catch (e) {}
+        // Resume where this browser left off. Signed-in members also sync through
+        // /api/history; guests have only this key, which is why it is written on
+        // every meaningful position rather than only when the tab closes.
+        const resumeKey = 'camanime_resume_{{ anime.id }}_{{ ep_num }}';
+        let resumeApplied = false;
+        let lastSavedPoint = 0;
+        function saveResumePoint(force) {
+            try {
+                const t = videoEl.currentTime || 0;
+                const d = videoEl.duration || 0;
+                if (t < 5) return;                              // the opening seconds are not a position
+                if (d && t > d - 10) {                          // finished: do not resume at the credits
+                    localStorage.removeItem(resumeKey);
+                    return;
+                }
+                if (!force && Math.abs(t - lastSavedPoint) < 5) return;
+                lastSavedPoint = t;
+                localStorage.setItem(resumeKey, String(Math.floor(t)));
+            } catch (e) {}
+        }
+        videoEl.addEventListener('timeupdate', () => saveResumePoint(false));
+        videoEl.addEventListener('pause', () => saveResumePoint(true));
+        window.addEventListener('pagehide', () => saveResumePoint(true));
+        videoEl.addEventListener('loadedmetadata', () => {
+            if (resumeApplied) return;
+            resumeApplied = true;
+            try {
+                const saved = parseFloat(localStorage.getItem(resumeKey) || '0');
+                const d = videoEl.duration || 0;
+                if (saved > 5 && (!d || saved < d - 10)) videoEl.currentTime = saved;
+            } catch (e) {}
+        }, { once: true });
+
         let syncedProgress = false;
         const syncProgress = () => {
             fetch('/api/history', {
