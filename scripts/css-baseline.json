@@ -1,21 +1,21 @@
 {
-  "css\\base.css": {
+  "base.css": {
     "literals": 56,
     "vw": 0
   },
-  "css\\header-layout.css": {
+  "header-layout.css": {
     "literals": 1,
     "vw": 0
   },
-  "css\\motion.css": {
+  "motion.css": {
     "literals": 1,
     "vw": 0
   },
-  "css\\redesign.css": {
+  "redesign.css": {
     "literals": 0,
     "vw": 1
   },
-  "css\\sync.css": {
+  "sync.css": {
     "literals": 236,
     "vw": 5
   }
