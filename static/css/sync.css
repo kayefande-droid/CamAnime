@@ -1061,11 +1061,30 @@ header {
   .ca-big-play { width: 58px; height: 58px; }
 }
 
+/* Narrow phones: the control bar carries more buttons than fit on one line,
+   so the picture-in-picture toggle steps aside instead of pushing the
+   fullscreen button off the stage. */
+@media (max-width: 440px) {
+  .ca-bar { gap: 0; }
+  .ca-btn { min-width: 34px; min-height: 34px; padding: 0 0.2rem; font-size: 0.88rem; }
+  .ca-time { font-size: 0.66rem; padding: 0 0.12rem; min-width: 0; }
+  .ca-select { min-height: 30px; padding: 0 0.25rem; font-size: 0.7rem; }
+  .ca-btn[data-ca="pip"] { display: none; }
+  .ca-controls { padding-inline: 0.4rem; }
+}
+
 .ca-player:fullscreen, .ca-player:-webkit-full-screen {
-  width: 100vw; height: 100vh; border-radius: 0;
+  width: 100vw; height: 100dvh; border-radius: 0;
+  box-sizing: border-box; overflow: hidden;
   padding: var(--ca-safe-top) var(--ca-safe-right) var(--ca-safe-bottom) var(--ca-safe-left);
 }
-.ca-player:fullscreen video, .ca-player:-webkit-full-screen video { height: 100vh; }
+/* The container already owns the viewport box and is padded for the notch and
+   the gesture bar. Sizing the video in vh as well pushed it past that padding,
+   clipping the bottom of the frame and the control bar over it. Fill the
+   padded box and let object-fit letterbox the rest. */
+.ca-player:fullscreen video, .ca-player:-webkit-full-screen video {
+  width: 100%; height: 100%; object-fit: contain;
+}
 .ca-player:fullscreen .ca-controls { padding-bottom: max(0.6rem, var(--ca-safe-bottom)); }
 
 /* ── 7. Dialogs, drawers, menus fit a 320px screen ─────────────────────── */
