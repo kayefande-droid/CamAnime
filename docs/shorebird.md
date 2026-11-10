@@ -11,12 +11,13 @@ APK pipeline and changes neither of them.
 | --- | --- |
 | Project inspected | ✅ Flutter app at `mobile/camanime_app`, no `shorebird.yaml` existed |
 | Organization | ✅ `Kayefande-droid` (`organization_id: 62361`) |
-| Existing app | ⚠️ None in the organization — app list is empty, so there is nothing to duplicate; one app record must be created |
+| Existing app | ⚠️ None in the organization — app list is empty, so there is nothing to duplicate; one app record must be created (`POST /api/v1/apps` with the CI key still answers `403 organization_permission_denied`, re-checked 2026-11-11) |
 | CI token (`SHOREBIRD_TOKEN`) | ✅ Valid — authenticated as role `developer` (release/patch only, cannot manage apps) |
-| Personal API key | ❌ Rejected `401 user_unauthorized` — expired, revoked or mistyped; must be reissued |
+| Personal API key | ❌ Rejected `401 user_unauthorized` — expired, revoked or mistyped; must be reissued (re-checked 2026-11-11) |
 | GitHub secrets | ✅ `SHOREBIRD_TOKEN` and `SHOREBIRD_API_KEY` set on `kayefande-droid/CamAnime` (Actions secrets, never committed) |
 | CI workflows | ✅ `.github/workflows/shorebird-release.yml`, `.github/workflows/shorebird-patch.yml` (manual `workflow_dispatch`) |
 | `shorebird.yaml` | ⛔ Blocked: needs the `app_id` created in the console |
+| Android build prerequisites | ✅ AndroidX enabled in `android/gradle.properties` (`android.useAndroidX=true`, `android.enableJetifier=true`) — required because the Flutter embedding, `androidx.work` and the Firebase BoM are all AndroidX |
 | First release | ⛔ Not run — needs the app id, and the user's approval |
 | Patch delivery test | ⛔ Needs a physical/emulated device with the release build installed |
 
