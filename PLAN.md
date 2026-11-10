@@ -1,42 +1,65 @@
-# Plan — Convio MCP in Freebuff CLI
+# Plan — one CamAnime design, served by both hosts
 
-Pattern: a single remote MCP endpoint plus a repeatable handshake check. There is
-no prompt, retrieval or agent layer to build — Convio does the tool work, the CLI
-does the calling.
+Both hosts ship the same `/static` tree, so every task below is a change to shared
+CSS/JS or to the two renderers' markup — never a fork of the design.
 
-## Tasks (build order)
+Milestone 1 is already done: identical stylesheet set and versions on both hosts
+(`base.css`, `sync.css`, `header-layout.css` at `20261111-ui` / `20261111-header`).
 
-1. **Confirm the endpoint and transport.** Hosted Streamable-HTTP MCP at
-   `https://mcp.convio.dev`, bearer-token auth, no local server.
-   *Verify:* `convio` tool calls answer in-session (`project_status` returns live
-   stage data) — done.
+## Milestone 2 — tokens and layout floor
 
-2. **Confirm the configuration is user-level, not per-repo.** "Available in every
-   project" means the CLI's user-scope MCP config, so a new project inherits it
-   with no setup.
-   *Verify:* list where the server is registered; a fresh directory in this
-   session can still call a Convio tool. If it is registered per-project, move it
-   to user scope.
+1. **One token set.** Audit `static/css/base.css` `:root` for colours, type scale,
+   spacing, radii, shadows and motion durations. Any literal colour or font-family
+   later in `base.css`/`sync.css` moves into a token.
+   *Verify:* `grep` for `#[0-9a-f]{3,6}` and `font-family` outside `:root` returns only
+   allowed exceptions (SVG fills, provider logos).
+2. **No horizontal overflow, 360 px → 1920 px.** `overflow-x: clip` on `html, body`,
+   capped centred container, and a check of `/`, `/anime/<id>`, `/watch/<id>/<ep>`,
+   `/library`, `/download`, `/owner-console` at 360, 414, 768, 1024, 1280, 1920.
+   *Verify:* `document.documentElement.scrollWidth <= clientWidth` at each width, and
+   screenshots at 360/1280.
+3. **Control states.** Every button, input, tab and card link gets hover,
+   `:focus-visible` (instant, 3:1 against its background), active and disabled.
+   *Verify:* keyboard tab-through on each page shows a visible focus ring; contrast
+   checked for body text (4.5:1) and large text/icons (3:1).
 
-3. **Add a re-runnable connectivity check.** `scripts/check-convio-mcp.sh` performs
-   an MCP `initialize` handshake with `CONVIO_API_KEY` from the environment.
-   *Verify:* run with a valid key → `200` + MCP `result`; with a bad key → `401`
-   and a non-zero exit.
+## Milestone 3 — media player
 
-4. **Keep the key out of the repository.** Key lives only in the MCP client config
-   (or an env var for the check script).
-   *Verify:* grep the tracked tree for the key prefix and the pasted placeholder;
-   both absent; `.gitignore` covers any local env file used.
+4. **Player chrome.** Progress bar with buffered range, time labels, volume, captions
+   toggle when tracks exist, fullscreen — responsive at 360 px and in `100dvh`
+   fullscreen, controls never overflowing the bar.
+   *Verify:* play a real title on both hosts; controls fit at 360 px; fullscreen has no
+   clipped bottom bar; keyboard shortcuts still work.
+5. **Resume and progress.** Position saves continue to hit the existing endpoints
+   unchanged; the bar reflects the saved position on load.
+   *Verify:* play, reload, position restored; `POST` bodies unchanged so the API stays
+   compatible with build 23 of the app.
 
-5. **Document the one-time setup.** Short section in `BRIEF.md` or the repo README
-   naming the config entry, the key's home, and the check command.
-   *Verify:* follow the steps from a clean shell and get a passing check.
+## Milestone 4 — admin dashboard
+
+6. **`/owner-console` at every width.** Tables become scrollable/cardified under
+   720 px, each panel has loading, empty and error states.
+   *Verify:* every existing admin action (user list, ban, push test, uploads, catalogue
+   tools) still returns 200 on Cloudflare D1 and on Render, and the layout holds at
+   360 px.
+7. **Tool parity.** Confirm each admin tool present on Render exists on the Worker (or
+   is documented as intentionally absent).
+   *Verify:* a checklist run against both hosts, recording status codes.
+
+## Milestone 5 — release parity
+
+8. **One version, one APK.** `2.12.0` build `23` appears identically in `pubspec.yaml`,
+   `version_gate`, `cloudflare/src/release.js`, the Worker's `/download`, Render's
+   `/download`, and the R2 object served by `/get/android`.
+   *Verify:* a script that reads all five and exits non-zero on any mismatch.
 
 ## Stage checkpoints
+- Design → settle tokens and type scale before Milestone 2 lands.
+- Security review → after Milestone 4 (admin surface changed).
+- Test thoroughly → run Milestones 2–5 checks in a real browser on both hosts.
+- Ship → deploy Worker + Render, then re-verify parity.
 
-- Scaffold — no app to scaffold; each task above is a config/doc change. Call
-  `next_stage` once tasks 1–5 are done.
-- Build the AI core — not applicable (no prompts, tools or retrieval to author).
-- Security review — the only asset is the API key; covered by task 4.
-- Test thoroughly — task 3's script is the test.
-- Ship — the "deploy" is the committed config/doc changes.
+## Guardrails
+Streaming provider calls, downloader endpoints and every `/api/app/*` path the Android
+app uses stay byte-compatible; layout work must not rename classes the app's webviews
+or the templates depend on.
