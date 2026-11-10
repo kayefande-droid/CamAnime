@@ -47,10 +47,11 @@ be rewritten. Every pin change is made in the 13 templates *and*
 10. **One version, one APK.** `2.12.0` build `23` agreed on both hosts before this
     work started; `/get/android` returns the same 59,434,094 bytes from both.
     `scripts/check-parity.mjs` asserts pins, version and APK size.
-11. **Close the six remaining mismatches.** The gate currently fails because
-    `/download` and `/developers` load different assets per host
-    (`base.css`, `header-layout.css`, `site.js`, `motion.js`, `release-schedule.js`).
-    *Verify:* `node scripts/check-parity.mjs` exits 0.
+11. **Close the six remaining mismatches.** · done — `download.html` gained
+    `base.css` + `header-layout.css`, `developers.html` gained `site.js` +
+    `motion.js`, and the worker head gained `release-schedule.js`.
+    *Verify:* `node scripts/check-parity.mjs` exits 0 (it does: pins, version and
+    the 59,434,094-byte APK agree on both hosts).
 
 ## Milestone 6 — sub/dub plumbing and providers · not started
 12. **Language truth in the data model.** Each episode records audio tracks and
