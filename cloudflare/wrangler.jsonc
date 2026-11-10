@@ -52,12 +52,12 @@
   // it: downloads fall back to the static asset bundle and then to the Render
   // 302. Re-enable this binding after activating R2 and creating the bucket.
   //
-  // "r2_buckets": [
-  //   {
-  //     "binding": "FILES",
-  //     "bucket_name": "camanime-files"
-  //   }
-  // ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "camanime"
+    }
+  ],
 
   "assets": {
     "directory": "../static",

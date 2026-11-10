@@ -8,7 +8,13 @@ import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import { fcmConfigured } from "./push.js";
-import { LATEST_BUILD, LATEST_VERSION, MIN_SUPPORTED_BUILD, releasePolicy } from "./release.js";
+import {
+  APK_SHA256,
+  LATEST_BUILD,
+  LATEST_VERSION,
+  MIN_SUPPORTED_BUILD,
+  releasePolicy,
+} from "./release.js";
 import { sitemapXml, sitemapResponse, robotsTxt, withSeo } from "./seo.js";
 
 function segments(pathname) {
@@ -353,13 +359,29 @@ async function pageRoutes(request, env, ctx, path) {
   }
 
   if (path === "/download") {
-    const files = (await (await api.downloadList(env)).json()).files;
+    // Report the exact bytes /get/android will hand over, so the page and the
+    // downloaded file can never disagree about version, size or name.
+    let apkSize = null;
+    try {
+      if (env.FILES) apkSize = (await env.FILES.head(APK_KEY))?.size ?? null;
+    } catch {
+      apkSize = null;
+    }
+    const extras = (await (await api.downloadList(env)).json()).files.filter(
+      (f) => f.key !== APK_KEY,
+    );
+    const sizeLabel = apkSize
+      ? `${(apkSize / (1024 * 1024)).toFixed(1)} MB`
+      : "size shown by the main site";
     const inner = `
-      <h1 class="section-title">Downloads (R2)</h1>
-      <p class="muted">CamAnime ${LATEST_VERSION} (build ${LATEST_BUILD}) — the current release. The Android APK is also mirrored by the main site.</p>
-      <p class="muted">Served from this deployment's own Cloudflare R2 bucket — no Render involvement.</p>
-      ${files.length ? `<ul>${files.map((f) => `<li style="margin:.5rem 0"><a href="${f.url}" download>${esc(f.name)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`).join("")}</ul>`
-        : `<div class="discovery-empty">No files uploaded yet.</div>`}
+      <h1 class="section-title">Download CamAnime</h1>
+      <div class="discovery-empty" style="display:block">
+        <p style="margin:0"><strong>CamAnime ${LATEST_VERSION} (build ${LATEST_BUILD})</strong> — Android APK, ${sizeLabel}</p>
+        <p style="margin:.75rem 0"><a class="btn-primary" href="/get/android" download>Download CamAnime.apk</a></p>
+        <p class="muted" style="margin:0">Checksum (sha256): <code style="word-break:break-all">${APK_SHA256}</code></p>
+      </div>
+      <p class="muted">${apkSize ? "Served from this deployment's own Cloudflare R2 bucket — no Render involvement." : "This mirror has no copy of its own yet, so the button redirects to the main site."}</p>
+      ${extras.length ? `<h2 class="section-title">Other files</h2><ul>${extras.map((f) => `<li style="margin:.5rem 0"><a href="${f.url}" download>${esc(f.name)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`).join("")}</ul>` : ""}
       ${user?.role === "admin" ? `
       <form id="upForm" enctype="multipart/form-data" style="margin-top:1rem">
         <h2 class="section-title">Admin upload</h2>
