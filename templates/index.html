@@ -48,9 +48,9 @@
 <link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/redesign.css?v=20261111-v11" rel="stylesheet">
-<link href="/static/css/motion.css?v=20261111-motion2" rel="stylesheet">
+<link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
-<script src="/static/js/motion.js?v=20261111-motion2" defer></script>
+<script src="/static/js/motion.js?v=20261111-motion3" defer></script>
     <style>
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
          * theme: Studio Obsidian · accent: warm-amber var(--accent, #FFB347) ~5% · studied: yes · DNA-source: user reference
@@ -257,7 +257,7 @@
             inset: 0;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.4s ease;
+            transition: opacity var(--ca-dur-base) var(--ca-ease-soft);
             display: flex;
             align-items: flex-end;
         }
@@ -277,7 +277,7 @@
             object-position: center 20%;
             filter: saturate(1.1) contrast(1.05);
             transform: scale(1.02);
-            transition: transform 3.5s ease;
+            transition: transform var(--ca-dur-slow) var(--ca-ease-out);
         }
         .hero-slide.active .hero-backdrop {
             transform: scale(1);
@@ -1495,10 +1495,22 @@
         currentSlide = idx;
     }
 
+    // One cycle, one clock. The hero's drift, its copy stagger and the reveal
+    // stagger are all declared against --ca-cycle / --ca-step in motion.css, so
+    // the rotation reads the same token instead of keeping a private timer that
+    // drifts out of step with everything else on the page.
+    const motionCycle = (() => {
+        const raw = getComputedStyle(document.documentElement).getPropertyValue('--ca-cycle').trim();
+        const value = raw.endsWith('ms') ? parseFloat(raw)
+            : raw.endsWith('s') ? parseFloat(raw) * 1000
+            : parseFloat(raw);
+        return Number.isFinite(value) && value >= 1500 ? value : 6000;
+    })();
+
     if (slides.length > 1) {
         setInterval(() => {
             setHeroSlide((currentSlide + 1) % slides.length);
-        }, 4500);
+        }, motionCycle);
     }
 
     // YouTube Trailer Modal
