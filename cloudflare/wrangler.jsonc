@@ -21,7 +21,7 @@
   // Defaults the worker reads at runtime. Override per environment in the
   // dashboard (Settings → Variables) without editing code.
   "vars": {
-    "APP_VERSION": "2.11.0",
+    "APP_VERSION": "2.12.0",
     // Leave empty to keep /admin a 404, matching the Render origin's
     // CAMANIME_ADMIN_PATH policy. Set it to serve the private dashboard.
     "ADMIN_PATH": "",
@@ -40,7 +40,7 @@
     {
       "binding": "DB",
       "database_name": "camanime",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "23847663-1064-422b-a12d-e3d602a9c745",
       "migrations_dir": "migrations"
     }
   ],
