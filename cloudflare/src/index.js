@@ -9,6 +9,7 @@ import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import { fcmConfigured } from "./push.js";
 import { MIN_SUPPORTED_BUILD, releasePolicy } from "./release.js";
+import { sitemapXml, sitemapResponse, robotsTxt, withSeo } from "./seo.js";
 
 function segments(pathname) {
   return pathname.split("/").filter(Boolean);
@@ -63,10 +64,16 @@ export default {
     // so the site has a mirror that does not depend on the Render origin.
     if (path === "/get/android") return serveApk(request, env);
 
+    // SEO endpoints for THIS deployment. Both are built from the request
+    // origin, so the Cloudflare sitemap never points at the Render host.
+    if (path === "/sitemap.xml") return sitemapResponse(await sitemapXml(url.origin));
+    if (path === "/robots.txt") return robotsTxt(url.origin, env.ADMIN_PATH || "");
+
     // Pages (SSR HTML) — failures render the themed error page.
     try {
       ctx.passThroughOnException();
-      return await pageRoutes(request, env, ctx, path);
+      const page = await pageRoutes(request, env, ctx, path);
+      return await withSeo(page, url);
     } catch (err) {
       const status = /not found/i.test(String(err && err.message)) ? 404 : 500;
       const message = status === 404 ? "Page not found." : "Something went wrong on the edge.";

@@ -8,16 +8,30 @@ const LAYOUT_GUARD = `<script>try{var l=localStorage.getItem('camanime-layout');
 function head(title, desc) {
   return `<!DOCTYPE html>
 <html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${esc(title)} | ${BRAND}</title>
 <meta name="description" content="${esc(desc)}">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#087BFF">
+<!-- Self-referencing canonical and social cards. __CA_CANONICAL__ / __CA_ORIGIN__
+     are filled by seo.js with this request's own origin, so this deployment
+     never claims to be the Render site. -->
+<link rel="canonical" href="__CA_CANONICAL__">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${BRAND}">
+<meta property="og:title" content="${esc(title)} | ${BRAND}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:url" content="__CA_CANONICAL__">
+<meta property="og:image" content="__CA_ORIGIN__/static/icon-512.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(title)} | ${BRAND}">
+<meta name="twitter:description" content="${esc(desc)}">
+<meta name="twitter:image" content="__CA_ORIGIN__/static/icon-512.png">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/base.css?v=20261108-ui">
-<link rel="stylesheet" href="/static/css/sync.css?v=20261108-ui">
+<link rel="stylesheet" href="/static/css/base.css?v=20261110-ui">
+<link rel="stylesheet" href="/static/css/sync.css?v=20261110-ui">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}

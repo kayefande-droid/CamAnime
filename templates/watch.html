@@ -40,8 +40,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+    <!-- CamAnime player chrome: binds to #nativeVideo, leaves iframe servers alone. -->
+    <script src="/static/js/player-ui.js?v=20261110-player" defer></script>
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261108-ui" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261110-ui" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
     <style>
         /* Theme tokens are owned centrally by /static/css/sync.css so the Settings theme picker works on this page too. */
@@ -505,7 +507,59 @@
         <div class="player-column">
             <!-- ─── VIDEO PLAYER STAGE (Supports Native MP4, HLS.js M3U8 + WebVTT Subtitles, and Iframe Fallback) ─── -->
             <div class="video-stage" id="videoStage">
-                <video id="nativeVideo" controls playsinline preload="auto" crossorigin="anonymous" style="display: none;"></video>
+                <!-- Native surface: the CamAnime control bar in player-ui.js takes
+                     over from the browser controls once it binds. Iframe providers
+                     keep their own controls; this wrapper hides itself for them. -->
+                <div class="ca-player" id="caPlayer">
+                    <video id="nativeVideo" controls playsinline preload="auto" crossorigin="anonymous" style="display: none;"></video>
+                    <div class="ca-shade" aria-hidden="true"></div>
+                    <button type="button" class="ca-big-play" aria-label="Play"><i class="fas fa-play" aria-hidden="true"></i></button>
+                    <div class="ca-loading" aria-hidden="true"><div class="ca-spinner"></div></div>
+                    <div class="ca-controls">
+                        <div class="ca-progress" role="slider" tabindex="0" aria-label="Seek"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                            <div class="ca-progress-track">
+                                <div class="ca-buffered"></div>
+                                <div class="ca-played"></div>
+                            </div>
+                            <div class="ca-scrub"></div>
+                        </div>
+                        <div class="ca-bar">
+                            <button type="button" class="ca-btn" data-ca="play" aria-label="Play">
+                                <i class="fas fa-play" aria-hidden="true"></i>
+                            </button>
+                            <span class="ca-time"><span class="ca-current">0:00</span> / <span class="ca-duration">0:00</span></span>
+                            <span class="ca-spacer"></span>
+                            <button type="button" class="ca-btn" data-ca="cc" aria-label="Subtitles" aria-pressed="false" style="display:none">
+                                <i class="fas fa-closed-captioning" aria-hidden="true"></i>
+                            </button>
+                            <div class="ca-volume">
+                                <button type="button" class="ca-btn" data-ca="mute" aria-label="Mute">
+                                    <i class="fas fa-volume-up" aria-hidden="true"></i>
+                                </button>
+                                <input id="caVol" type="range" min="0" max="1" step="0.05" value="1" aria-label="Volume">
+                            </div>
+                            <select id="caSpeed" class="ca-select" aria-label="Playback speed">
+                                <option value="0.5">0.5×</option>
+                                <option value="0.75">0.75×</option>
+                                <option value="1" selected>1×</option>
+                                <option value="1.25">1.25×</option>
+                                <option value="1.5">1.5×</option>
+                                <option value="2">2×</option>
+                            </select>
+                            <button type="button" class="ca-btn" data-ca="pip" aria-label="Picture in picture">
+                                <i class="fas fa-clone" aria-hidden="true"></i>
+                            </button>
+                            <button type="button" class="ca-btn" data-ca="full" aria-label="Fullscreen">
+                                <i class="fas fa-expand" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="ca-error" role="alert">
+                        <span class="ca-error-text">Playback failed.</span>
+                        <button type="button" class="ca-btn" data-ca="retry">Retry</button>
+                    </div>
+                </div>
                 <iframe id="embedIframe" src="{{ stream_url }}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="display: none;"></iframe>
                 <button type="button" id="skipIntroBtn" class="skip-intro-btn" onclick="skipIntro()">
                     <i class="fas fa-forward"></i> Skip Intro
@@ -795,6 +849,8 @@
         video.removeAttribute('src');
         video.innerHTML = '';
         skipBtn.style.display = 'none';
+        // Keep the CamAnime chrome in sync: it only ever shows for native video.
+        if (window.caPlayerSetMode) window.caPlayerSetMode(srv.playback_mode);
         currentIntro = srv.intro || null;
 
         if (srv.playback_mode === 'mp4') {

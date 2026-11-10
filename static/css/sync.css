@@ -809,3 +809,290 @@ html[data-layout="wall"] body .ep-grid { grid-template-columns: repeat(auto-fill
   html[data-layout="wall"] body .anime-card:hover .card-poster-wrap { outline: 2px solid var(--accent, #FFB347); outline-offset: 1px; }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CamAnime 2026 — responsive system + unified player chrome (additive)
+   Loaded by BOTH deployments: Render templates and the Cloudflare worker
+   both link /static/css/sync.css. Nothing here removes an existing rule.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ca-gutter: clamp(0.9rem, 0.5rem + 2vw, 2rem);
+  --ca-safe-top: env(safe-area-inset-top, 0px);
+  --ca-safe-right: env(safe-area-inset-right, 0px);
+  --ca-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ca-safe-left: env(safe-area-inset-left, 0px);
+  --ca-tap: 44px;              /* minimum touch target */
+  --ca-radius-card: 14px;
+  --ca-radius-panel: 18px;
+}
+
+/* ── 1. Overflow guards ──────────────────────────────────────────────────
+   One unbreakable string (a long title, a URL in a comment) used to widen
+   the document on phones. `clip` keeps sticky positioning working while
+   still refusing a horizontal scrollbar. */
+html, body { max-width: 100%; overflow-x: clip; }
+body { padding-left: var(--ca-safe-left); padding-right: var(--ca-safe-right); }
+main, .watch-container, .header-inner, .hero, section { min-width: 0; }
+pre, code, .ca-community p, .comment-body { overflow-wrap: anywhere; }
+img, video, iframe, svg, canvas { max-width: 100%; }
+table { max-width: 100%; }
+
+/* ── 2. Header ───────────────────────────────────────────────────────────
+   Sticky with the notch accounted for, and never taller than a thumb can
+   reach on a 320px screen. */
+header {
+  position: sticky; top: 0; z-index: 900;
+  padding-top: var(--ca-safe-top);
+  backdrop-filter: blur(14px);
+}
+.header-inner {
+  gap: 0.6rem;
+  padding-left: max(var(--ca-gutter), var(--ca-safe-left));
+  padding-right: max(var(--ca-gutter), var(--ca-safe-right));
+  min-height: 56px;
+}
+.site-logo { font-size: clamp(1.15rem, 1rem + 0.6vw, 1.45rem); line-height: 1; }
+.brand-group { min-width: 0; }
+.nav-toggle {
+  width: var(--ca-tap); height: var(--ca-tap);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
+}
+.mobile-nav { padding-bottom: max(1rem, var(--ca-safe-bottom)); }
+.mobile-nav a { min-height: var(--ca-tap); display: flex; align-items: center; }
+
+/* ── 3. Hero ─────────────────────────────────────────────────────────────
+   Phone: copy stacked, CTA full width. Tablet+: side by side. */
+.hero { padding-left: var(--ca-gutter); padding-right: var(--ca-gutter); }
+.hero-title { text-wrap: balance; }
+.hero-sub { max-width: 60ch; }
+@media (max-width: 640px) {
+  .hero { min-height: 0; padding-top: 1.5rem; padding-bottom: 1.75rem; }
+  .hero-inner { max-width: 100%; }
+  .hero-ctas { width: 100%; gap: 0.5rem; }
+  .hero-ctas > * { flex: 1 1 auto; min-height: var(--ca-tap); justify-content: center; }
+}
+
+/* ── 4. Cards and grids ──────────────────────────────────────────────────
+   Posters keep a 2:3 ratio at every width, so a 320px phone shows two
+   readable columns instead of one stretched poster. */
+.anime-grid, .catalog-grid, .mini-grid, .heaven-strip-grid {
+  gap: clamp(0.55rem, 0.3rem + 1vw, 1.1rem);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+}
+@media (min-width: 600px) {
+  .anime-grid, .catalog-grid, .mini-grid, .heaven-strip-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .anime-grid, .catalog-grid { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); }
+}
+.card-poster-wrap {
+  aspect-ratio: 2 / 3;
+  border-radius: var(--ca-radius-card);
+  overflow: hidden;
+  background: var(--bg-elevated, #0e111a);   /* no white flash while loading */
+}
+.card-poster-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.card-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+  min-height: 2.4em;   /* reserves two lines: no jump as titles load */
+}
+.card-badges, .card-meta { flex-wrap: wrap; row-gap: 0.25rem; }
+
+/* ── 5. Watch page ───────────────────────────────────────────────────────
+   Desktop keeps player + 350px rail. Below 1024px the rail stops being a
+   column: episodes become a horizontally scrollable strip under the
+   player, which is what a thumb expects on a phone. */
+.watch-container {
+  padding-left: max(var(--ca-gutter), var(--ca-safe-left));
+  padding-right: max(var(--ca-gutter), var(--ca-safe-right));
+  margin-bottom: max(2rem, var(--ca-safe-bottom));
+}
+.cinema-grid { min-width: 0; }
+.player-column { min-width: 0; }
+.transport-bar {
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  padding: clamp(0.7rem, 0.5rem + 1vw, 1rem);
+}
+.now-playing-info { min-width: 0; flex: 1 1 12rem; }
+.now-playing-info h1 { overflow-wrap: anywhere; }
+.transport-actions { flex-wrap: wrap; row-gap: 0.45rem; }
+.transport-actions .ctrl-btn { min-height: var(--ca-tap); }
+.server-deck { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.server-row { flex-wrap: wrap; }
+.server-btn { min-height: var(--ca-tap); }
+
+@media (max-width: 1023px) {
+  .cinema-grid { grid-template-columns: 1fr; }
+  .episodes-rail, .episode-sidebar {
+    border-radius: var(--ca-radius-panel);
+    padding: 0.9rem 0.95rem;
+  }
+  .ep-grid {
+    display: flex;
+    gap: 0.45rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.35rem;
+    scroll-snap-type: x proximity;
+  }
+  .ep-grid > * { flex: 0 0 auto; scroll-snap-align: start; }
+  .ep-chip { min-width: var(--ca-tap); min-height: var(--ca-tap); }
+}
+@media (max-width: 767px) {
+  .video-stage { border-radius: 12px; }
+  .transport-bar { flex-direction: column; align-items: stretch; }
+  .transport-actions { width: 100%; }
+  .transport-actions .ctrl-btn { flex: 1 1 calc(50% - 0.3rem); justify-content: center; }
+  .skip-intro-btn { right: 10px; bottom: 64px; }
+}
+
+/* ── 6. Player chrome ────────────────────────────────────────────────────
+   One control surface for the native <video>. It only renders when a real
+   HTML5 source is playing; iframe providers keep their own controls. */
+.ca-player { position: relative; width: 100%; height: 100%; background: #000; }
+.ca-player video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+.ca-player .ca-shade {
+  position: absolute; inset: auto 0 0 0; height: 45%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
+  opacity: 1; transition: opacity 0.22s ease; pointer-events: none;
+}
+.ca-player.idle .ca-shade { opacity: 0; }
+
+.ca-big-play {
+  position: absolute; inset: 0; margin: auto; width: 68px; height: 68px;
+  border-radius: 50%; border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.55);
+  background: rgba(7, 8, 13, 0.62); color: var(--accent, #FFB347);
+  font-size: 1.45rem; display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px); cursor: pointer; z-index: 3;
+}
+.ca-player.paused .ca-big-play { display: flex; }
+.ca-big-play:hover { background: rgba(7, 8, 13, 0.8); transform: scale(1.04); }
+
+.ca-controls {
+  position: absolute; inset: auto 0 0 0; z-index: 4;
+  padding: 0 clamp(0.5rem, 0.4rem + 0.6vw, 0.9rem) clamp(0.45rem, 0.4vw, 0.7rem);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.ca-player.idle .ca-controls { opacity: 0; transform: translateY(6px); pointer-events: none; }
+.ca-player.idle { cursor: none; }
+
+.ca-progress {
+  position: relative; height: 22px; display: flex; align-items: center;
+  cursor: pointer; touch-action: none;
+}
+.ca-progress-track {
+  position: relative; width: 100%; height: 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22); overflow: hidden;
+  transition: height 0.15s ease;
+}
+.ca-progress:hover .ca-progress-track,
+.ca-progress:focus-visible .ca-progress-track { height: 6px; }
+.ca-buffered { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(255, 255, 255, 0.33); }
+.ca-played { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent, #FFB347); }
+.ca-scrub {
+  position: absolute; top: 50%; width: 12px; height: 12px; margin-left: -6px;
+  border-radius: 50%; background: var(--accent, #FFB347); transform: translateY(-50%) scale(0.9);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.35); pointer-events: none;
+}
+
+.ca-bar { display: flex; align-items: center; gap: 0.15rem; color: #fff; }
+.ca-spacer { flex: 1 1 auto; }
+.ca-btn {
+  min-width: var(--ca-tap); min-height: var(--ca-tap);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: 10px; color: #fff;
+  font-size: 0.95rem; cursor: pointer; padding: 0 0.5rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ca-btn:hover, .ca-btn:focus-visible { background: rgba(255, 255, 255, 0.16); color: var(--accent, #FFB347); }
+.ca-btn[aria-pressed="true"] { color: var(--accent, #FFB347); }
+.ca-time {
+  font-variant-numeric: tabular-nums; font-size: 0.78rem; color: #e8ecf5;
+  padding: 0 0.45rem; white-space: nowrap;
+}
+.ca-time .ca-dur { color: rgba(255, 255, 255, 0.65); }
+.ca-volume { display: flex; align-items: center; }
+.ca-volume input[type="range"] {
+  width: 0; opacity: 0; transition: width 0.18s ease, opacity 0.18s ease;
+  accent-color: var(--accent, #FFB347);
+}
+.ca-volume:hover input[type="range"],
+.ca-volume:focus-within input[type="range"] { width: 74px; opacity: 1; }
+.ca-select {
+  background: rgba(7, 8, 13, 0.55); color: #fff; border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 9px; min-height: 34px; padding: 0 0.4rem; font: inherit; font-size: 0.76rem;
+}
+.ca-select option { background: #0e111a; color: #f3f5fa; }
+
+.ca-loading {
+  position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(4, 5, 9, 0.45); z-index: 5;
+}
+.ca-player.loading .ca-loading { display: flex; }
+.ca-spinner {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--accent, #FFB347);
+  animation: caSpin 0.8s linear infinite;
+}
+@keyframes caSpin { to { transform: rotate(360deg); } }
+
+.ca-error {
+  position: absolute; inset: auto 12px 74px 12px; z-index: 6; display: none;
+  gap: 0.6rem; align-items: center; flex-wrap: wrap;
+  background: rgba(7, 8, 13, 0.94); border: 1px solid rgba(248, 113, 113, 0.55);
+  color: #fecaca; border-radius: 12px; padding: 0.7rem 0.85rem; font-size: 0.84rem;
+}
+.ca-player.failed .ca-error { display: flex; }
+.ca-error .ca-btn { color: #fff; border: 1px solid rgba(255, 255, 255, 0.35); min-height: 36px; }
+
+@media (max-width: 600px) {
+  .ca-time { font-size: 0.7rem; padding: 0 0.2rem; }
+  .ca-volume input[type="range"] { display: none; }   /* phones use hardware volume */
+  .ca-btn { min-width: 40px; padding: 0 0.28rem; }
+  .ca-error { inset: auto 8px 66px 8px; }
+  .ca-big-play { width: 58px; height: 58px; }
+}
+
+.ca-player:fullscreen, .ca-player:-webkit-full-screen {
+  width: 100vw; height: 100vh; border-radius: 0;
+  padding: var(--ca-safe-top) var(--ca-safe-right) var(--ca-safe-bottom) var(--ca-safe-left);
+}
+.ca-player:fullscreen video, .ca-player:-webkit-full-screen video { height: 100vh; }
+.ca-player:fullscreen .ca-controls { padding-bottom: max(0.6rem, var(--ca-safe-bottom)); }
+
+/* ── 7. Dialogs, drawers, menus fit a 320px screen ─────────────────────── */
+[role="dialog"], .modal, .drawer, .sheet, .search-panel {
+  max-width: min(100vw - 1rem, 640px);
+  max-height: min(100dvh - 1.5rem, 90vh);
+  overflow-y: auto;
+}
+.live-schedule-drawer { max-width: calc(100vw - 1rem); }
+
+/* ── 8. Motion and accessibility ─────────────────────────────────────────
+   Everything above degrades to a static, still-readable layout. */
+@media (prefers-reduced-motion: reduce) {
+  .ca-shade, .ca-controls, .ca-btn, .ca-spinner { transition: none; animation: none; }
+  .ca-player.idle .ca-controls { opacity: 1; transform: none; pointer-events: auto; }
+  * { scroll-behavior: auto !important; }
+}
+
+a:focus-visible, button:focus-visible, select:focus-visible,
+input:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent, #FFB347);
+  outline-offset: 2px;
+}
+
+/* ── 9. Landscape phones ──────────────────────────────────────────────── */
+@media (max-height: 480px) and (orientation: landscape) {
+  header { position: static; }           /* don't steal 56px of a 360px screen */
+  .video-stage { max-height: 78vh; }
+  .hero { min-height: 0; }
+}
