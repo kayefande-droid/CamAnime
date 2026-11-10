@@ -2,15 +2,15 @@
    elevation; these are the few surfaces this layer adds on top so no rule below
    carries a literal colour of its own. */
 :root {
-  --ca-ink-900: var(--ca-ink-900);
-  --ca-scrim: var(--ca-scrim);
-  --ca-scrim-strong: var(--ca-scrim-strong);
-  --ca-sheen: var(--ca-sheen);
-  --ca-hair-soft: var(--ca-hair-soft);
-  --ca-hair: var(--ca-hair);
-  --ca-hair-mid: var(--ca-hair-mid);
-  --ca-hair-strong: var(--ca-hair-strong);
-  --ca-wash: var(--ca-wash);
+  --ca-ink-900: #0b0c12;
+  --ca-scrim: rgba(4, 5, 9, .6);
+  --ca-scrim-strong: rgba(4, 5, 9, .85);
+  --ca-sheen: rgba(255, 255, 255, .04);
+  --ca-hair-soft: rgba(255, 255, 255, .04);
+  --ca-hair: rgba(255, 255, 255, .06);
+  --ca-hair-mid: rgba(255, 255, 255, .1);
+  --ca-hair-strong: rgba(255, 255, 255, .14);
+  --ca-wash: rgba(255, 255, 255, .08);
   --ca-radius-panel: 22px;
   --ca-shade-1: rgba(5, 6, 11, .86);
   --ca-shade-2: rgba(5, 6, 11, .18);
@@ -469,8 +469,9 @@ body.page-apps .search-form > button,
 body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
 
 /* The schedule tab parks at 42% of the viewport, which on these pages lands on
-   the headline. It moves to the corner here rather than everywhere. */
+   the headline. It moves to the lower-left corner on every desktop page. */
 @media (min-width: 901px) {
+  html body .live-schedule-tab,
   html body.page-apps .live-schedule-tab,
   html body.page-dev .live-schedule-tab {
     top: auto !important;
@@ -478,6 +479,18 @@ body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
     left: .75rem !important;
   }
 }
+
+/* ── 13. Desktop detail pages: keep actions and numbers inside their boxes ──
+   The release-reminder button wrapped onto its own row, the episode numbers
+   were clipped at the top edge of their buttons, and the watch heading broke
+   across two lines mid-phrase. */
+@media (min-width: 901px) {
+  body .release-follow-toggle { white-space: nowrap; }
+}
+
+body .ep-rail-item { line-height: 1.2; padding-block: .55rem; overflow: visible; }
+
+body .sidebar-title { text-wrap: balance; }
 
 /* Phones: the brand mark and the search field share a narrow row. */
 @media (max-width: 700px) {
