@@ -450,8 +450,8 @@ body .dev-content { min-width: 0; }
    mark had no size of its own here and rendered at its intrinsic width, pushing
    the search field out of the row. Scoped by body class so the pages that
    already size it keep their own numbers. */
-body.page-apps .site-logo img,
-body.page-dev .site-logo img { width: clamp(138px, 12vw, 176px); height: auto; }
+body.page-apps header .header-inner .site-logo img,
+body.page-dev header .header-inner .site-logo img { width: clamp(138px, 12vw, 176px); height: auto; }
 
 body.page-apps .header-inner,
 body.page-dev .header-inner { flex-wrap: nowrap; }
@@ -460,10 +460,13 @@ body.page-apps .header-actions,
 body.page-dev .header-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
 
 body.page-apps .search-form,
-body.page-dev .search-form { flex: 1 1 16rem; min-width: 0; max-width: 26rem; }
+body.page-dev .search-form { flex: 1 1 16rem; min-width: 0; max-width: min(520px, 44vw); flex-wrap: nowrap; }
 
 body.page-apps .search-input,
 body.page-dev .search-input { width: 100%; min-width: 0; }
+
+body.page-apps .search-form > button,
+body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
 
 /* The schedule tab parks at 42% of the viewport, which on these pages lands on
    the headline. It moves to the corner here rather than everywhere. */
@@ -478,8 +481,8 @@ body.page-dev .search-input { width: 100%; min-width: 0; }
 
 /* Phones: the brand mark and the search field share a narrow row. */
 @media (max-width: 700px) {
-  body.page-apps .site-logo img,
-  body.page-dev .site-logo img { width: clamp(120px, 34vw, 150px); }
+  body.page-apps header .header-inner .site-logo img,
+  body.page-dev header .header-inner .site-logo img { width: clamp(120px, 34vw, 150px); }
   body.page-apps .search-form,
   body.page-dev .search-form { flex: 1 1 100%; max-width: none; }
 }
