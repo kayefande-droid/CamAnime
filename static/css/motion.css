@@ -1,0 +1,120 @@
+/* CamAnime — motion layer. Loaded after redesign.css.
+   One timing scale for the whole site so nothing moves on its own private
+   clock: every duration and easing below comes from these four tokens.
+   Reveals are opt-in classes added by motion.js, so with JavaScript off (or
+   blocked) nothing is hidden — the page renders exactly as before. */
+
+:root {
+  --ca-ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ca-ease-soft: cubic-bezier(.4, 0, .2, 1);
+  --ca-dur-quick: 180ms;
+  --ca-dur-base: 320ms;
+  --ca-dur-slow: 560ms;
+  --ca-step: 55ms;          /* stagger between siblings */
+  --ca-rise: 14px;          /* travel distance for a reveal */
+}
+
+/* ── 1. Scroll reveal ────────────────────────────────────────────────────── */
+.ca-reveal {
+  opacity: 0;
+  transform: translate3d(0, var(--ca-rise), 0);
+  transition:
+    opacity var(--ca-dur-slow) var(--ca-ease-out),
+    transform var(--ca-dur-slow) var(--ca-ease-out);
+  transition-delay: calc(var(--ca-step) * var(--i, 0));
+  will-change: opacity, transform;
+}
+
+.ca-reveal.ca-in {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+
+/* ── 2. Hero: slow cinematic drift, restarted for each slide ─────────────── */
+@keyframes ca-drift {
+  from { transform: scale(1.01); }
+  to   { transform: scale(1.07); }
+}
+
+@keyframes ca-fade-up {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+body .hero-slide.active .hero-backdrop {
+  animation: ca-drift 14s var(--ca-ease-soft) both;
+  transform-origin: 50% 30%;
+}
+
+/* Kicker, title and copy arrive in sequence rather than all at once. */
+body .hero-slide.active .hero-kicker,
+body .hero-slide.active .hero-title,
+body .hero-slide.active .hero-meta-row,
+body .hero-slide.active .hero-desc,
+body .hero-slide.active .hero-ctas {
+  animation: ca-fade-up var(--ca-dur-slow) var(--ca-ease-out) both;
+}
+
+body .hero-slide.active .hero-kicker   { animation-delay: 40ms; }
+body .hero-slide.active .hero-title    { animation-delay: 110ms; }
+body .hero-slide.active .hero-meta-row { animation-delay: 170ms; }
+body .hero-slide.active .hero-desc     { animation-delay: 220ms; }
+body .hero-slide.active .hero-ctas     { animation-delay: 280ms; }
+
+/* The active dot's bar slides rather than jumps. */
+body .hero-dot { transition: width var(--ca-dur-base) var(--ca-ease-out), background-color var(--ca-dur-base) var(--ca-ease-soft); }
+
+/* ── 3. Primary action: one sheen sweep, on hover only ───────────────────── */
+body .btn-primary { position: relative; overflow: hidden; }
+
+body .btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, .42) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform var(--ca-dur-slow) var(--ca-ease-out);
+  pointer-events: none;
+}
+
+body .btn-primary:hover::after,
+body .btn-primary:focus-visible::after { transform: translateX(120%); }
+
+/* ── 4. Accent markers breathe together ──────────────────────────────────── */
+@keyframes ca-marker {
+  0%, 100% { opacity: .85; box-shadow: 0 0 12px rgba(var(--accent-rgb, 255, 179, 71), .28); }
+  50%      { opacity: 1;   box-shadow: 0 0 22px rgba(var(--accent-rgb, 255, 179, 71), .52); }
+}
+
+body .section-accent-bar { animation: ca-marker 4.5s var(--ca-ease-soft) infinite; }
+
+/* ── 5. Player: transport and progress respond on the same clock ─────────── */
+body .ca-btn { transition: transform var(--ca-dur-quick) var(--ca-ease-out), filter var(--ca-dur-quick) var(--ca-ease-out), background-color var(--ca-dur-quick) var(--ca-ease-soft); }
+body .ca-btn:hover { transform: translateY(-1px); }
+body .ca-btn:active { transform: translateY(0); filter: brightness(.94); }
+body .ca-progress::-webkit-slider-thumb { transition: transform var(--ca-dur-quick) var(--ca-ease-out), box-shadow var(--ca-dur-quick) var(--ca-ease-soft); }
+body .ca-progress:hover::-webkit-slider-thumb { transform: scale(1.18); box-shadow: 0 0 0 6px rgba(var(--accent-rgb, 255, 179, 71), .16); }
+
+/* ── 6. Theme switching stays calm ───────────────────────────────────────── */
+body, header, body .anime-card, body .panel-box {
+  transition: background-color var(--ca-dur-base) var(--ca-ease-soft),
+              border-color var(--ca-dur-base) var(--ca-ease-soft),
+              color var(--ca-dur-base) var(--ca-ease-soft);
+}
+
+/* ── 7. Opt out ──────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .ca-reveal, .ca-reveal.ca-in { opacity: 1; transform: none; transition: none; }
+  body .hero-slide.active .hero-backdrop,
+  body .hero-slide.active .hero-kicker,
+  body .hero-slide.active .hero-title,
+  body .hero-slide.active .hero-meta-row,
+  body .hero-slide.active .hero-desc,
+  body .hero-slide.active .hero-ctas,
+  body .section-accent-bar { animation: none; }
+  body .btn-primary::after { display: none; }
+  body .ca-btn:hover, body .ca-progress:hover::-webkit-slider-thumb { transform: none; }
+}
+
+html[data-motion="reduced"] .ca-reveal { opacity: 1; transform: none; }

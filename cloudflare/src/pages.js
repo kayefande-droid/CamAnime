@@ -34,7 +34,9 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/sync.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/redesign.css?v=20261111-v2">
+<link href="/static/css/motion.css?v=20261111-motion" rel="stylesheet">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
+<script src="/static/js/motion.js?v=20261111-motion" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
 </head><body>`;
