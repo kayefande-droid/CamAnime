@@ -1,366 +1,245 @@
-/* CamAnime — visual pass 2.
-   Loaded LAST on every page, after base.css and sync.css, so it may restyle
-   anything the two earlier layers build. It only ever adds to existing class
-   names — nothing here renames a hook, so templates, site.js and the Android
-   WebView keep working. Every colour comes from the theme tokens, so all eight
-   themes still recolour the whole page. */
+/* CamAnime — design pass 3 (structural).
+   Loaded last, after base.css, sync.css and header-layout.css. This pass moves
+   layouts rather than only recolouring them: a full-bleed cinematic hero, a
+   capsule header, a magazine catalogue grid with a feature tile, a sticky
+   episode rail and a taller details dossier.
 
-/* ── 1. Canvas ─────────────────────────────────────────────────────────────
-   A deeper base with two slow aurora pools and a whisper of grain. The grain
-   is a repeating gradient rather than an image so it costs no request. */
-body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(70rem 34rem at 8% -12%, rgba(var(--accent-rgb, 255, 179, 71), .10), transparent 58%),
-    radial-gradient(58rem 30rem at 96% -4%, rgba(var(--accent-crimson-rgb, 255, 94, 98), .07), transparent 60%),
-    radial-gradient(46rem 46rem at 50% 118%, rgba(8, 123, 255, .05), transparent 68%);
-  background-attachment: fixed;
-  background-repeat: no-repeat;
-  letter-spacing: .002em;
+   Ground rules kept from the earlier passes:
+   - no class is renamed, so templates, site.js and the Android WebView work;
+   - every colour is a theme token, so all eight themes recolour the page;
+   - nothing here depends on JavaScript. */
+
+/* ── 0. Frame ─────────────────────────────────────────────────────────────── */
+html, body { overflow-x: clip; }
+
+:root {
+  --ca-header-h: 64px;
+  --ca-bleed: clamp(2.6rem, 9vw, 8rem);
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: .16;
-  background-image:
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, .028) 0 1px, transparent 1px 3px);
-  mix-blend-mode: overlay;
+/* ── 1. Header: floating capsule on wide screens ──────────────────────────── */
+@media (min-width: 900px) {
+  body header {
+    background: transparent;
+    border-bottom: 0;
+    box-shadow: none;
+    padding-top: .7rem;
+  }
+
+  body header .header-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: .45rem .55rem .45rem 1rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    border: 1px solid rgba(255, 255, 255, .10);
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    backdrop-filter: blur(18px) saturate(150%);
+    box-shadow: 0 18px 44px -30px rgba(0, 0, 0, .95), inset 0 1px 0 rgba(255, 255, 255, .06);
+  }
 }
 
-/* Keep the page content above that grain layer without changing layout. */
-header, main, footer, .shell, .page-wrap { position: relative; z-index: 1; }
-
-/* ── 2. Type scale ─────────────────────────────────────────────────────────
-   Display type gets tighter and heavier; body copy stays at a comfortable
-   reading size. No label is uppercased or letter-spaced here. */
-h1, h2, h3, .hero-title, .section-title, .card-title, .panel-box-title, .deck-head h1 {
-  font-family: var(--ca-font-display, "Sora", system-ui, sans-serif);
-  letter-spacing: -.018em;
-  line-height: 1.08;
-  text-wrap: balance;
+body .nav-link {
+  padding: .42rem .7rem;
+  border-radius: 999px;
+  transition: color var(--ca-dur-quick, .18s) ease, background-color var(--ca-dur-quick, .18s) ease;
 }
 
-.section-title {
-  font-size: clamp(1.28rem, 1.05rem + .9vw, 1.72rem);
-  font-weight: 800;
-  margin: 0;
-}
-
-.section-head  { gap: .75rem 1rem; align-items: center; }
-.section-title-wrap { gap: .55rem; }
-
-/* The little accent bar becomes a short gradient rule that reads as a marker
-   rather than a bullet. */
-.section-accent-bar {
-  width: 4px;
-  height: 1.45em;
-  border-radius: 99px;
-  background: linear-gradient(180deg, var(--accent), var(--accent-crimson, #FF5E62));
-  box-shadow: 0 0 18px rgba(var(--accent-rgb, 255, 179, 71), .45);
-}
-
-/* ── 3. Header / navigation ──────────────────────────────────────────────── */
-header {
-  background: color-mix(in srgb, var(--header-glass, rgba(7, 8, 13, .86)) 82%, transparent);
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, .08));
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .04), 0 12px 40px -28px rgba(0, 0, 0, .9);
-}
-
-.nav-link {
-  position: relative;
-  padding: .45rem .15rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  transition: color .18s ease;
-}
-
-.nav-link:hover { color: var(--text); }
-
-.nav-link.active { color: var(--text); }
-
-.nav-link.active::after,
-.nav-link:hover::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -.28rem;
-  height: 2px;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-crimson, #FF5E62));
-}
-
-/* ── 4. Buttons ──────────────────────────────────────────────────────────── */
-.btn-primary, .btn-secondary, .backup-link, .ca-btn {
-  min-height: 44px;
-  border-radius: var(--ca-radius-control, 999px);
-  font-weight: 700;
-  letter-spacing: -.005em;
-  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease,
-              border-color .18s ease, background-color .18s ease;
-}
-
-.btn-primary {
-  background-image: linear-gradient(135deg, var(--accent), var(--accent-crimson, #FF5E62));
-  color: var(--accent-ink, #07080d);
-  border: none;
-  box-shadow: 0 10px 26px -12px rgba(var(--accent-rgb, 255, 179, 71), .65),
-              inset 0 1px 0 rgba(255, 255, 255, .38);
-}
-
-.btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
-
-.btn-secondary {
-  background: rgba(255, 255, 255, .05);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, .12));
+body .nav-link:hover { background: rgba(255, 255, 255, .06); }
+body .nav-link.active {
+  background: rgba(var(--accent-rgb, 255, 179, 71), .14);
   color: var(--text);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+}
+body .nav-link.active::after, body .nav-link:hover::after { display: none; }
+
+/* ── 2. Hero: full-bleed, cinematic, bottom-anchored ──────────────────────── */
+body .hero-spotlight,
+body .hero-slide.active {
+  border-radius: 0;
+  border: 0;
+  margin-inline: calc(50% - 50vw);
+  width: 100vw;
+  box-shadow: none;
 }
 
-.btn-secondary:hover {
-  border-color: rgba(var(--accent-rgb, 255, 179, 71), .55);
-  transform: translateY(-1px);
+body .hero-spotlight { margin-bottom: 2.4rem; }
+
+body .hero-spotlight,
+body .hero-slide.active {
+  min-height: clamp(460px, 74vh, 780px);
 }
 
-:where(a, button, .ctrl-btn, .ca-btn, .nav-link):focus-visible {
-  outline: none;
-  box-shadow: var(--ca-ring, 0 0 0 3px rgba(var(--accent-rgb, 255, 179, 71), .35));
+body .hero-slide.active { min-height: clamp(460px, 74vh, 780px); }
+
+body .hero-backdrop { object-position: center 22%; }
+
+body .hero-vignette {
+  background:
+    linear-gradient(to top, var(--bg) 1%, rgba(5, 6, 11, .86) 30%, rgba(5, 6, 11, .18) 74%),
+    linear-gradient(95deg, rgba(4, 5, 9, .95) 8%, rgba(4, 5, 9, .58) 46%, transparent 76%);
 }
 
-/* ── 5. Poster grid ──────────────────────────────────────────────────────── */
+body .hero-body {
+  max-width: 860px;
+  padding: clamp(1.4rem, 4vw, 3.6rem) clamp(1.1rem, 5vw, 4.5rem) clamp(2.6rem, 6vw, 5rem);
+}
+
+body .hero-title {
+  font-size: clamp(2.1rem, 1.1rem + 4.6vw, 4.4rem);
+  line-height: 1.02;
+  letter-spacing: -.035em;
+  max-width: 18ch;
+  margin-block: .45rem .85rem;
+}
+
+body .hero-desc {
+  max-width: 54ch;
+  font-size: clamp(.92rem, .88rem + .25vw, 1.05rem);
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body .hero-meta-row { display: flex; flex-wrap: wrap; gap: .45rem; margin-block: .3rem .2rem; }
+
+body .hero-ctas { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.1rem; }
+body .hero-ctas .btn-primary,
+body .hero-ctas .btn-secondary { min-height: 48px; padding-inline: 1.5rem; }
+
+/* Dots ride the bottom-right corner as a capsule, not a centred row. */
+body .hero-dots { left: auto; right: clamp(1rem, 4vw, 3rem); bottom: clamp(1rem, 3vw, 2rem); }
+
+/* ── 3. Catalogue: magazine grid with one feature tile ────────────────────── */
 body .anime-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 154px), 1fr));
-  gap: clamp(.65rem, 1.6vw, 1.15rem);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 158px), 1fr));
+  gap: clamp(.7rem, 1.5vw, 1.15rem);
+  align-items: stretch;
+}
+
+@media (min-width: 900px) {
+  /* The first card of a section becomes a 2x2 feature so the eye lands. */
+  body .section-block > .anime-grid > .anime-card:first-child {
+    grid-column: span 2;
+    grid-row: span 2;
+  }
+
+  body .section-block > .anime-grid > .anime-card:first-child .card-poster-wrap img {
+    aspect-ratio: 2 / 3;
+    height: 100%;
+  }
+
+  body .section-block > .anime-grid > .anime-card:first-child .card-title { font-size: 1.12rem; }
+  body .section-block > .anime-grid > .anime-card:first-child .card-submeta { font-size: .84rem; }
 }
 
 body .anime-card {
-  position: relative;
-  border-radius: 16px;
-  overflow: hidden;
-  background: var(--bg-elevated, #0e111a);
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, .07);
-  box-shadow: 0 12px 26px -20px rgba(0, 0, 0, .9);
-  transition: transform .22s cubic-bezier(.2, .7, .2, 1), box-shadow .22s ease,
-              border-color .22s ease;
-  will-change: transform;
+  background: var(--bg-elevated, #0e111a);
+  overflow: hidden;
 }
 
-body .anime-card:hover,
-body .anime-card:focus-within {
-  transform: translateY(-6px);
-  border-color: rgba(var(--accent-rgb, 255, 179, 71), .5);
-  box-shadow: 0 26px 46px -24px rgba(0, 0, 0, .95),
-              0 0 0 1px rgba(var(--accent-rgb, 255, 179, 71), .18),
-              0 20px 50px -30px rgba(var(--accent-rgb, 255, 179, 71), .55);
-}
+body .card-poster-wrap img { aspect-ratio: 2 / 3; }
 
-body .card-poster-wrap { position: relative; overflow: hidden; }
+body .card-body { padding: .6rem .7rem .75rem; }
 
-body .card-poster-wrap img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 2 / 3;
-  object-fit: cover;
-  transition: transform .5s cubic-bezier(.2, .7, .2, 1), filter .3s ease;
-}
-
-body .anime-card:hover .card-poster-wrap img,
-body .anime-card:focus-within .card-poster-wrap img {
-  transform: scale(1.045);
-  filter: saturate(1.08) brightness(1.03);
-}
-
-/* Scrim so badges stay legible over any artwork. */
-body .card-poster-wrap::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 55%;
-  background: linear-gradient(to top, rgba(4, 5, 9, .92), rgba(4, 5, 9, .35) 45%, transparent);
-  opacity: .85;
-  pointer-events: none;
-}
-
-.card-badges-top { z-index: 2; }
-
-.ep-badge, .score-badge {
-  border-radius: 999px;
-  padding: .18rem .5rem;
-  font-size: .68rem;
+body .card-title {
+  font-size: .9rem;
   font-weight: 700;
-  font-family: var(--ca-font-mono, ui-monospace, monospace);
-  background: rgba(6, 8, 14, .72);
-  border: 1px solid rgba(255, 255, 255, .16);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  color: var(--text);
-}
-
-.score-badge i { color: var(--accent); margin-right: .15rem; }
-
-.card-title {
-  font-size: .93rem;
-  font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.32;
+  letter-spacing: -.01em;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.card-submeta { color: var(--text-muted); font-size: .76rem; }
+body .card-submeta { font-size: .74rem; color: var(--text-muted); margin-top: .2rem; }
 
-/* ── 6. Hero ─────────────────────────────────────────────────────────────── */
-.hero-spotlight, .hero-slide.active {
-  border-radius: 24px;
-  overflow: hidden;
-  min-height: clamp(420px, 58vw, 600px);
-  border: 1px solid rgba(255, 255, 255, .08);
-  box-shadow: 0 40px 90px -50px rgba(0, 0, 0, 1),
-              inset 0 1px 0 rgba(255, 255, 255, .06);
-}
-
-.hero-backdrop img { filter: saturate(1.05) contrast(1.04); }
-
-.hero-vignette {
-  background:
-    linear-gradient(to top, var(--bg) 2%, rgba(6, 7, 12, .86) 32%, rgba(6, 7, 12, .12) 72%),
-    linear-gradient(100deg, rgba(4, 5, 9, .94) 12%, rgba(4, 5, 9, .55) 48%, transparent 78%);
-}
-
-.hero-title {
-  font-size: clamp(2rem, 1.1rem + 4.2vw, 4rem);
-  font-weight: 800;
-  letter-spacing: -.03em;
-  text-shadow: 0 18px 50px rgba(0, 0, 0, .75);
-}
-
-.hero-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: .45rem;
-  font-weight: 700;
-  font-size: .78rem;
-  color: var(--text);
-  padding: .28rem .7rem;
-  border-radius: 999px;
-  background: rgba(var(--accent-rgb, 255, 179, 71), .14);
-  border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), .35);
-}
-
-.hero-desc {
-  color: var(--text-secondary);
-  font-size: clamp(.9rem, .85rem + .2vw, 1.02rem);
-  max-width: 46ch;
-}
-
-.hero-dots {
+/* ── 4. Section headings: editorial rule instead of a coloured bar ────────── */
+body .section-head {
   display: flex;
-  gap: .4rem;
-  padding: .4rem .55rem;
-  border-radius: 999px;
-  background: rgba(5, 6, 11, .55);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, .1);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: .7rem;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  margin-bottom: clamp(.9rem, 1.8vw, 1.4rem);
 }
 
-.hero-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, .32);
-  transition: width .25s ease, background-color .25s ease;
-}
-
-.hero-dot.active {
+body .section-accent-bar {
   width: 22px;
-  background: linear-gradient(90deg, var(--accent), var(--accent-crimson, #FF5E62));
+  height: 3px;
+  border-radius: 999px;
+  align-self: flex-end;
+  margin-bottom: .55rem;
 }
 
-/* ── 7. Section rhythm ───────────────────────────────────────────────────── */
-.section-block { margin-block: clamp(1.6rem, 3.2vw, 2.8rem); }
-.section-head  { margin-bottom: clamp(.85rem, 1.6vw, 1.25rem); }
+body .section-title { font-size: clamp(1.2rem, 1rem + .85vw, 1.6rem); font-weight: 800; }
+body .section-subtitle { display: block; margin-top: .25rem; }
 
-/* ── 8. Panels, forms, tables (details / watch / admin / settings) ───────── */
-body .panel-box {
-  border-radius: 18px;
+/* ── 5. Watch: wider player, sticky episode rail ──────────────────────────── */
+@media (min-width: 1100px) {
+  body .cinema-grid { grid-template-columns: minmax(0, 1fr) 340px; gap: 1.35rem; }
+  body .episode-sidebar {
+    position: sticky;
+    top: calc(var(--ca-header-h) + 18px);
+    max-height: calc(100vh - var(--ca-header-h) - 40px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 16px;
+  }
+  body .video-stage { border-radius: 18px; }
+}
+
+@media (max-width: 1099px) {
+  body .cinema-grid { grid-template-columns: minmax(0, 1fr); }
+  body .episode-sidebar { max-height: none; }
+}
+
+/* ── 6. Details: taller banner, dossier lifts into it ─────────────────────── */
+body .banner-wrap { height: clamp(280px, 42vh, 460px); }
+
+body .container {
+  max-width: 1340px;
+  margin-top: clamp(-200px, -14vw, -150px);
+}
+
+body .dossier-card {
+  grid-template-columns: 286px minmax(0, 1fr);
+  gap: clamp(1.1rem, 2.4vw, 2.2rem);
+  border-radius: 22px;
+  padding: clamp(1rem, 2vw, 1.6rem);
   border: 1px solid rgba(255, 255, 255, .08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012));
-  box-shadow: 0 20px 44px -34px rgba(0, 0, 0, .95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, .012));
+  box-shadow: 0 40px 80px -60px rgba(0, 0, 0, 1);
 }
 
-body .panel-box-title { font-size: 1.02rem; font-weight: 800; }
-
-input, select, textarea {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  background: var(--bg-input, #141926);
-  color: var(--text);
-  min-height: 44px;
-  transition: border-color .18s ease, box-shadow .18s ease;
-}
-
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: rgba(var(--accent-rgb, 255, 179, 71), .7);
-  box-shadow: 0 0 0 3px rgba(var(--accent-rgb, 255, 179, 71), .16);
-}
-
-/* ── 9. Player chrome ────────────────────────────────────────────────────── */
-.server-btn, .server-tag {
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, .12);
-  background: rgba(255, 255, 255, .04);
-  transition: border-color .18s ease, background-color .18s ease, color .18s ease;
-}
-
-.server-btn:hover { border-color: rgba(var(--accent-rgb, 255, 179, 71), .55); }
-
-.server-btn.active {
-  border-color: rgba(var(--accent-rgb, 255, 179, 71), .7);
-  background: rgba(var(--accent-rgb, 255, 179, 71), .16);
-  color: var(--text);
-}
-
-.ca-btn { min-width: 44px; }
-
-.ca-progress { border-radius: 999px; }
-
-/* ── 10. Footer ──────────────────────────────────────────────────────────── */
-footer {
-  border-top: 1px solid rgba(255, 255, 255, .08);
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .35));
-}
-
-/* ── 11. Narrow phones ───────────────────────────────────────────────────── */
-@media (max-width: 480px) {
-  body .anime-grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr));
-    gap: .6rem;
+@media (min-width: 980px) {
+  body .dossier-card > :first-child {
+    position: sticky;
+    top: calc(var(--ca-header-h) + 18px);
+    align-self: start;
   }
-  .hero-spotlight, .hero-slide.active { min-height: clamp(340px, 88vw, 440px); border-radius: 18px; }
-  .hero-vignette {
-    background:
-      linear-gradient(to top, var(--bg) 3%, rgba(6, 7, 12, .9) 42%, rgba(6, 7, 12, .2) 82%);
-  }
-  .hero-title { font-size: clamp(1.6rem, 7.2vw, 2.3rem); }
-  .card-title { font-size: .86rem; }
-  .section-title { font-size: 1.2rem; }
 }
 
-/* ── 12. Motion preferences ──────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  .anime-card,
-  .anime-card:hover,
-  .anime-card:focus-within,
-  .card-poster-wrap img,
-  .btn-primary:hover,
-  .btn-secondary:hover { transform: none; transition: none; }
-  body::before { opacity: .1; }
+@media (max-width: 760px) {
+  body .dossier-card { grid-template-columns: minmax(0, 1fr); }
+  body .banner-wrap { height: 240px; }
+  body .container { margin-top: -110px; padding-inline: .85rem; }
+}
+
+/* ── 7. Phones: tighten the reworked pieces ───────────────────────────────── */
+@media (max-width: 700px) {
+  body .hero-spotlight,
+  body .hero-slide.active { min-height: clamp(400px, 92vw, 520px); }
+  body .hero-title { font-size: clamp(1.75rem, 8vw, 2.4rem); max-width: none; }
+  body .hero-body { padding: 1.2rem 1.1rem 2.4rem; }
+  body .hero-desc { -webkit-line-clamp: 2; }
+  body .hero-dots { right: .9rem; bottom: .9rem; }
+  body .anime-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 138px), 1fr)); }
+  body .card-title { font-size: .84rem; }
+  body .section-head { flex-direction: column; align-items: flex-start; gap: .5rem; }
 }
