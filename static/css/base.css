@@ -16,6 +16,16 @@
   --ca-shadow-card: 0 10px 28px rgba(0, 0, 0, .34);
   --ca-shadow-lift: 0 18px 42px rgba(var(--accent-rgb, 255, 179, 71), .16);
   --ca-ring: 0 0 0 3px rgba(var(--accent-rgb, 255, 179, 71), .35);
+  --ca-header-glass: rgba(7, 8, 13, .86);
+  --ca-border-subtle: rgba(255, 255, 255, .08);
+  --ca-input-bg: #181e2e;
+  --ca-canvas-ink: #07080d;
+  --ca-focus-ring-color: #12CDE8;
+  --ca-hover-wash: rgba(255, 255, 255, .06);
+  --ca-live-border: rgba(16, 185, 129, .35);
+  --ca-live-bg: rgba(16, 185, 129, .1);
+  --ca-live-bg-hover: rgba(16, 185, 129, .2);
+  --ca-live-ink: #34d399;
 }
 
 *,
