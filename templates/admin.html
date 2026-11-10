@@ -8,7 +8,7 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-:root{--bg:var(--bg-canvas, #07080d);--panel:var(--bg-elevated, #0e111a);--panel2:var(--bg-surface, #141926);--line:rgba(255,255,255,.1);--accent:var(--accent, #FFB347);--crimson:var(--accent-crimson, #FF5E62);--emerald:#10B981;--blue:#087BFF;--text:var(--text-primary, #f3f5fa);--text2:var(--text-secondary, #a0abc0);--muted:var(--text-muted, #64708a)}
+:root{--bg:var(--bg-canvas, #07080d);--panel:var(--bg-elevated, #0e111a);--panel2:var(--bg-surface, #141926);--line:rgba(255,255,255,.1);--crimson:var(--accent-crimson, #FF5E62);--emerald:#10B981;--blue:#087BFF;--text:var(--text-primary, #f3f5fa);--text2:var(--text-secondary, #a0abc0);--muted:var(--text-muted, #64708a)}
 body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;min-height:100vh;
   background-image:radial-gradient(circle at 12% 0%,rgba(var(--accent-rgb,255,179,71),.09),transparent 42%),radial-gradient(circle at 88% 8%,rgba(8,123,255,.07),transparent 40%)}
 a{color:var(--accent)}
@@ -35,7 +35,7 @@ td,th{padding:.6rem .8rem;border-bottom:1px solid rgba(255,255,255,.07);text-ali
 tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
 /* ── tool cards (recommended admin tools) ── */
 .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:.9rem}
-.tool-card{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.45rem;text-decoration:none;color:var(--text);transition:all .18s}
+.tool-card{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.45rem;text-decoration:none;color:var(--text);transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease}
 .tool-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.5)}
 .tool-card i{font-size:1.3rem;color:var(--accent)}
 .tool-card b{font-family:'Syne';font-size:.98rem}
@@ -66,7 +66,20 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
   .grid,.tool-grid,.live-grid{grid-template-columns:1fr}
   .panel{padding:.9rem}
   table{white-space:nowrap}
-  .btn{min-height:40px}
+  .btn{min-height:44px}
+}
+@media(max-width:414px){
+  .shell{padding:1rem .75rem 2.5rem}
+  .deck-head{padding:1rem;border-radius:16px}
+  .deck-head h1{font-size:1.25rem}
+  .backup-link{width:100%;justify-content:center;min-height:44px}
+  .panel{padding:.85rem;border-radius:14px}
+  .panel h2{font-size:1.02rem}
+  .form{max-width:none}
+  .form input,.form select,.form textarea,.btn{width:100%;min-height:44px}
+  .form .row>*{flex:1 1 100%}
+  .stat b{font-size:1.3rem}
+  td,th{padding:.5rem .6rem;font-size:.8rem}
 }
 </style>
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
