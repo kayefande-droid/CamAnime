@@ -78,3 +78,13 @@
   header .header-inner:has(.brand-group) .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
   header .header-inner:has(.brand-group) .btn-watchlist-Trigger { flex: 0 0 auto; }
 }
+
+/* Narrow phones: the action row inside the header must wrap instead of pushing
+   its last button past the right edge. Pages without .brand-group (the watch
+   page, for one) never matched the rules above, so this applies to all headers. */
+@media (max-width: 480px) {
+  header .header-inner { flex-wrap: wrap; gap: .5rem; }
+  header .header-inner > div { flex-wrap: wrap; min-width: 0; }
+  header .header-inner .ctrl-btn { padding: .4rem .58rem; font-size: .74rem; flex: 0 1 auto; }
+  header .header-inner .search-form { flex: 1 1 100%; min-width: 0; }
+}

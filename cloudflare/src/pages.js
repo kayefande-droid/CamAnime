@@ -30,8 +30,9 @@ function head(title, desc) {
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/base.css?v=20261110-ui">
-<link rel="stylesheet" href="/static/css/sync.css?v=20261110-ui">
+<link rel="stylesheet" href="/static/css/base.css?v=20261111-tokens">
+<link rel="stylesheet" href="/static/css/sync.css?v=20261111-tokens">
+<link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
