@@ -54,7 +54,9 @@ if (onlyRender.length) console.log(`  only on render: ${onlyRender.join(" ")}`);
 if (onlyMirror.length) console.log(`  only on mirror: ${onlyMirror.join(" ")}`);
 if (onlyRender.length || onlyMirror.length) failures++;
 
-const paths = [...new Set([...renderLinks, ...mirrorLinks])];
+const paths = process.env.CHECK_PATHS
+  ? process.env.CHECK_PATHS.split(",")
+  : [...new Set([...renderLinks, ...mirrorLinks])];
 
 for (const [host, base] of Object.entries(HOSTS)) {
   for (const path of paths) {
@@ -70,6 +72,15 @@ for (const [host, base] of Object.entries(HOSTS)) {
         await new Promise((r) => setTimeout(r, 350));
         const report = await page.evaluate(() => {
           const limit = document.documentElement.clientWidth;
+          const intentionallyOffCanvas = (el) => el.classList.contains("skip-link");
+          const clipped = (el) => {
+            // content that a clip ancestor already cuts off cannot move the page
+            for (let p = el.parentElement; p; p = p.parentElement) {
+              const ov = getComputedStyle(p).overflowX;
+              if (ov === "clip" || ov === "hidden") return true;
+            }
+            return false;
+          };
           const inScroller = (el) => {
             for (let p = el.parentElement; p; p = p.parentElement) {
               const s = getComputedStyle(p);
@@ -84,7 +95,7 @@ for (const [host, base] of Object.entries(HOSTS)) {
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) continue;
             if (r.right <= limit + 1 && r.left >= -1) continue;
-            if (inScroller(el)) continue;
+            if (intentionallyOffCanvas(el) || inScroller(el) || clipped(el)) continue;
             offenders.push({
               tag: el.tagName.toLowerCase(),
               cls: (el.className || "").toString().slice(0, 50),
