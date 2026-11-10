@@ -1058,19 +1058,27 @@
         videoEl.addEventListener('timeupdate', () => saveResumePoint(false));
         videoEl.addEventListener('pause', () => saveResumePoint(true));
         window.addEventListener('pagehide', () => saveResumePoint(true));
+        let resumeTarget = 0;
+        try { resumeTarget = parseFloat(localStorage.getItem(resumeKey) || '0') || 0; } catch (e) { resumeTarget = 0; }
         function applyResumePoint() {
-            if (resumeApplied) return;
-            resumeApplied = true;
+            if (resumeApplied || !(resumeTarget > 5)) return;
+            const d = videoEl.duration || 0;
+            if (d && resumeTarget > d - 10) return;          // the ending is not a resume point
+            if (videoEl.currentTime > 3) { resumeApplied = true; return; }  // the viewer already moved
             try {
-                const saved = parseFloat(localStorage.getItem(resumeKey) || '0');
-                const d = videoEl.duration || 0;
-                if (saved > 5 && (!d || saved < d - 10)) videoEl.currentTime = saved;
-            } catch (e) {}
+                videoEl.currentTime = resumeTarget;
+            } catch (e) {
+                return;
+            }
+            resumeApplied = true;
         }
-        // The <video> preloads metadata, so `loadedmetadata` can fire before this
-        // handler is attached. Apply straight away when metadata is already there.
+        // Server fallback reassigns `src`, which zeroes the position, and metadata
+        // can arrive before this code runs. Re-apply across the early lifecycle
+        // events until the position actually sticks; the guard above stops it from
+        // ever fighting a viewer who has already seeked.
+        ['loadedmetadata', 'loadeddata', 'canplay', 'playing', 'durationchange']
+            .forEach((evt) => videoEl.addEventListener(evt, applyResumePoint));
         if (videoEl.readyState >= 1) applyResumePoint();
-        else videoEl.addEventListener('loadedmetadata', applyResumePoint, { once: true });
 
         let syncedProgress = false;
         const syncProgress = () => {
