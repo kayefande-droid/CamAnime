@@ -33,6 +33,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261111-v2">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
