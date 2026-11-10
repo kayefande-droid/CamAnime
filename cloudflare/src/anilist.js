@@ -20,7 +20,7 @@ const ENDPOINT = "https://graphql.anilist.co";
 /** body -> Promise<payload> for requests currently in flight. */
 const inFlight = new Map();
 
-function store() {
+export function store() {
   return typeof caches !== "undefined" && caches.default ? caches.default : null;
 }
 

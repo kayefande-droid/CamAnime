@@ -33,7 +33,20 @@ export default {
       const assetUrl = new URL(request.url);
       assetUrl.pathname = path.slice("/static".length) || "/";
       try {
-        return await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+        const asset = await env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+        // The asset bundle ships max-age=0, must-revalidate, so every page load
+        // revalidated all six stylesheets and scripts. Templates pin versions
+        // with ?v=, so a pinned URL can be cached for a year; anything without
+        // a pin still gets a week instead of a round trip per navigation.
+        if (asset.status === 304) return asset;
+        const headers = new Headers(asset.headers);
+        headers.set(
+          "Cache-Control",
+          url.searchParams.has("v")
+            ? "public, max-age=31536000, immutable"
+            : "public, max-age=604800"
+        );
+        return new Response(asset.body, { status: asset.status, headers });
       } catch {
         return new Response(null, { status: 404 });
       }
@@ -308,6 +321,38 @@ async function apiRoutes(request, env, url, path) {
   return json({ error: "Unknown API route" }, 404);
 }
 
+const store = (() => {
+  try {
+    return caches && caches.default ? caches.default : null;
+  } catch {
+    return null;
+  }
+})();
+
+async function pageCacheGet(request) {
+  const cookie = request.headers.get("cookie") || "";
+  if (!store || cookie) return null;
+  try {
+    return await store.match(new Request(request.url, { method: "GET" }));
+  } catch {
+    return null;
+  }
+}
+
+async function pageCachePut(request, response) {
+  const cookie = request.headers.get("cookie") || "";
+  if (!store || cookie || response.status !== 200) return response;
+  try {
+    const headers = new Headers(response.headers);
+    headers.set("Cache-Control", "public, max-age=30, stale-while-revalidate=120");
+    await store.put(new Request(request.url, { method: "GET" }),
+      new Response(response.clone().body, { status: 200, headers }));
+  } catch {
+    // A failed write must never cost the visitor their page.
+  }
+  return response;
+}
+
 async function pageRoutes(request, env, ctx, path) {
   ctx.waitUntil(api.bumpVisit(env).catch(() => {}));
 
@@ -315,8 +360,10 @@ async function pageRoutes(request, env, ctx, path) {
   const url = new URL(request.url);
 
   if (path === "/") {
+    const cached = await pageCacheGet(request);
+    if (cached) return cached;
     const grids = await homeGrids();
-    return html(homePage(grids, user?.name));
+    return pageCachePut(request, html(homePage(grids, user?.name)));
   }
 
   if (path === "/search" || path === "/browse") {
@@ -328,10 +375,12 @@ async function pageRoutes(request, env, ctx, path) {
   const [p0, p1, p2] = segments(path);
 
   if (p0 === "anime" && p1 && !p2) {
+    const cached = await pageCacheGet(request);
+    if (cached) return cached;
     const anime = await details(p1);
     if (!anime) throw new Error("anime not found");
     const summary = await (await api.ratingSummary(env, request, p1)).json();
-    return html(detailsPage(anime, summary, user));
+    return pageCachePut(request, html(detailsPage(anime, summary, user)));
   }
 
   if (p0 === "watch" && p1 && p2) {
