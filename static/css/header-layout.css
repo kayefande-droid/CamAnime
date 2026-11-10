@@ -1,0 +1,80 @@
+/* ── Shared header layout ────────────────────────────────────────────────
+   The home shell used to put the logo, every navigation link, the search
+   field and the watchlist button on one fixed line, so the links were
+   squeezed between the logo and the search box and the bar read as a single
+   cramped strip. A 1280px rule made it worse by folding the links into the
+   menu button, so on a large screen the menu was hidden behind a hamburger.
+
+   Here the bar becomes two rows on wide screens:
+     row 1 — logo, then search + watchlist pushed to the right
+     row 2 — the navigation links, on their own line above the hero slide
+
+   This file is loaded after each page's inline <style>, so it wins without
+   needing !important everywhere. Only shells with a .brand-group (the home
+   header) opt in; the details and player headers keep their own bars.
+   ──────────────────────────────────────────────────────────────────────── */
+
+@media (min-width: 1024px) {
+  header .header-inner:has(.brand-group) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "logo actions"
+      "nav  nav";
+    align-items: center;
+    column-gap: 1.25rem;
+    row-gap: .45rem;
+    padding-block: .6rem .5rem;
+  }
+
+  /* Let the logo and the link row be placed as separate grid items. */
+  header .header-inner:has(.brand-group) .brand-group { display: contents; }
+  header .header-inner:has(.brand-group) .site-logo { grid-area: logo; }
+
+  header .header-inner:has(.brand-group) .nav-links {
+    grid-area: nav;
+    display: flex !important;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: .2rem;
+    overflow-x: auto;
+    padding-top: .55rem;
+    border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, .08));
+    scrollbar-width: none;
+  }
+
+  header .header-inner:has(.brand-group) .nav-links::-webkit-scrollbar { display: none; }
+
+  header .header-inner:has(.brand-group) .header-actions {
+    grid-area: actions;
+    width: 100%;
+    justify-content: flex-end;
+    gap: .75rem;
+  }
+
+  header .header-inner:has(.brand-group) .search-form {
+    flex: 1 1 auto;
+    max-width: min(520px, 44vw);
+    min-width: 200px;
+    margin-left: auto;
+  }
+
+  /* The links are visible again, so no panel or menu button on this shell. */
+  header .header-inner:has(.brand-group) .nav-toggle { display: none !important; }
+  header .header-inner:has(.brand-group) + .mobile-nav { display: none !important; }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  header .header-inner:has(.brand-group) { flex-wrap: wrap; gap: .6rem; }
+  header .header-inner:has(.brand-group) .brand-group { flex: 1 1 auto; min-width: 0; }
+  header .header-inner:has(.brand-group) .header-actions { flex: 1 1 100%; gap: .6rem; }
+  header .header-inner:has(.brand-group) .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
+}
+
+@media (max-width: 767px) {
+  header .header-inner:has(.brand-group) { flex-wrap: wrap; gap: .55rem; }
+  header .header-inner:has(.brand-group) .brand-group { flex: 1 1 auto; min-width: 0; }
+  header .header-inner:has(.brand-group) .header-actions { flex: 1 1 100%; gap: .5rem; }
+  header .header-inner:has(.brand-group) .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
+  header .header-inner:has(.brand-group) .btn-watchlist-Trigger { flex: 0 0 auto; }
+}
