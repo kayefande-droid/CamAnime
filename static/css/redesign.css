@@ -250,3 +250,18 @@ body .dossier-card {
   body .card-title { font-size: .84rem; }
   body .section-head { flex-direction: column; align-items: flex-start; gap: .5rem; }
 }
+
+/* ── 8. Keep the live-schedule tab off the hero copy on small screens ─────── */
+@media (max-width: 900px) {
+  .live-schedule-tab {
+    top: auto;
+    bottom: calc(.85rem + env(safe-area-inset-bottom));
+    left: .55rem;
+    min-height: 2.6rem;
+    padding: .45rem .6rem;
+    border-radius: 999px;
+    font-size: .68rem;
+  }
+
+  body .hero-body { padding-bottom: 4.6rem; }
+}
