@@ -37,3 +37,6 @@ cloudflare/.dev.vars
 /downloads/
 ffmpeg-bin
 render_env.json
+
+# local design/QA scratch output
+.judgment/
