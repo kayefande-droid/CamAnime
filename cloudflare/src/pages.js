@@ -34,10 +34,10 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/sync.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/redesign.css?v=20261111-v11">
-<link href="/static/css/motion.css?v=20261111-motion" rel="stylesheet">
+<link href="/static/css/motion.css?v=20261111-motion2" rel="stylesheet">
 <script src="/static/js/site.js?v=20261106-flow" defer></script>
-<script src="/static/js/motion.js?v=20261111-motion" defer></script>
-<script src="/static/js/release-schedule.js?v=20261019-tabprefs" defer></script><script src="/static/js/motion.js?v=20261111-motion" defer></script>
+<script src="/static/js/motion.js?v=20261111-motion2" defer></script>
+<script src="/static/js/release-schedule.js?v=20261019-tabprefs" defer></script><script src="/static/js/motion.js?v=20261111-motion2" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
 </head><body>`;

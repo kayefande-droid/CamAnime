@@ -118,3 +118,33 @@ body, header, body .anime-card, body .panel-box {
 }
 
 html[data-motion="reduced"] .ca-reveal { opacity: 1; transform: none; }
+
+/* ── 8. Page continuity ──────────────────────────────────────────────────────
+   Home, details and watch are separate documents, so the browser paints a hard
+   cut between them. The entry half is pure CSS: even with JavaScript blocked the
+   page fades in from the same clock everything else uses. The departure half is
+   opt-in, because only a script may delay a navigation — and it never does so
+   when the visitor asked for reduced motion. */
+@keyframes ca-page-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+body {
+  /* Short on purpose: long enough to read as one continuous place, short enough
+     that it never feels like waiting for a page. */
+  animation: ca-page-in var(--ca-dur-quick) var(--ca-ease-out) both;
+}
+
+html.ca-leaving body {
+  animation: none;
+  opacity: 0;
+  transition: opacity 120ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body { animation: none; }
+  html.ca-leaving body { animation: none; opacity: 1; transition: none; }
+}
+
+html[data-motion="reduced"] body { animation: none; }

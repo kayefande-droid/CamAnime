@@ -60,3 +60,59 @@
     ready();
   }
 })();
+
+/* ── Page continuity ───────────────────────────────────────────────────────────
+   Fades the document out on the way to another page of this site, so home →
+   details → watch reads as one flow. The arrival fade is CSS; this only handles
+   the departure, and only when the visitor has not asked for reduced motion.
+
+   Deliberately conservative: it lets the browser handle anything it might need
+   to (new tabs, downloads, external hosts, modified clicks, in-page anchors), and
+   it never traps a click — the navigation always happens, 120 ms later. */
+(() => {
+  const root = document.documentElement;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  // Coming back through history must never leave the page faded out.
+  window.addEventListener('pageshow', () => root.classList.remove('ca-leaving'));
+  window.addEventListener('hashchange', () => root.classList.remove('ca-leaving'));
+
+  if (reduced.matches) return;
+
+  let leaving = false;
+
+  document.addEventListener('click', (event) => {
+    if (event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const target = event.target instanceof Element ? event.target : null;
+    const link = target && target.closest('a[href]');
+    if (!link) return;
+    if (link.target && link.target !== '_self') return;
+    if (link.hasAttribute('download') || link.hasAttribute('data-no-transition')) return;
+
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('#')) return;
+
+    let url;
+    try {
+      url = new URL(link.href, location.href);
+    } catch {
+      return;
+    }
+    if (url.origin !== location.origin) return;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+    if (url.href === location.href) return;
+
+    // One navigation per gesture, however many times the click bubbles.
+    if (leaving) {
+      event.preventDefault();
+      return;
+    }
+    leaving = true;
+
+    event.preventDefault();
+    root.classList.add('ca-leaving');
+    window.setTimeout(() => { window.location.href = url.href; }, 120);
+  }, true);
+})();
