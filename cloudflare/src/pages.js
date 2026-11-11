@@ -36,7 +36,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261111-tokens">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261111-v20">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261111-v21">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>

@@ -42,7 +42,7 @@ html, body { overflow-x: clip; }
    page text printed through the header. Paint it from the theme's own glass. */
 @media (max-width: 899px) {
   body header {
-    background: var(--header-glass, var(--bg));
+    background: var(--bg, var(--header-glass));
     -webkit-backdrop-filter: blur(14px);
     backdrop-filter: blur(14px);
   }
