@@ -69,6 +69,11 @@ def test_download_page_exposes_copyable_android_url_and_direct_download(api):
     apk = client.head("/get/android")
     assert apk.status_code == 200
     assert "attachment" in apk.headers["Content-Disposition"]
+    policy = api.app_version.DEFAULT_POLICY
+    expected_name = (
+        f"CamAnime-{policy['latest_version']}-build{policy['latest_version_code']}.apk"
+    )
+    assert expected_name in apk.headers["Content-Disposition"]
     apk_path = Path(api.app.static_folder or "static") / "downloads" / "CamAnime.apk"
     assert apk.headers["Content-Length"] == str(apk_path.stat().st_size)
 

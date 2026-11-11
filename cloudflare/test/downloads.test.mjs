@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
+import { APK_FILENAME } from "../src/release.js";
 
 function ctx() {
   return { waitUntil() {}, passThroughOnException() {} };
@@ -28,7 +29,11 @@ test("/get/android serves the APK from this deployment's own assets", async () =
   assert.equal(res.status, 200);
   assert.equal(requestedPath, "/downloads/CamAnime.apk");
   assert.equal(res.headers.get("content-type"), "application/vnd.android.package-archive");
-  assert.match(res.headers.get("content-disposition"), /CamAnime\.apk/);
+  assert.equal(
+    res.headers.get("content-disposition"),
+    `attachment; filename="${APK_FILENAME}"`
+  );
+  assert.match(APK_FILENAME, /^CamAnime-\d+\.\d+\.\d+-build\d+\.apk$/);
 });
 
 test("blocked builds lose streaming and downloads on this host too", async () => {
