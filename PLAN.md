@@ -113,6 +113,19 @@ be rewritten. Every pin change is made in the 13 templates *and*
     *Blocked on:* a working Android toolchain on this machine — a version bump with
     no artifact behind it would hand users a broken download.
 
+## Milestone 7 — security review · done
+19. **Findings closed.** `SECURITY-REVIEW.md` records every scanner result and
+    finding. Four high issues are fixed and verified on both hosts: stored XSS
+    through comment stickers, an owner takeover by password reset from a support
+    login, the mirror sending no security headers at all, and three dependencies
+    with published advisories. The media proxy now refuses every non-global IP.
+    Medium items left open with reasons: CSRF (cookie is `SameSite=Lax`; a token
+    would risk the Android WebView), the media proxy allowlist, and a nonce CSP.
+    semgrep and ZAP could not run here (no Docker, semgrep unsupported on this
+    Windows box) — bandit plus a manual review covered the same ground.
+    *Verify:* `pytest tests` 185 passed, worker `npm test` 75 passed,
+    `pip-audit` clean, `npm audit` clean, gitleaks history triaged.
+
 ## Stage checkpoints
 - Design → happens next; it formalises the tokens and type scale already shipped.
 - Security review → after Milestone 4 (the admin surface is the sensitive part).
