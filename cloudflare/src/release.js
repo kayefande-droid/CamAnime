@@ -24,9 +24,8 @@ export const APK_SHA256 =
   "ebcc8096b4db90ad6bbb609f2f458976a22cae0e71b16a117bd436e2a15b4f1c";
 
 export const RELEASE_NOTES =
-  "Build 25 fixes in-player sub/dub switching so the chosen language sticks "
-  "across episodes, and deletes the device copy in Download/CamAnime when a "
-  "download is removed from the Library.";
+  "Build 26: home redesign, sub/dub switching fix, device-delete on library "
+  "remove, poster persistence, background notifications.";
 
 export const RENDER_ORIGIN = "https://camanime.onrender.com";
 export const WORKER_ORIGIN = "https://camanjme.camanime.workers.dev";
