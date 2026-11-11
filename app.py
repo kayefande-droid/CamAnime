@@ -229,6 +229,24 @@ def _record_activity(kind: str, anime: str = "", ep: str = "", detail: str = "")
 
 
 @app.before_request
+def _canonical_url():
+    """Send a trailing-slash page URL to its canonical form.
+
+    Werkzeug 404s `/download/` when the rule is `/download`, which made a
+    hand-typed or copy-pasted link look like a missing page. The Cloudflare
+    mirror redirects the same way, so both hosts behave identically.
+    """
+    if request.method not in ("GET", "HEAD"):
+        return None
+    path = request.path or "/"
+    if len(path) <= 1 or not path.endswith("/"):
+        return None
+    target = path.rstrip("/") or "/"
+    query = request.query_string.decode("utf-8", "replace")
+    return redirect(f"{target}?{query}" if query else target, code=308)
+
+
+@app.before_request
 def _see_visitor():
     """Cheapest possible online counter: ip -> last seen, no storage growth."""
     try:

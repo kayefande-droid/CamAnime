@@ -1,6 +1,6 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext } from "./catalog.js";
-import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage } from "./pages.js";
+import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage } from "./pages.js";
 import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
@@ -25,6 +25,14 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // One canonical URL per page. A trailing slash used to 404 while the same
+    // page without it worked, which broke links copied by hand or by tools.
+    if (path.length > 1 && path.endsWith("/")) {
+      const target = new URL(request.url);
+      target.pathname = path.replace(/\/+$/, "") || "/";
+      return Response.redirect(target.toString(), 308);
+    }
 
     // Real static assets (same CSS/JS/icons the Render site serves) via the ASSETS binding.
     // The bundle mounts static/ at the asset root, so /static/css/x.css must be
@@ -428,30 +436,18 @@ async function pageRoutes(request, env, ctx, path) {
     const sizeLabel = apkSize
       ? `${(apkSize / (1024 * 1024)).toFixed(1)} MB`
       : "size shown by the main site";
-    const inner = `
-      <h1 class="section-title">Download CamAnime</h1>
-      <div class="discovery-empty" style="display:block">
-        <p style="margin:0"><strong>CamAnime ${LATEST_VERSION} (build ${LATEST_BUILD})</strong> — Android APK, ${sizeLabel}</p>
-        <p style="margin:.75rem 0"><a class="btn-primary" href="/get/android" download>Download CamAnime.apk</a></p>
-        <p class="muted" style="margin:0">Checksum (sha256): <code style="word-break:break-all">${APK_SHA256}</code></p>
-      </div>
-      <p class="muted">${apkSize ? "Served from this deployment's own Cloudflare R2 bucket — no Render involvement." : "This mirror has no copy of its own yet, so the button redirects to the main site."}</p>
-      ${extras.length ? `<h2 class="section-title">Other files</h2><ul>${extras.map((f) => `<li style="margin:.5rem 0"><a href="${f.url}" download>${esc(f.name)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`).join("")}</ul>` : ""}
-      ${user?.role === "admin" ? `
-      <form id="upForm" enctype="multipart/form-data" style="margin-top:1rem">
-        <h2 class="section-title">Admin upload</h2>
-        <input type="file" name="file" required>
-        <button class="btn-primary" type="submit">Upload</button>
-      </form>
-      <script>
-      document.getElementById('upForm').onsubmit = async function (e) {
-        e.preventDefault();
-        var fd = new FormData(this);
-        var res = await fetch('/api/admin/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
-        if (res.ok) location.reload(); else alert((await res.json()).error || 'Upload failed');
-      };
-      </script>` : ""}`;
-    return html(chrome("Downloads", "CamAnime downloads on Cloudflare R2.", user?.name, inner, "download"));
+    return html(
+      downloadPage({
+        userName: user?.name,
+        user,
+        version: LATEST_VERSION,
+        build: LATEST_BUILD,
+        sizeLabel,
+        sha: APK_SHA256,
+        extras,
+        origin: url.origin,
+      }),
+    );
   }
 
   if (path === "/settings") {

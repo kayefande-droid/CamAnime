@@ -28,6 +28,9 @@ function head(title, desc) {
 <meta name="twitter:description" content="${esc(desc)}">
 <meta name="twitter:image" content="__CA_ORIGIN__/static/icon-512.png">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/base.css?v=20261111-tokens">
@@ -43,13 +46,16 @@ ${LAYOUT_GUARD}
 </head><body>`;
 }
 
-export function chrome(title, desc, userName, inner, active = "home") {
+export function chrome(title, desc, userName, inner, active = "home", opts = {}) {
+  const bodyClass = opts.bodyClass ? ` class="${opts.bodyClass}"` : "";
+  const mainClass = opts.mainClass || "main-wrap";
   return `${head(title, desc)}
+<body${bodyClass}>
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header>
   <div class="header-inner">
     <div class="brand-group">
-      <a class="site-logo" href="/">Cam<span style="color:var(--accent, #FFB347)">Anime</span></a>
+      <a class="site-logo" href="/" aria-label="CamAnime — Watch, discover, enjoy"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy"></a>
       <nav class="nav-links">
         <a class="nav-link ${active === "home" ? "active" : ""}" href="/">Home</a>
         <a class="nav-link ${active === "library" ? "active" : ""}" href="/library">My Library</a>
@@ -70,7 +76,7 @@ export function chrome(title, desc, userName, inner, active = "home") {
     ${userName ? `<a href="/settings">Account (${esc(userName)})</a>` : `<a href="/login">Sign in</a>`}
   </nav>
 </header>
-<main class="main-wrap" id="main-content" tabindex="-1">
+<main class="${mainClass}" id="main-content" tabindex="-1">
 ${inner}
 </main>
 <footer style="text-align:center;color:var(--text-muted,#64708a);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">
@@ -497,4 +503,117 @@ export function settingsPage(user) {
     });
     </script>`;
   return chrome("Settings", "CamAnime settings: themes, layouts and account.", user?.name, inner, "settings");
+}
+
+/**
+ * Download page. Same sections, classes and copy as `templates/download.html`
+ * on the Render origin, so the shared stylesheets render both hosts the same
+ * way; only the figures come from this deployment's own R2 bucket.
+ */
+export function downloadPage({ userName, user, version, build, sizeLabel, sha, extras = [], origin }) {
+  const here = String(origin || "").replace(/\/+$/, "");
+  const copyBlock = (id, label, value, ariaLabel) => `
+      <div class="dl-copy">
+        <label for="${id}">${esc(label)}</label>
+        <div class="copy-row"><input id="${id}" type="text" readonly value="${esc(value)}" aria-label="${esc(ariaLabel)}"><button type="button" id="copy-${id}" aria-describedby="copy-${id}-status">Copy link</button></div>
+        <div id="copy-${id}-status" class="copy-status" role="status" aria-live="polite"></div>
+      </div>`;
+
+  const inner = `
+  <section class="dl-hero">
+    <div class="dl-hero-copy">
+      <h1>Download the CamAnime app</h1>
+      <p class="dl-lede">Same account, watchlist and resume points as the website, with downloads that play offline. Files only leave the app when you tap Save to device.</p>
+      <div class="dl-actions">
+        <a class="btn-primary" href="/get/android" download><i class="fas fa-mobile-alt" aria-hidden="true"></i> Install for Android</a>
+        <a class="dl-secondary" href="/get/windows" download><i class="fas fa-laptop" aria-hidden="true"></i> Windows build</a>
+      </div>
+    </div>
+    <dl class="dl-facts">
+      <div><dt>Version</dt><dd>CamAnime ${esc(version)} (build ${esc(build)})</dd></div>
+      <div><dt>Android file</dt><dd>${esc(sizeLabel)}</dd></div>
+      <div><dt>Checksum</dt><dd><code>${esc(sha)}</code></dd></div>
+      <div><dt>Account</dt><dd>One sign-in for the site and the app</dd></div>
+    </dl>
+  </section>
+
+  <section class="dl-platforms" aria-label="Available apps">
+    <article class="dl-platform">
+      <header class="dl-platform-head"><h2>Android</h2><span class="dl-tag">APK</span></header>
+      <p class="dl-platform-note">The app checks for a new release on launch and hands it to Android's installer.</p>
+      <a class="btn-primary" href="/get/android" download>Install App</a>
+      <a class="dl-link" href="/get/android" download>Direct link: CamAnime.apk</a>
+      ${copyBlock("android-download-url", "Copyable download URL", `${here}/get/android`, "Direct CamAnime Android APK URL on this site")}
+      ${copyBlock("render-download-url", "Render-hosted APK URL", "https://camanime.onrender.com/get/android", "CamAnime Android APK URL on the Render site")}
+    </article>
+
+    <article class="dl-platform">
+      <header class="dl-platform-head"><h2>Windows</h2><span class="dl-tag">.NET</span></header>
+      <p class="dl-platform-note">Windows builds ship with every release from the main site.</p>
+      <a class="btn-primary" href="/get/windows" download>Install App</a>
+      <a class="dl-link" href="/get/windows" download>Direct link: CamAnime-Windows.zip</a>
+    </article>
+  </section>
+
+  <section class="dl-build" id="build">
+    <h2>Build it yourself</h2>
+    <ol class="dl-steps">
+      <li><strong>Automatic updates.</strong> The app checks this site on launch, downloads the new release and hands it to Android's installer. Library, downloads and watch history are preserved.</li>
+      <li><strong>Android.</strong> Install Flutter, then <code>cd mobile/camanime_app &amp;&amp; flutter pub get &amp;&amp; flutter build apk --release</code>. The APK lands in <code>build/app/outputs/flutter-apk/app-release.apk</code>.</li>
+      <li><strong>Windows.</strong> Install the .NET 8 SDK, then <code>cd windows/CamAnime.Windows &amp;&amp; dotnet publish -c Release -r win-x64 --self-contained</code>.</li>
+      <li>Point the app at your site URL and sign in with your website account. One shared user database.</li>
+    </ol>
+  </section>
+  ${extras.length ? `
+  <section class="dl-build" aria-label="Other files">
+    <h2>Other files</h2>
+    <ul class="dl-steps">${extras.map((f) => `<li><a href="${esc(f.url)}" download>${esc(f.name)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`).join("")}</ul>
+  </section>` : ""}
+  ${user?.role === "admin" ? `
+  <section class="dl-build" aria-label="Admin upload">
+    <h2>Admin upload</h2>
+    <form id="upForm" enctype="multipart/form-data">
+      <input type="file" name="file" required>
+      <button class="btn-primary" type="submit">Upload</button>
+    </form>
+  </section>
+  <script>
+  document.getElementById('upForm').onsubmit = async function (e) {
+    e.preventDefault();
+    var fd = new FormData(this);
+    var res = await fetch('/api/admin/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+    if (res.ok) location.reload(); else alert((await res.json()).error || 'Upload failed');
+  };
+  </script>` : ""}
+  <script>
+  (() => {
+    ["android-download-url", "render-download-url"].forEach((id) => {
+      const field = document.getElementById(id);
+      const button = document.getElementById("copy-" + id);
+      const status = document.getElementById("copy-" + id + "-status");
+      if (!field || !button || !status) return;
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(field.value);
+          status.textContent = "Download link copied.";
+        } catch (_) {
+          field.focus();
+          field.select();
+          field.setSelectionRange(0, field.value.length);
+          const copied = document.execCommand("copy");
+          status.textContent = copied ? "Download link copied." : "Select and copy the link above.";
+        }
+      });
+    });
+  })();
+  </script>`;
+
+  return chrome(
+    "Download the CamAnime app",
+    "Install the CamAnime Android app, or build it yourself from source.",
+    userName,
+    inner,
+    "download",
+    { bodyClass: "page-apps", mainClass: "main-wrap dl-main" },
+  );
 }
