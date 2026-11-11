@@ -30,9 +30,8 @@ DEFAULT_POLICY = {
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 25 fixes in-player sub/dub switching so the chosen language "
-        "sticks across episodes, and deletes the device copy in Download/ "
-        "CamAnime when a download is removed from the Library."
+        "Build 26: home redesign, sub/dub switching fix, device-delete on "
+        "library remove, poster persistence, background notifications."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "
