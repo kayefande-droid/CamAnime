@@ -1523,8 +1523,12 @@
     })();
 
     if (slides.length > 1) {
-        setInterval(() => {
-            setHeroSlide((currentSlide + 1) % slides.length);
+        // Play through once and stop on the last slide. The Cloudflare mirror's
+        // hero never wraps back round, so the Flask carousel must not either:
+        // wrapping made the same home page feel different depending on host.
+        const heroTimer = setInterval(() => {
+            if (currentSlide >= slides.length - 1) { clearInterval(heroTimer); return; }
+            setHeroSlide(currentSlide + 1);
         }, motionCycle);
     }
 
