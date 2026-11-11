@@ -681,6 +681,14 @@ body .ca-player .ca-poster {
   body.page-watch header .header-inner .breadcrumb-bar a { max-width: none; }
   body.page-watch header .header-inner > div:last-child { flex-wrap: wrap; gap: .4rem; align-items: center; }
   body.page-watch header .header-inner > div:last-child > * { flex: 0 0 auto; }
+  /* The appearance toggle is injected as a sibling of the two header groups,
+     so it stretched to the full column width as a lone grey bar. */
+  body.page-watch header .header-inner > .ca-appearance-toggle {
+    flex: 0 0 auto;
+    align-self: flex-start;
+    width: auto;
+    padding: .2rem .45rem;
+  }
 }
 
 /* Phones: the card action row is always visible on touch, and its two icon
