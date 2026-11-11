@@ -840,7 +840,7 @@ class _LibraryTabState extends State<LibraryTab> {
         title: const Text('Remove download?'),
         content: Text(
             '${task.displayTitle} will be deleted from CamAnime\'s offline library.'
-            '${exported ? '\n\nThe copy on your device (Download/CamAnime) is kept.' : ''}'),
+            '${exported ? '\n\nThe copy in Download/CamAnime on your device is deleted too.' : ''}'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),

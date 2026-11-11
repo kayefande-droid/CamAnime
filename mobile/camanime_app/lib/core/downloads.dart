@@ -798,8 +798,10 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Removes the task and everything it wrote. Completed files are deleted
-  /// too — this is the Library's delete action.
-  Future<void> remove(String id) async {
+  /// too — this is the Library's delete action. The copy exported to the
+  /// device (`Download/CamAnime/...`) is removed as well, so a delete from
+  /// the Library also frees the space on the phone.
+  Future<void> remove(String id, {bool deleteFromDevice = true}) async {
     final task = _tasks.remove(id);
     _pausing.remove(id);
     _clients[id]?.close();
@@ -821,6 +823,11 @@ class DownloadManager extends ChangeNotifier {
       if (local != null && local.endsWith('.mp4')) {
         final file = File(local);
         if (await file.exists()) await file.delete();
+      }
+      if (deleteFromDevice &&
+          (task.devicePath ?? '').isNotEmpty) {
+        await DeviceStorage.deleteExported(task.devicePath!);
+        task.devicePath = null;
       }
     } catch (_) {}
     await _persist();

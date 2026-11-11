@@ -3887,8 +3887,13 @@ class _DetailScreenState extends State<DetailScreen> {
     try {
       final bundle = await Api.episodeSources(widget.animeId, ep, newAudio);
       _applyAudioAvailability(bundle);
-      final list = await _streamSourcesForBundle(bundle, ep);
+      final list = await _streamSourcesForBundle(bundle, ep,
+          preferredAudio: newAudio);
       if (list.isEmpty) return null;
+      // Keep the rest of the screen (and the next-episode fetch) in sync with
+      // the audio the user just picked, so auto-advance stays in the same
+      // language instead of snapping back to the previous one.
+      _setAudio(newAudio);
       return list.first.url;
     } catch (_) {
       return null;
@@ -3896,7 +3901,8 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<List<EpisodeSource>> _streamSourcesForBundle(
-      Map<String, dynamic> bundle, int ep) async {
+      Map<String, dynamic> bundle, int ep,
+      {String? preferredAudio}) async {
     final p = await SharedPreferences.getInstance();
     final saved = p.getString('stream_quality') ?? 'auto';
     final pref = (p.getBool('app_data_saver') ?? false) ? '480' : saved;
@@ -3906,7 +3912,7 @@ class _DetailScreenState extends State<DetailScreen> {
       episode: ep,
       animeTitle: (info['title'] ?? widget.title).toString(),
       image: (info['image'] ?? '').toString(),
-      preferredAudio: audio,
+      preferredAudio: preferredAudio ?? audio,
       absolute: Api.abs,
       qualityPreference: pref,
     );

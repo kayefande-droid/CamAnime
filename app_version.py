@@ -23,17 +23,16 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.13.0",
-    "latest_version_code": 24,
+    "latest_version": "2.14.0",
+    "latest_version_code": 25,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 24 rebuilds the app on the current stack and moves the release "
-        "gate to 2.13.0. The player, download folder and notification code are "
-        "unchanged from 2.12.0; the website it talks to is the new type and "
-        "manga-print pass."
+        "Build 25 fixes in-player sub/dub switching so the chosen language "
+        "sticks across episodes, and deletes the device copy in Download/ "
+        "CamAnime when a download is removed from the Library."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "

@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.13.0";
-export const LATEST_BUILD = 24;
+export const LATEST_VERSION = "2.14.0";
+export const LATEST_BUILD = 25;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,13 +21,12 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "f4bd818fff460b578b58ebe565ebcac9ffd1a5f926b08d7b2fbe8d6a19651d64";
+  "29d656dd8047d409b56cf610433fb73a8547510e4a370ddd9e0239b104ec0190";
 
 export const RELEASE_NOTES =
-  "Build 24 rebuilds the app on the current stack and moves the release "
-  "gate to 2.13.0. The player, download folder and notification code are "
-  "unchanged from 2.12.0; the website it talks to is the new type and "
-  "manga-print pass.";
+  "Build 25 fixes in-player sub/dub switching so the chosen language sticks "
+  "across episodes, and deletes the device copy in Download/CamAnime when a "
+  "download is removed from the Library.";
 
 export const RENDER_ORIGIN = "https://camanime.onrender.com";
 export const WORKER_ORIGIN = "https://camanjme.camanime.workers.dev";
