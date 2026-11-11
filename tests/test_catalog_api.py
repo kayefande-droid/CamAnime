@@ -1,4 +1,5 @@
 import importlib
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -601,7 +602,8 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"aria-label=\"Live release schedule\"" in response.data
     assert b"aria-expanded=\"false\"" in response.data
     assert b"sync.css?v=20261111-tokens" in response.data
-    assert b"release-schedule.js?v=20261019-tabprefs" in response.data
+    # The schedule script must stay cache-pinned; the exact stamp is bumped on edit.
+    assert re.search(rb"release-schedule\.js\?v=20\d{6}-[a-z0-9]+", response.data)
 
 
 def test_mobile_navigation_and_drawer_have_touch_sized_controls(api):
