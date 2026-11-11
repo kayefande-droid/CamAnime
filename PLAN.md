@@ -45,7 +45,11 @@ be rewritten. Every pin change is made in the 13 templates *and*
 8. **`/owner-console` at every width.** Fixed: token cycle removed, 44 px controls,
    full-width forms under 414 px, panel headings wrap.
 9. **Tool parity and working actions.** Every admin control must return a real
-   response on both hosts.
+   response on both hosts. The light/dark appearance toggle now renders in the same
+   place on both hosts at 1280, and the phone header paints opaque below 900 px so
+   content never shows through it.
+   *Verified:* 18 screenshots across `/`, `/anime/<id>`, `/watch/<id>/<ep>` at 360 and
+   1280 on both hosts — every page 200, zero horizontal overflow.
    *Blocked:* the supplied login returns 401 on Render and the mirror, and no account
    exists for that email. Needs a working credential (or `ADMIN_PATH` + password).
    Also outstanding: delete the accidentally created `probe` user (no delete route).
@@ -54,32 +58,57 @@ be rewritten. Every pin change is made in the 13 templates *and*
 10. **One version, one APK.** `2.12.0` build `23` agreed on both hosts before this
     work started; `/get/android` returns the same 59,434,094 bytes from both.
     `scripts/check-parity.mjs` asserts pins, version and APK size.
-11. **Close the six remaining mismatches.** · done — `download.html` gained
+11. **Close the six asset mismatches.** · done — `download.html` gained
     `base.css` + `header-layout.css`, `developers.html` gained `site.js` +
-    `motion.js`, and the worker head gained `release-schedule.js`.
-    *Verify:* `npm run parity` exits 0.
+    `motion.js`, the worker head gained `release-schedule.js`, and `login.html`
+    gained `base.css` + `header-layout.css` so the sign-in card matches the mirror.
+    *Verified:* the gate reports `/`, `/download`, `/developers` and `/login` all at
+    8/8 matching pins, version `2.12.0/23` and identical 59,434,094-byte APKs on
+    both hosts.
 
     The gate compares, in order: the `<head>` asset pins of every page both hosts
     serve, the advertised app version, the `/get/android` byte count, the status of
     twelve routes, the internal link inventory and both `/sitemap.xml` sets. It exits
     1 on any divergence, so it can gate a deploy. Run it after every push to Render
     and every `wrangler deploy`.
+12. **Route-level parity.** Trailing slashes 308-redirect to the canonical path on
+    both hosts, the mirror's `/download` is now the full Render page, and the
+    mirror's `/schedule` 302s to `/?schedule=open` exactly as Render does.
+    *Still open (route coverage, not styling):* the mirror 404s `/scraper`, `/promo`
+    and `/advert`, Render 404s `/library`, `/owner-console` answers 401 on the mirror
+    and 200 on Render, the mirror sitemap lists 4 URLs against Render's 37, and
+    Render never links `/library`, `/browse` or `/search` from its own pages.
+13. **Home structure and screen states.** A genre browse rail and a continue-watching
+    row give the grid real structure; the continue-watching fetch, the schedule and
+    the catalogue each show a plain error line with a retry instead of an empty gap.
+    The watch page explains a resume jump with a "resuming at mm:ss" note that clears
+    after a few seconds.
+    *Verified:* resume note observed in Chrome at 12:04 against a local 21 m 40 s clip,
+    `currentTime` 724 / duration 1300; continue-watching error line and schedule retry
+    button present on both hosts.
 
-## Milestone 6 — sub/dub plumbing and providers · not started
-12. **Language truth in the data model.** Each episode records audio tracks and
+## Milestone 6 — sub/dub plumbing and providers · design approved, not built
+14. **Sub/dub design.** `docs/sub-dub-model.md` records the proposed model: an
+    additive `audio` field (`sub` / `dub` / `unknown`) read from the source, with the
+    player preferring a dub source when one exists and falling back to sub with a
+    plain "dub not yet available" message. Nothing is implemented yet — it is
+    deliberately left out until the player's audio switch lands with it, because a
+    label without a real track behind it would be an invented fact.
+    *Verify (on implementation):* both paths plus a missing-episode case on both hosts.
+15. **Language truth in the data model.** Each episode records audio tracks and
     subtitle tracks as facts from the source; no inferred dubs, no invented subtitle
     tracks, sub-only titles labelled sub-only.
     *Verify:* a fixture per provider asserting the parsed languages.
-13. **Dub routing with fallback.** Dub selection prefers a dub source when one
+16. **Dub routing with fallback.** Dub selection prefers a dub source when one
     exists, falls back to the sub source otherwise, and shows a plain "dub not yet
     available" message instead of failing. Sub playback is unchanged.
     *Verify:* both paths plus a missing-episode case, on both hosts.
-14. **Provider additions without regressions.** New scrapers land behind the existing
+17. **Provider additions without regressions.** New scrapers land behind the existing
     provider interface, with timeouts, retries and a provider-specific error that
     leaves the fallback chain intact. No provider removed.
     *Verify:* existing providers still resolve; the new one fails cleanly when
     unreachable.
-15. **APK rebuild and version bump.** Only after 12–14 pass: bump the version in
+18. **APK rebuild and version bump.** Only after 15–17 pass: bump the version in
     every place the gate reads, build, publish, and re-run the parity gate.
     *Blocked on:* a working Android toolchain on this machine — a version bump with
     no artifact behind it would hand users a broken download.
