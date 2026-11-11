@@ -39,7 +39,7 @@
   }
   function card(c, replies) {
     return '<div class="ca-card"><div class="ca-card-head"><strong>' + esc(c.user) + '</strong><span> • ' + new Date(c.t * 1000).toLocaleString() + '</span></div>'
-      + '<div class="ca-card-body">' + (c.sticker ? '<span class="ca-sticker">' + c.sticker + '</span> ' : '') + esc(c.text) + '</div>'
+      + '<div class="ca-card-body">' + (c.sticker ? '<span class="ca-sticker">' + esc(c.sticker) + '</span> ' : '') + esc(c.text) + '</div>'
       + '<div class="ca-card-actions"><button data-like="' + c.id + '">♥ ' + (c.likes || 0) + '</button>'
       + '<button data-reply="' + c.id + '" data-who="' + esc(c.user) + '">Reply</button></div>'
       + replies.map(function (x) { return '<div class="ca-reply">' + card(x, []) + '</div>'; }).join('') + '</div>';

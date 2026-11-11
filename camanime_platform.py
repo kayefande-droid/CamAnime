@@ -607,6 +607,11 @@ def track(data: Dict, kind: str, meta: Dict = None) -> None:
 def add_comment(data: Dict, anime_id: str, ep: str, user: Dict, text: str,
                 parent: str = "", sticker: str = "") -> Dict:
     text = (text or "").strip()[:600]
+    # Stickers are rendered as markup by the community widget, so an arbitrary
+    # client string here would be stored XSS. Only the published set is kept.
+    sticker = (sticker or "").strip()
+    if sticker not in CAM_STICKERS:
+        sticker = ""
     if not text and not sticker:
         raise ValueError("Write something or pick a sticker.")
     cid = secrets.token_hex(6)

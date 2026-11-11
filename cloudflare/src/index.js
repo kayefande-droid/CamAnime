@@ -21,8 +21,59 @@ function segments(pathname) {
   return pathname.split("/").filter(Boolean);
 }
 
+/* The same security headers the Render origin sends (app.py after_request).
+ * The mirror answered without any of them, which left clickjacking, MIME
+ * sniffing and mixed-content downgrades open on this host. */
+const SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "SAMEORIGIN",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-site",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "Content-Security-Policy":
+    "default-src 'self' https: data: blob:; " +
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " +
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " +
+    "img-src 'self' https: data: blob:; " +
+    "media-src 'self' https: blob: data:; " +
+    "frame-src 'self' https:; " +
+    "connect-src 'self' https: blob:; " +
+    "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';",
+};
+
+export function withSecurityHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+  // 204/304 (and 101) must not carry a body, so the cache-revalidated asset
+  // responses pass through as-is instead of throwing on construction.
+  const body = [204, 304, 101].includes(response.status) ? null : response.body;
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
+    return withSecurityHeaders(await handle(request, env, ctx));
+  },
+
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      appapi.hourlyDigest(env).catch((err) =>
+        console.error(JSON.stringify({ message: "digest failed", error: String(err) })),
+      ),
+    );
+  },
+};
+
+async function handle(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -119,22 +170,7 @@ export default {
       const message = status === 404 ? "Page not found." : "Something went wrong on the edge.";
       return html(errorPage(status, message), status);
     }
-  },
-
-  /**
-   * Cloudflare Cron Trigger (see `triggers.crons` in wrangler.jsonc). Sends the
-   * hourly new-episode digest to devices that opted into `new_episodes`, which
-   * reaches phones with the app closed or the screen off. Skips silently when
-   * nothing aired, during quiet hours, or when FCM is not configured.
-   */
-  async scheduled(controller, env, ctx) {
-    ctx.waitUntil(
-      appapi.hourlyDigest(env).catch((err) =>
-        console.error(JSON.stringify({ message: "digest failed", error: String(err) })),
-      ),
-    );
-  },
-};
+}
 
 const PROTECTED_PREFIXES = [
   "/api/proxy/",

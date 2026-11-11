@@ -48,7 +48,17 @@ export async function getComments(env, request, animeId, ep) {
   ).bind(String(animeId), String(ep)).all();
   const user = await currentUser(env, request);
   const mine = user ? rows.results.filter((r) => r.email === user.email) : [];
-  return json({ comments: rows.results, mine: mine.map((r) => r.id), user: user ? { name: user.name } : null });
+  return json({ comments: rows.results, stickers: STICKERS,
+    mine: mine.map((r) => r.id), user: user ? { name: user.name } : null });
+}
+
+/* The published sticker set. Comments are rendered as markup by the community
+ * widget, so anything outside this list must never reach the database. */
+export const STICKERS = ["🍥", "⚔️", "🐉", "👺", "🌸", "🔥", "🍜", "⛩️", "👾", "💫", "🎴", "🍡"];
+
+export function safeSticker(value) {
+  const v = String(value || "").trim();
+  return STICKERS.includes(v) ? v : "";
 }
 
 export async function postComment(env, request, animeId, ep) {
@@ -60,7 +70,7 @@ export async function postComment(env, request, animeId, ep) {
   await env.DB.prepare(
     "INSERT INTO comments (id, anime_id, ep, email, username, text, parent, sticker, likes, liked_by, t) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,0,'[]',?9)"
   ).bind(id, String(animeId), String(ep), user.email, anon, String(body.text || "").slice(0, 1000),
-    String(body.parent || ""), String(body.sticker || ""), time()).run();
+    String(body.parent || "").slice(0, 64), safeSticker(body.sticker), time()).run();
   return json({ ok: true, id });
 }
 

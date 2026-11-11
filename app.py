@@ -2547,11 +2547,11 @@ def _safe_upstream_url(url):
                 ip = ipaddress.ip_address(sockaddr[0])
             except ValueError:
                 return None
-            # Some CDN origins (e.g. fetch.nexabloom.top) resolve against public
-            # DoH endpoints that are flagged private; those hosts usually also
-            # publish direct public IPs, so allow them through while still
-            # blocking real private/loopback addresses.
-            if (ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified):
+            # Only globally routable addresses are allowed. is_global covers
+            # loopback, link-local, multicast, unspecified, RFC1918 private space
+            # (10/8, 172.16/12, 192.168/16), CGNAT and other reserved ranges, so
+            # the proxy cannot be pointed at an internal host or metadata IP.
+            if not ip.is_global:
                 return None
         if not _media_host_allowed(host):
             return None
@@ -4020,6 +4020,12 @@ def api_admin_password():
         target = (d.get("target_email") or "").strip().lower()
         new_pw = d.get("new_password") or ""
         if target and target != u["email"].lower():
+            # Resetting someone else's password is account takeover, so it is
+            # owner-only: a developer or support login must not be able to
+            # seize the owner account this way.
+            if _role_of(u) != "owner":
+                return jsonify({"status": "error",
+                                "error": "Only the owner can reset another account."}), 403
             platform.admin_reset_password(target, new_pw)
             return jsonify({"status": "success", "reset_for": target})
         platform.change_own_password(u["email"], d.get("current_password") or "", new_pw)
