@@ -106,7 +106,7 @@ test("J2 search returns matches, and an empty state for nonsense", async ({ page
   await expect(page).toHaveTitle(/search|naruto/i);
   await expect.poll(async () => page.locator('a[href^="/anime/"]').count(), { timeout: 30_000 }).toBeGreaterThan(0);
 
-  await page.goto("/search?q=zzzqqq123notatitle");
+  await page.goto("/search?q=zzzqqq123notatitle", { waitUntil: "domcontentloaded" });
   const text = await page.locator("body").innerText();
   expect(text).toMatch(/No .*titles matched/i);
   await expect(page.getByRole("link", { name: "Clear search" })).toHaveAttribute("href", "/");
@@ -278,19 +278,29 @@ test("J9 history is owner-only and the watch page resumes", async ({ page, reque
   await expect(page.locator("#caResumeNote")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("#caResumeNote")).toContainText(/0?4:00|4:0/);
 
-  // Another account sees none of it.
-  const other = await page.request.post("/api/auth/register", {
-    data: { email: `e2e-other-${Date.now()}@example.com`, password: "e2e-password-2", name: "Other" },
+  // Another account sees none of it. The API signs in with a bearer token
+  // instead of a cookie, so the second reader is measured on its own token,
+  // never on the first account's browser session.
+  const otherEmail = `e2e-other-${Date.now()}@example.com`;
+  const other = await request.post("/api/auth/register", {
+    data: { email: otherEmail, password: "e2e-password-2", name: "Other" },
   });
   expect(other.status()).toBe(200);
-  const otherHistory = await (await page.request.get("/api/history")).json();
+  const otherLogin = await request.post("/api/auth/login", { data: { email: otherEmail, password: "e2e-password-2" } });
+  expect(otherLogin.status()).toBe(200);
+  const otherAuth = { Authorization: `Bearer ${(await otherLogin.json()).token}` };
+  const otherHistory = await (await request.get("/api/history", { headers: otherAuth })).json();
   expect(otherHistory.history).toEqual([]);
 
-  const remove = await page.request.post("/api/history/remove", { data: { anime_id: String(anime.id) } });
+  // The first account still has its row, and remove clears only its own.
+  const mineLogin = await request.post("/api/auth/login", { data: { email, password: "e2e-password-1" } });
+  const mineAuth = { Authorization: `Bearer ${(await mineLogin.json()).token}` };
+  const mine = await (await request.get("/api/history", { headers: mineAuth })).json();
+  expect(mine.history).toHaveLength(1);
+  const remove = await request.post("/api/history/remove", { data: { anime_id: String(anime.id) }, headers: mineAuth });
   expect(remove.status()).toBe(200);
-  const after = await (await page.request.get("/api/history")).json();
+  const after = await (await request.get("/api/history", { headers: mineAuth })).json();
   expect(after.history).toEqual([]);
-  expect(email).toContain("e2e-resume");
 });
 
 // ── J10, J11: boundaries and errors ─────────────────────────────────────

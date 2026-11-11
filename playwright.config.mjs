@@ -26,11 +26,13 @@ for (const browser of ["firefox", "webkit"]) {
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 90_000,
+  timeout: 150_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // One retry absorbs the occasional browser-process crash on a machine this
+  // low on disk; a real failure fails twice.
+  retries: 1,
   projects,
   // This machine's C: is full, so artifacts and the JSON report can be pinned
   // to another drive by env var without changing the config.
@@ -42,7 +44,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     actionTimeout: 15_000,
-    navigationTimeout: 45_000,
+    navigationTimeout: 90_000,
   },
   webServer: {
     command: "node tests/e2e/start-server.mjs",

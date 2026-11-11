@@ -5,8 +5,8 @@
 
 /* ── Tokens shared by every theme (sync.css themes override these) ── */
 :root {
-  --ca-font-display: "Sora", "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --ca-font-body: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ca-font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ca-font-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --ca-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --ca-page: 1440px;
@@ -44,6 +44,8 @@ body {
   background-attachment: fixed;
   color: var(--text);
   font-family: var(--ca-font-body);
+  font-optical-sizing: auto;
+  font-synthesis-weight: none;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -804,7 +806,7 @@ html[data-data="low"] body { background-attachment: scroll; }
 .dev-table { width: 100%; border-collapse: collapse; margin-top: .9rem; font-size: .88rem; }
 .dev-table th,
 .dev-table td { padding: .6rem .7rem; text-align: left; border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, .08)); }
-.dev-table th { color: var(--text-muted); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
+.dev-table th { color: var(--text-secondary); font-size: .8rem; font-weight: 600; }
 .dev-table code {
   padding: .12rem .4rem;
   border-radius: 6px;
@@ -848,7 +850,7 @@ html[data-data="low"] body { background-attachment: scroll; }
 .dev-form { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .8rem; }
 .dev-form input { flex: 1 1 220px; }
 
-.dev-note { margin-top: 1.6rem; color: var(--text-muted); font-size: .78rem; max-width: 74ch; }
+.dev-note { margin-top: 1.6rem; color: var(--text-secondary); font-size: .82rem; max-width: 74ch; }
 
 .dev-table-scroll { width: 100%; }
 

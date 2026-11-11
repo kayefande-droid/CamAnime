@@ -1,8 +1,8 @@
 /* CamAnime screen-ratio sync + vibrant theme + type scale (additive layer) */
 :root {
-  --ca-font-display: "Sora", "Syne", system-ui, sans-serif;
-  --ca-font-body: "Outfit", "Inter", system-ui, sans-serif;
-  --ca-font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --ca-font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ca-font-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ca-font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 }
 html, body { overflow-x: clip; }
 /* Global responsive guards (additive: page styles below keep precedence) */
@@ -112,7 +112,7 @@ small, .muted { font-size: .85em; color: var(--text-secondary); }
 .ca-sticker-row { display: flex; gap: .35rem; margin: .6rem 0; flex-wrap: wrap; }
 .ca-sticker-row button { font-size: 1.25rem; background: var(--bg-input); border: 1px solid var(--line); border-radius: 8px; padding: .25rem .55rem; cursor: pointer; }
 .ca-comments { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
-.ca-empty { color: var(--text-muted); font-size: .92rem; }
+.ca-empty { color: var(--text-secondary); font-size: .92rem; }
 .ca-card { background: var(--bg-input); border: 1px solid var(--line); border-radius: 10px; padding: .65rem .8rem; }
 .ca-card-head { font-size: .82rem; color: var(--accent); }
 .ca-card-head span { color: var(--text-muted); }
@@ -277,7 +277,7 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 
 /* ── Next-episode release countdown (all users) ── */
 .release-ticker{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(var(--accent-rgb,255,179,71),.13),rgba(14,17,26,.94) 55%,rgba(var(--accent-crimson-rgb,255,94,98),.10));border:1px solid rgba(var(--accent-rgb,255,179,71),.35);border-radius:16px;padding:1rem 1.25rem;margin-bottom:1.5rem}
-.release-ticker .rt-title{font-weight:800;font-family:var(--ca-font-display,'Sora',sans-serif);font-size:1rem;min-width:0;overflow-wrap:anywhere}
+.release-ticker .rt-title{font-weight:800;font-family:var(--ca-font-display,'Bricolage Grotesque',sans-serif);font-size:1rem;min-width:0;overflow-wrap:anywhere}
 .release-ticker .rt-sub{color:var(--text-secondary);font-size:.8rem;font-family:var(--ca-font-mono,monospace)}
 .countdown-chips{display:flex;gap:.45rem;margin-left:auto;flex-wrap:wrap}
 .cd-chip{background:rgba(7,8,13,.7);border:1px solid rgba(var(--accent-rgb,255,179,71),.4);border-radius:10px;padding:.4rem .65rem;min-width:64px;text-align:center}
@@ -300,7 +300,7 @@ body .ca-announce { display: flex; gap: .7rem; align-items: flex-start; backgrou
 .live-schedule-drawer{position:fixed;z-index:4199;inset:0 auto 0 0;display:flex;flex-direction:column;width:min(28rem,calc(100vw - 2.5rem));height:100dvh;padding:1.1rem;background:#090b12;border-right:1px solid rgba(var(--accent-rgb,255,179,71),.32);box-shadow:24px 0 70px rgba(0,0,0,.55);transform:translateX(-105%);visibility:hidden;transition:transform .28s cubic-bezier(.2,.75,.25,1),visibility .28s;overscroll-behavior:contain}
 .live-schedule-drawer.is-open{transform:translateX(0);visibility:visible}
 .live-schedule-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.25rem .1rem 1rem;border-bottom:1px solid rgba(255,255,255,.1)}
-.live-schedule-header h2{margin:.4rem 0 .15rem;color:var(--text-primary, var(--text));font:800 1.35rem/1.2 var(--ca-font-display,'Sora',sans-serif)}
+.live-schedule-header h2{margin:.4rem 0 .15rem;color:var(--text-primary, var(--text));font:800 1.35rem/1.2 var(--ca-font-display,'Bricolage Grotesque',sans-serif)}
 .live-schedule-header p,.live-schedule-eyebrow{color:var(--text-secondary);font-size:.76rem}
 .live-schedule-eyebrow{display:flex;align-items:center;gap:.45rem;color:var(--accent);font:700 .67rem/1.2 var(--ca-font-mono,monospace);letter-spacing:.08em}
 .live-schedule-close{width:2.75rem;height:2.75rem;min-width:44px;min-height:44px;flex:0 0 auto;color:var(--text-primary, var(--text));background:#151923;border:1px solid rgba(255,255,255,.12);border-radius:10px;font-size:1.6rem;line-height:1;cursor:pointer}
@@ -352,7 +352,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .stat-strip .st-cell{display:flex;flex-direction:column;align-items:center;min-width:100px}
 .stat-strip .st-cell b{font-family:var(--ca-font-mono,monospace);font-size:1.35rem;color:var(--accent, #FFB347)}
 .stat-strip .st-cell span{font-size:.72rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em}
-.stat-strip .st-note{width:100%;text-align:center;color:var(--text-muted);font-size:.72rem}
+.stat-strip .st-note{width:100%;text-align:center;color:var(--text-secondary);font-size:.72rem}
 
 /* ── Header search: guaranteed visible on desktop + not squashed on phones ── */@media (min-width: 1024px){
   body .header-inner{flex-wrap:nowrap}
@@ -407,8 +407,8 @@ html[data-schedule-pos$="-bottom"] body .live-schedule-tab { top: auto; bottom: 
 }
 
 /* Skip-to-content link: screen-reader/keyboard only until focused. */
-.skip-link{position:absolute;left:-9999px;top:0;z-index:99999;background:var(--accent);color:var(--bg-canvas, var(--bg));font-weight:700;padding:10px 18px;border-radius:0 0 10px 0;text-decoration:none}
-.skip-link:focus{left:0}
+.skip-link{position:fixed;left:0;top:0;z-index:99999;transform:translateY(-140%);background:var(--accent);color:var(--bg-canvas, var(--bg));font-weight:700;padding:10px 18px;border-radius:0 0 10px 0;text-decoration:none}
+.skip-link:focus-visible{transform:none}
 
 /* ── Supplemental tokens for existing themes (added so tokenized templates recolor everywhere) ── */
 html[data-theme="vibrant"]{ --accent-rgb:124,97,212; --accent-crimson-rgb:234,174,135; --accent-hover:#9b82e6; --accent-ink:#14101f; --bg-glass:rgba(20,16,31,.84); --header-glass:rgba(20,16,31,.88); }

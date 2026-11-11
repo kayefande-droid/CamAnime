@@ -8,23 +8,23 @@
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Outfit','Inter',sans-serif;min-height:100vh}
+body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-primary, #f3f5fa));font-family:'Plus Jakarta Sans','Plus Jakarta Sans',sans-serif;min-height:100vh}
 .set-wrap{max-width:760px;margin:0 auto;padding:clamp(1rem,4vw,2rem)}
 .set-head{display:flex;align-items:center;gap:1rem;margin:1rem 0 1.5rem;flex-wrap:wrap}
 .set-head img{width:min(220px,60vw);height:auto}
-.set-head h1{font-family:'Sora',sans-serif;font-size:clamp(1.5rem,1.3rem + 1.5vw,2rem)}
+.set-head h1{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(1.5rem,1.3rem + 1.5vw,2rem)}
 .set-card{background:var(--bg-elevated,var(--bg-elevated, #0e111a));border:1px solid var(--line,rgba(255,255,255,.1));border-radius:18px;padding:clamp(1rem,3vw,1.5rem);margin-bottom:1.1rem}
-.set-card h2{font-family:'Sora',sans-serif;font-size:clamp(1.05rem,1rem + .4vw,1.25rem);margin-bottom:.35rem}
+.set-card h2{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(1.05rem,1rem + .4vw,1.25rem);margin-bottom:.35rem}
 .set-card p{color:var(--text-secondary,var(--text-secondary, #a0abc0));font-size:.9rem;margin-bottom:.9rem}
 .theme-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:.6rem}
 .theme-pick{display:flex;align-items:center;gap:.55rem;background:var(--bg-input,var(--bg-surface, #141926));border:2px solid var(--line,rgba(255,255,255,.12));border-radius:12px;padding:.7rem .8rem;cursor:pointer;font-weight:700;font-size:.9rem;color:var(--text,var(--text-primary, #f3f5fa))}
@@ -132,12 +132,12 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     <p>How episodes behave while you watch. Changes apply on the next episode you open.</p>
     <div class="row-toggle">
       <span class="lab">Autoplay next episode</span>
-      <label class="switch"><input type="checkbox" id="setAutoplay"><span class="track"></span><span class="thumb"></span></label>
+      <label class="switch"><input type="checkbox" id="setAutoplay" aria-label="Autoplay episodes"><span class="track"></span><span class="thumb"></span></label>
       <span class="hint">When an episode ends, the next one starts automatically.</span>
     </div>
     <div class="row-toggle">
       <span class="lab">Reduce motion</span>
-      <label class="switch"><input type="checkbox" id="setMotion"><span class="track"></span><span class="thumb"></span></label>
+      <label class="switch"><input type="checkbox" id="setMotion" aria-label="Reduce motion"><span class="track"></span><span class="thumb"></span></label>
       <span class="hint">Turns off animations and transitions across the site.</span>
     </div>
     <div class="lab" style="font-weight:700;font-size:.95rem;margin:.4rem 0 .5rem">Default audio</div>
@@ -152,7 +152,7 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
     <p>The live release schedule opens from a tab on the edge of the screen. Hide the tab, or move it to any edge. The schedule stays available from this page either way.</p>
     <div class="row-toggle">
       <span class="lab">Show schedule tab</span>
-      <label class="switch"><input type="checkbox" id="setScheduleTab"><span class="track"></span><span class="thumb"></span></label>
+      <label class="switch"><input type="checkbox" id="setScheduleTab" aria-label="Show live schedule tab"><span class="track"></span><span class="thumb"></span></label>
       <span class="hint">Off hides the tab on every page. You can still open the schedule below.</span>
     </div>
     <div class="lab" style="font-weight:700;font-size:.95rem;margin:.4rem 0 .5rem">Tab position</div>
@@ -177,7 +177,7 @@ body{background:var(--bg,var(--bg-canvas, #07080d));color:var(--text,var(--text-
       <button type="button" data-data="low"><i class="fas fa-feather"></i> Data saver on</button>
       <button type="button" data-data="normal"><i class="fas fa-gauge-high"></i> Max quality</button>
     </div>
-    <p style="font-size:.82rem;color:var(--text-muted)">Auto follows the Network Information API (save-data, 2G/3G, hotspot). Data saver trims blur, swaps to smaller posters and enlarges the playback buffer so episodes keep playing on bad links.</p>
+    <p style="font-size:.82rem;color:var(--text-secondary)">Auto follows the Network Information API (save-data, 2G/3G, hotspot). Data saver trims blur, swaps to smaller posters and enlarges the playback buffer so episodes keep playing on bad links.</p>
   </div>
 
   <div class="set-card">

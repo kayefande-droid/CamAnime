@@ -4,18 +4,18 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin Control Deck — CamAnime</title>
 <meta name="robots" content="noindex, nofollow">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Syne:wght@700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
 :root{--bg:var(--bg-canvas, #07080d);--panel:var(--bg-elevated, #0e111a);--panel2:var(--bg-surface, #141926);--line:rgba(255,255,255,.1);--crimson:var(--accent-crimson, #FF5E62);--emerald:#10B981;--blue:#087BFF;--text:var(--text-primary, #f3f5fa);--text2:var(--text-secondary, #a0abc0);--muted:var(--text-muted, #64708a)}
-body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.5;min-height:100vh;
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;line-height:1.5;min-height:100vh;
   background-image:radial-gradient(circle at 12% 0%,rgba(var(--accent-rgb,255,179,71),.09),transparent 42%),radial-gradient(circle at 88% 8%,rgba(8,123,255,.07),transparent 40%)}
 a{color:var(--accent)}
 .shell{max-width:1180px;margin:0 auto;padding:1.4rem 1.4rem 3.5rem}
 /* ── command header ── */
 .deck-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:linear-gradient(135deg,rgba(var(--accent-rgb,255,179,71),.13),rgba(14,17,26,.94) 55%,rgba(8,123,255,.09));border:1px solid rgba(var(--accent-rgb,255,179,71),.3);border-radius:20px;padding:1.3rem 1.6rem;margin-bottom:1.6rem}
-.deck-head h1{font-family:'Syne';font-size:clamp(1.3rem,1rem + 1.6vw,1.9rem);display:flex;gap:.7rem;align-items:center}
+.deck-head h1{font-family:'Bricolage Grotesque';font-size:clamp(1.3rem,1rem + 1.6vw,1.9rem);display:flex;gap:.7rem;align-items:center}
 .deck-head .sub{color:var(--text2);font-size:.85rem;margin-top:.25rem}
 .backup-link{background:rgba(255,255,255,.08);border:1px solid var(--line);color:var(--text);text-decoration:none;border-radius:999px;padding:.55rem 1.1rem;font-weight:700;font-size:.85rem;display:inline-flex;gap:.5rem;align-items:center}
 .backup-link:hover{border-color:var(--accent);color:var(--accent)}
@@ -27,7 +27,7 @@ a{color:var(--accent)}
 .stat span{color:var(--text2);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
 .stat .trend{margin-top:.35rem;font-size:.7rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.4rem;margin:1.4rem 0}
-.panel h2{font-family:'Syne';font-size:1.15rem;margin-bottom:.7rem;display:flex;align-items:center;gap:.6rem}
+.panel h2{font-family:'Bricolage Grotesque';font-size:1.15rem;margin-bottom:.7rem;display:flex;align-items:center;gap:.6rem}
 .panel p.note{color:var(--text2);font-size:.85rem;max-width:720px}
 table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:14px;overflow:hidden;font-size:.85rem}
 .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:14px}
@@ -38,7 +38,7 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
 .tool-card{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:1.1rem;display:flex;flex-direction:column;gap:.45rem;text-decoration:none;color:var(--text);transition:border-color .18s ease, transform .18s ease, box-shadow .18s ease}
 .tool-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 14px 30px rgba(0,0,0,.5)}
 .tool-card i{font-size:1.3rem;color:var(--accent)}
-.tool-card b{font-family:'Syne';font-size:.98rem}
+.tool-card b{font-family:'Bricolage Grotesque';font-size:.98rem}
 .tool-card span{color:var(--text2);font-size:.8rem}
 .tool-card .tag{font-size:.66rem;font-family:'JetBrains Mono',monospace;background:rgba(16,185,129,.14);border:1px solid rgba(16,185,129,.35);color:#34d399;border-radius:6px;padding:.12rem .5rem;width:max-content}
 /* ── forms ── */
@@ -83,8 +83,8 @@ tbody tr:hover{background:rgba(var(--accent-rgb,255,179,71),.05)}
 }
 </style>
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>

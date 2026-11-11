@@ -7,11 +7,11 @@
 <meta name="theme-color" content="#07080d">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal','wide','magazine','wall'].indexOf(l)!==-1)document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>
-<link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script><link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
@@ -21,7 +21,7 @@
 .dev-code-wrap { position: relative; }
 .dev-copy-btn {
   position: absolute; top: .55rem; right: .6rem;
-  font: 600 .72rem/1 'Outfit', system-ui, sans-serif;
+  font: 600 .72rem/1 'Plus Jakarta Sans', system-ui, sans-serif;
   letter-spacing: .04em; text-transform: uppercase;
   color: var(--text-secondary, #9aa4bd);
   background: rgba(255,255,255,.07);
@@ -224,9 +224,9 @@ document.querySelector("video").src = ep.streams[0].url;</pre>
   </div>
 </main>
 
-<footer style="text-align:center;color:var(--text-muted,#64708a);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">
+<footer style="text-align:center;color:var(--text-secondary,#a9b4c6);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">
   <p>CamAnime — free anime streaming. Independent Cloudflare + Render deployments.</p>
-  <p style="margin-top:.6rem;font-size:.78rem;">© 2026 CamAnime. All rights reserved. · Built by <strong style="color:var(--text-primary,#f3f5fa)">kayefande &amp; Co.</strong></p>
+  <p style="margin-top:.6rem;font-size:.82rem;">© 2026 CamAnime. Built by <strong style="color:var(--text-primary,#f3f5fa)">kayefande &amp; Co.</strong></p>
 </footer>
 
 <script>
@@ -263,6 +263,9 @@ function legacyCopy(text, done) {
       if (pre.parentNode.classList.contains('dev-code-wrap')) return;
       var wrap = document.createElement('div');
       wrap.className = 'dev-code-wrap';
+      pre.setAttribute('tabindex', '0');
+      pre.setAttribute('role', 'region');
+      pre.setAttribute('aria-label', 'Code sample — scrollable');
       pre.parentNode.insertBefore(wrap, pre);
       wrap.appendChild(pre);
       var btn = document.createElement('button');

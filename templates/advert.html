@@ -6,47 +6,53 @@
 <meta name="description" content="CamAnime advert: streaming, downloads, adaptive quality, themes and layout templates, community, accounts — on Render and on Cloudflare.">
 <meta name="theme-color" content="#07080d">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal','wide','magazine','wall'].indexOf(l)!==-1)document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}html,body{overflow-x:clip}
-body{background:var(--bg-canvas,#07080d);color:var(--text-primary,#f3f5fa);font-family:'Outfit','Inter',sans-serif;min-height:100vh;line-height:1.6}
+body{background:var(--bg-canvas,#07080d);background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1.4px);background-size:18px 18px;color:var(--text-primary,#f3f5fa);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;line-height:1.6}
 .ad-wrap{width:100%;max-width:1080px;margin:0 auto;padding:clamp(1rem,4vw,2.5rem)}
 .ad-top{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:clamp(1.5rem,5vw,3rem)}
 .ad-top img{width:min(190px,48vw);height:auto}
 .ad-top a{color:var(--accent,#FFB347);text-decoration:none;font-weight:700}
-.ad-badge{display:inline-flex;align-items:center;gap:.55rem;background:rgba(var(--accent-rgb,255,179,71),.13);border:1px solid rgba(var(--accent-rgb,255,179,71),.4);color:var(--accent,#FFB347);border-radius:999px;padding:.45rem 1.1rem;font-weight:700;font-size:.85rem;margin-bottom:1rem}
-.ad-hero{padding:clamp(1.5rem,5vw,3rem) 0 clamp(2rem,5vw,3.5rem)}
-.ad-hero h1{font-family:'Sora',sans-serif;font-size:clamp(2rem,1.4rem + 4.5vw,4rem);line-height:1.08;letter-spacing:-.02em}
-.ad-hero h1 em{font-style:normal;color:var(--accent,#FFB347)}
+.ad-badge{display:inline-flex;align-items:center;gap:.55rem;background:rgba(var(--accent-rgb,255,179,71),.13);border:1px solid rgba(var(--accent-rgb,255,179,71),.4);color:var(--accent,#FFB347);border-radius:3px;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));padding:.45rem 1.1rem;font-weight:700;font-size:.85rem;margin-bottom:1rem;transform:rotate(-1.2deg)}
+.ad-hero{position:relative;padding:clamp(1.5rem,5vw,3rem) 0 clamp(2rem,5vw,3.5rem);border-top:3px solid var(--accent,#FFB347);margin-top:.5rem}
+.ad-hero::after{content:"";position:absolute;right:0;top:0;width:min(45%,300px);height:100%;pointer-events:none;background:repeating-linear-gradient(104deg,rgba(255,255,255,.06) 0 2px,transparent 2px 12px);-webkit-mask-image:linear-gradient(to left,#000,transparent);mask-image:linear-gradient(to left,#000,transparent)}
+.ad-hero h1{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(2.2rem,1.4rem + 5vw,4.4rem);line-height:1.02;letter-spacing:-.03em;text-wrap:balance}
+.ad-hero h1 em{font-style:normal;color:inherit;white-space:nowrap}
 .ad-hero .lede{color:var(--text-secondary,#a0abc0);font-size:clamp(1rem,.95rem + .6vw,1.25rem);max-width:46rem;margin-top:1rem}
 .ad-ctas{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.8rem}
-.ad-btn{display:inline-flex;align-items:center;gap:.6rem;text-decoration:none;border-radius:999px;padding:.95rem 1.6rem;font-weight:800;font-size:.95rem}
+.ad-btn{display:inline-flex;align-items:center;gap:.6rem;text-decoration:none;border-radius:8px;padding:.95rem 1.6rem;font-weight:800;font-size:.95rem;box-shadow:4px 4px 0 0 rgba(2,3,7,.9);transition:transform .16s ease,box-shadow .16s ease}
+.ad-btn:hover{transform:translate(-1px,-2px);box-shadow:6px 7px 0 0 rgba(2,3,7,.9)}
+.ad-btn:active{transform:none;box-shadow:2px 2px 0 0 rgba(2,3,7,.9)}
+@media (prefers-reduced-motion: reduce){.ad-btn{transition:none}.ad-btn:hover,.ad-btn:active{transform:none}}
 .ad-btn.primary{background:linear-gradient(135deg,var(--accent,#FFB347),var(--accent-crimson,#FF5E62));color:#0a0c14}
 .ad-btn.secondary{border:1px solid rgba(var(--accent-rgb,255,179,71),.5);color:var(--accent,#FFB347)}
 .ad-btn.ghost{border:1px solid rgba(255,255,255,.14);color:var(--text-primary,#f3f5fa)}
 .ad-btn:hover{filter:brightness(1.08)}
 .ad-hosts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem;margin:1.5rem 0 3rem}
-.ad-host{background:var(--bg-elevated,#0e111a);border:1px solid rgba(var(--accent-rgb,255,179,71),.35);border-radius:18px;padding:1.4rem;position:relative}
-.ad-host .tag{position:absolute;top:-.75rem;left:1.2rem;background:var(--accent,#FFB347);color:#0a0c14;font-size:.7rem;font-weight:800;border-radius:999px;padding:.2rem .7rem;letter-spacing:.04em}
+.ad-host{background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.22);border-radius:4px;padding:1.4rem;position:relative;box-shadow:5px 6px 0 0 rgba(2,3,7,.92)}
+.ad-host .tag{position:absolute;top:-.75rem;left:1.2rem;background:var(--accent,#FFB347);color:#0a0c14;font-size:.7rem;font-weight:800;border-radius:2px;clip-path:polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px));padding:.2rem .7rem}
 .ad-host:hover .entry{color:var(--accent,#FFB347)}
-.ad-host h2{font-family:'Sora',sans-serif;font-size:1.15rem}
+.ad-host h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.15rem}
 .ad-host .entry{display:inline-block;margin:.7rem 0 .4rem;font-family:ui-monospace,monospace;font-size:.88rem;color:var(--text-primary,#f3f5fa);word-break:break-all;text-decoration:none;border-bottom:1px dashed rgba(var(--accent-rgb,255,179,71),.5)}
 .ad-host p{color:var(--text-secondary,#a0abc0);font-size:.88rem}
 .ad-sec{margin:clamp(2rem,6vw,3.5rem) 0}
-.ad-sec > h2{font-family:'Sora',sans-serif;font-size:clamp(1.4rem,1.2rem + 1.4vw,2rem);margin-bottom:1.2rem}
+.ad-sec > h2{font-family:'Bricolage Grotesque',sans-serif;font-size:clamp(1.4rem,1.2rem + 1.4vw,2rem);margin-bottom:1.2rem}
 .ad-sec > h2 i{color:var(--accent,#FFB347)}
 .ad-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:1rem}
-.ad-feat{background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:1.2rem}
+.ad-feat{background:var(--bg-elevated,#0e111a);border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:1.2rem;box-shadow:4px 5px 0 0 rgba(2,3,7,.9);transition:transform .16s ease,border-color .16s ease}
+.ad-feat:hover{transform:translateY(-3px) rotate(-.4deg);border-color:var(--accent,#FFB347)}
+@media (prefers-reduced-motion: reduce){.ad-feat:hover{transform:none}}
 .ad-feat i{color:var(--accent,#FFB347);font-size:1.25rem}
 .ad-feat h3{font-size:1rem;margin:.55rem 0 .3rem}
 .ad-feat p{color:var(--text-secondary,#a0abc0);font-size:.86rem}
 .ad-quote{border-left:3px solid var(--accent,#FFB347);padding:.4rem 0 .4rem 1.1rem;color:var(--text-secondary,#a0abc0);font-size:.92rem;margin-top:2.5rem}
-.ad-foot{text-align:center;color:var(--text-muted,#64708a);font-size:.8rem;margin-top:3rem;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.08)}
+.ad-foot{text-align:center;color:var(--text-secondary,#a9b4c6);font-size:.82rem;margin-top:3rem;padding-top:1.5rem;border-top:1px solid rgba(255,255,255,.08)}
 </style>
 </head>
 <body>

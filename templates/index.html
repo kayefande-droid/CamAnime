@@ -42,12 +42,12 @@
     <link rel="dns-prefetch" href="https://media.kitsu.io">
     <link rel="dns-prefetch" href="https://s4.anilist.co">
     <meta name="format-detection" content="telephone=no">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -55,7 +55,7 @@
         /* Hallmark · macrostructure: Marquee Hero · H1 hero knobs: size=xxl, alignment=left-bias
          * theme: Studio Obsidian · accent: warm-amber var(--accent, #FFB347) ~5% · studied: yes · DNA-source: user reference
          */
-        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261111-ui so the Settings theme picker works on this page too. */
+        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261112-ink so the Settings theme picker works on this page too. */
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { scroll-behavior: smooth; }
@@ -67,7 +67,7 @@
                 radial-gradient(circle at 15% 0%, rgba(var(--accent-rgb, 255, 179, 71), 0.07) 0%, transparent 45%),
                 radial-gradient(circle at 85% 15%, rgba(var(--accent-crimson-rgb, 255, 94, 98), 0.05) 0%, transparent 40%);
             color: var(--text-primary);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             line-height: 1.5;
             min-height: 100vh;
             overflow-x: hidden;
@@ -256,13 +256,18 @@
             position: absolute;
             inset: 0;
             opacity: 0;
+            /* Hidden slides must not paint or be read: they sit on top of the
+               active one and their copy would double in the accessibility tree. */
+            visibility: hidden;
             pointer-events: none;
-            transition: opacity var(--ca-dur-base) var(--ca-ease-soft);
+            transition: opacity var(--ca-dur-base) var(--ca-ease-soft), visibility 0s linear var(--ca-dur-base);
             display: flex;
             align-items: flex-end;
         }
         .hero-slide.active {
             opacity: 1;
+            visibility: visible;
+            transition: opacity var(--ca-dur-base) var(--ca-ease-soft);
             pointer-events: auto;
             position: relative;
             width: 100%;
@@ -312,7 +317,7 @@
             margin-bottom: 1rem;
         }
         .hero-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-size: clamp(2.1rem, 4vw, 3.35rem);
             font-weight: 800;
             line-height: 1.06;
@@ -490,14 +495,14 @@
             background: linear-gradient(180deg, var(--accent), var(--accent-crimson));
         }
         .section-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-size: 1.45rem;
             font-weight: 800;
             letter-spacing: -0.02em;
         }
         .section-subtitle {
-            color: var(--text-muted);
-            font-size: 0.85rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
             margin-left: 0.25rem;
         }
         .section-link {
@@ -558,7 +563,7 @@
         }
         .card-poster-wrap.poster-fallback::after {
             content: 'CamAnime';
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-weight: 800;
             color: rgba(var(--accent-rgb, 255, 179, 71), 0.55);
             font-size: 0.95rem;
@@ -763,7 +768,7 @@
             border-bottom: 1px solid var(--border-subtle);
         }
         .modal-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-weight: 700;
             font-size: 1.05rem;
             display: flex;
@@ -807,7 +812,10 @@
             justify-content: space-between;
             align-items: center;
             gap: 1.5rem;
-            color: var(--text-muted);
+            /* --text-muted is below the 4.5:1 AA ratio on every dark theme; the
+               footer is small text people actually read, so use the secondary
+               tone (measured 7:1+ on the default background). */
+            color: var(--text-secondary);
             font-size: 0.85rem;
         }
 
@@ -936,7 +944,7 @@
         </button>
         <div class="header-actions">
             <form action="/search" method="get" class="search-form">
-                <input type="search" name="q" class="search-input" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." aria-label="Search anime catalogue" required>
+                <input type="search" name="q" class="search-input" role="combobox" aria-haspopup="listbox" aria-label="Search anime catalogue" value="{{ search_query or '' }}" placeholder="Search anime, seasons, movies..." required>
                 <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
             </form>
             <button type="button" class="btn-watchlist-Trigger" onclick="toggleWatchlistModal()">
@@ -1010,7 +1018,7 @@
     {% if announcement %}
     <div class="ca-announce" role="status">
         <i class="fas fa-bullhorn" style="color:var(--accent, #FFB347)"></i>
-        <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:var(--text-muted, #64708a)">· {{ announcement.author }}</em></span></div>
+        <div><strong>{{ announcement.title }}</strong><span> — {{ announcement.body }} <em style="color:var(--text-secondary, #a9b4c6)">{{ announcement.author }}</em></span></div>
     </div>
     {% endif %}
 
@@ -1113,9 +1121,9 @@
                         Trending & Top Airing Now
                     {% endif %}
                 {% if page_type == 'home' and hero_slides %}</h2>{% elif page_type != 'home' or not hero_slides %}</h1>{% endif %}
-                <span class="section-subtitle" role="status" aria-live="polite">{{ search_result_count if page_type == 'search' else (trending | length) }} catalogue results · playback availability shown per episode</span>
+                <span class="section-subtitle" role="status" aria-live="polite">{{ search_result_count if page_type == 'search' else (trending | length) }} catalogue results. Playback availability shown per episode.</span>
             </div>
-            <a href="/scraper" class="section-link">Browse provider listings <i class="fas fa-arrow-right"></i></a>
+            <a href="/scraper" class="section-link">Browse provider listings <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
         </div>
 
         {% if trending %}
@@ -1135,8 +1143,8 @@
                             <a href="/anime/{{ anime.id }}" class="card-btn-play">
                                 <i class="fas fa-circle-info"></i> Episode details
                             </a>
-                            <button type="button" class="card-btn-trailer" title="Watch YouTube Trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
-                                <i class="fab fa-youtube"></i>
+                            <button type="button" class="card-btn-trailer" title="Watch YouTube Trailer" aria-label="Watch YouTube trailer for {{ anime.title | e }}" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                                <i class="fab fa-youtube" aria-hidden="true"></i>
                             </button>
                             <a href="/anime/{{ anime.id }}" class="card-btn-trailer" title="Episode details">
                                 <i class="fas fa-download"></i>
@@ -1281,7 +1289,7 @@
 
         <div class="heaven-strip-grid">
             {% for item in heaven_recent %}
-            <a href="/scraper?id={{ item.id }}" class="heaven-mini-card" aria-label="Open provider listing for {{ item.title }}">
+            <a href="/scraper?id={{ item.id }}" class="heaven-mini-card">
                 <img src="{{ item.image or '/static/brand/camanime-icon.svg' }}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="{{ item.title }}" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                 <div class="heaven-mini-info">
                     <div class="heaven-mini-title">{{ item.title }}</div>
@@ -1318,7 +1326,7 @@
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
-                            <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                            <button type="button" class="card-btn-trailer" aria-label="Watch YouTube trailer for {{ anime.title | e }}" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
                             <a href="/anime/{{ anime.id }}" class="card-btn-trailer" aria-label="Episode details"><i class="fas fa-list" aria-hidden="true"></i></a>
@@ -1360,7 +1368,7 @@
                     <div class="card-hover-actions">
                         <div class="card-action-row">
                             <a href="/anime/{{ anime.id }}" class="card-btn-play"><i class="fas fa-circle-info"></i> Details</a>
-                            <button type="button" class="card-btn-trailer" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
+                            <button type="button" class="card-btn-trailer" aria-label="Watch YouTube trailer for {{ anime.title | e }}" onclick="openTrailerModal('{{ anime.title | e }}', '{{ anime.trailer_id or '' }}', {{ anime.id }})">
                                 <i class="fab fa-youtube"></i>
                             </button>
                             <a href="/anime/{{ anime.id }}" class="card-btn-trailer" aria-label="Episode details"><i class="fas fa-list" aria-hidden="true"></i></a>
@@ -1404,7 +1412,7 @@
                 </div>
                 <div class="card-body" style="text-decoration:none;">
                     <div class="card-title">{{ anime.title }}</div>
-                    <div class="card-submeta"><span>{{ anime.format }} · Episode options vary</span><span>{{ anime.status }}</span></div>
+                    <div class="card-submeta"><span>{{ anime.format }}</span><span>{{ anime.status }}</span></div>
                 </div>
             </a>
             {% endfor %}
@@ -1465,7 +1473,7 @@
                 <i class="fab fa-youtube" style="color: #ff4e45; font-size: 1.3rem;"></i>
                 <span id="trailerModalTitle">Official Anime Trailer Preview</span>
             </div>
-            <button type="button" class="modal-close" onclick="closeTrailerModal()"><i class="fas fa-times"></i></button>
+            <button type="button" class="modal-close" aria-label="Close trailer" onclick="closeTrailerModal()"><i class="fas fa-times" aria-hidden="true"></i></button>
         </div>
         <div class="modal-video-box" id="trailerVideoBox"></div>
     </div>
@@ -1474,7 +1482,7 @@
 <footer>
     <div class="footer-inner">
         <div>
-            <strong style="color: var(--text-primary); font-family: 'Syne', sans-serif;">CamAnime</strong> — Anime discovery, episode metadata, release schedule, and available provider listings.
+            <strong style="color: var(--text-primary); font-family: 'Bricolage Grotesque', sans-serif;">CamAnime</strong> — Anime discovery, episode metadata, release schedule, and available provider listings.
         </div>
         <div style="display: flex; gap: 1.25rem; flex-wrap: wrap;">
             <a href="/" style="color: var(--text-secondary); text-decoration: none;">Home</a>
@@ -1483,7 +1491,7 @@
             <a href="/download" style="color: var(--accent); text-decoration: none;"><i class="fas fa-mobile-alt"></i> Get the Apps</a>
         </div>
     </div>
-    <div class="footer-inner" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border-subtle, rgba(255,255,255,.08)); display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: var(--text-muted, rgba(160,171,192,.9)); font-size: .78rem;">
+    <div class="footer-inner" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border-subtle, rgba(255,255,255,.08)); display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: var(--text-secondary); font-size: .78rem;">
         <span>© 2026 CamAnime. All rights reserved.</span>
         <span>Built by <strong style="color: var(--text-primary, #f3f5fa);">kayefande &amp; Co.</strong></span>
     </div>
@@ -1792,7 +1800,7 @@
   var box = document.createElement('div');
   box.className = 'search-suggest'; box.hidden = true;
   box.id = 'searchSuggestions';
-  box.setAttribute('role', 'group');
+  box.setAttribute('role', 'listbox');
   input.setAttribute('aria-controls', box.id);
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');

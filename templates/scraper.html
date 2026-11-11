@@ -24,16 +24,16 @@
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" sizes="180x180">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
     <style>
-        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261111-ui so the Settings theme picker works on this page too. */
+        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261112-ink so the Settings theme picker works on this page too. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background-color: var(--bg-canvas);
@@ -41,7 +41,7 @@
                 radial-gradient(circle at 20% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 45%),
                 radial-gradient(circle at 80% 10%, rgba(var(--accent-rgb, 255, 179, 71), 0.06) 0%, transparent 40%);
             color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             line-height: 1.5;
             min-height: 100vh;
         }
@@ -93,7 +93,7 @@
             gap: 1rem;
         }
         .scraper-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-size: clamp(1.6rem, 3vw, 2.3rem);
             font-weight: 800;
             display: flex;
@@ -405,7 +405,7 @@
                         {{ selected_anime.total_episodes }} Episodes Extracted
                     </span>
                 </div>
-                <h2 style="font-family:'Syne',sans-serif;font-size:1.85rem;font-weight:800;margin-bottom:0.25rem;">
+                <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.85rem;font-weight:800;margin-bottom:0.25rem;">
                     {{ selected_anime.title }}
                 </h2>
                 {% if selected_anime.title_jp %}
@@ -441,7 +441,7 @@
             </div>
         </div>
 
-        <h3 style="font-family:'Syne',sans-serif;font-size:1.15rem;margin-bottom:0.85rem;">
+        <h3 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.15rem;margin-bottom:0.85rem;">
             Extracted Episode Keys ({{ selected_anime.episodes | length }}) — Click Stream or Direct Download
         </h3>
         <div class="ep-key-grid">
@@ -469,7 +469,7 @@
 
     <!-- ─── SCRAPED CATALOG RESULTS ─── -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.15rem;">
-        <h2 style="font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;">
+        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.35rem;font-weight:800;">
             {% if query %}
                 AnimeHeaven Search Results for "{{ query }}" ({{ items | length }})
             {% else %}

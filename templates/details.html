@@ -32,21 +32,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://s4.anilist.co" crossorigin>
     <link rel="dns-prefetch" href="https://s4.anilist.co">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
-<link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v21" rel="stylesheet">
+<link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
     <style>
-        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261111-ui so the Settings theme picker works on this page too. */
+        /* Theme tokens are owned centrally by /static/css/sync.css?v=20261112-ink so the Settings theme picker works on this page too. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background-color: var(--bg-canvas);
             color: var(--text-primary);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', sans-serif;
             line-height: 1.55;
             min-height: 100vh;
         }
@@ -197,7 +197,7 @@
         }
 
         .anime-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-size: clamp(1.9rem, 3.5vw, 2.85rem);
             font-weight: 800;
             line-height: 1.08;
@@ -205,7 +205,7 @@
             color: #fff;
         }
         .anime-subtitle {
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-size: 0.95rem;
             margin-bottom: 1.25rem;
         }
@@ -312,7 +312,7 @@
             flex-wrap: wrap;
         }
         .panel-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bricolage Grotesque', sans-serif;
             font-size: 1.3rem;
             font-weight: 800;
             display: flex;
@@ -327,7 +327,7 @@
         }
 
         /* ─── EPISODE GRID & SEARCH ─── */
-        .availability-note { color: var(--text-muted); font-size: .82rem; margin: -.4rem 0 .9rem; }
+        .availability-note { color: var(--text-secondary); font-size: .82rem; margin: -.4rem 0 .9rem; }
         .ep-no-match { grid-column: 1 / -1; color: var(--text-secondary); padding: 1rem; }
         .ep-controls {
             display: flex;
@@ -493,7 +493,7 @@
         }
         .mini-poster-sub {
             font-size: 0.72rem;
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-family: 'JetBrains Mono', monospace;
             white-space: nowrap;
             overflow: hidden;
@@ -507,7 +507,7 @@
             align-items: center;
             justify-content: center;
             background: var(--bg-surface);
-            color: var(--text-muted);
+            color: var(--text-secondary);
             font-size: 1.6rem;
         }
         .season-count-badge {
@@ -703,14 +703,14 @@
                 </div>
                 <div class="trailer-embed-wrap" id="detailsTrailerBox">
                     {% if anime.trailer_id %}
-                    <iframe src="https://www.youtube.com/embed/{{ anime.trailer_id }}?rel=0" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                    <iframe src="https://www.youtube.com/embed/{{ anime.trailer_id }}?rel=0" title="Trailer for {{ anime.title }}" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>
                     {% else %}
-                    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);font-size:0.85rem;">
+                    <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:0.85rem;">
                         Trailer preview unavailable
                     </div>
                     {% endif %}
                 </div>
-                <p style="font-size: 0.8rem; color: var(--text-muted);">
+                <p style="font-size: 0.8rem; color: var(--text-secondary);">
                     The embedded trailer is provided by YouTube. CamAnime does not place ads on its own pages or through its media proxy. External video services and embeds may show their own ads, which we cannot control.
                 </p>
             </div>
