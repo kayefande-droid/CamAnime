@@ -9,6 +9,24 @@
     else document.documentElement.setAttribute("data-theme", "midnight");
     if (localStorage.getItem("camanime-motion") === "1") document.documentElement.dataset.motion = "reduced";
   } catch (e) {}
+  /* The header panel is frosted over the hero, but at 72% opacity page text
+     showed through it once the page scrolled. Flip it to solid on scroll. */
+  (function () {
+    var root = document.documentElement;
+    var pending = false;
+    function paint() {
+      pending = false;
+      root.dataset.scrolled = (window.scrollY || window.pageYOffset || 0) > 8 ? "true" : "false";
+    }
+    function onScroll() {
+      if (pending) return;
+      pending = true;
+      window.requestAnimationFrame(paint);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    paint();
+  })();
+
   window.caSetTheme = function (name) {
     if (THEMES.indexOf(name) === -1) name = "midnight";
     document.documentElement.setAttribute("data-theme", name);

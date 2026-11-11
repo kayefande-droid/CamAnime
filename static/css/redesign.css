@@ -37,6 +37,17 @@ html, body { overflow-x: clip; }
   --ca-bleed: clamp(2.6rem, 9vw, 8rem);
 }
 
+/* Phones and tablets keep the plain sticky bar, but header-layout.css paints it
+   with a token base.css does not load here, so it computed to transparent and
+   page text printed through the header. Paint it from the theme's own glass. */
+@media (max-width: 899px) {
+  body header {
+    background: var(--header-glass, var(--bg));
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+  }
+}
+
 /* ── 1. Header: floating capsule on wide screens ──────────────────────────── */
 @media (min-width: 900px) {
   body header {
@@ -44,6 +55,12 @@ html, body { overflow-x: clip; }
     border-bottom: 0;
     box-shadow: none;
     padding-top: .7rem;
+  }
+
+  /* Once the page scrolls, the frosted panel let page text show through the
+     sticky header; it turns solid and stays a panel. */
+  html[data-scrolled="true"] body header .header-inner {
+    background: color-mix(in srgb, var(--bg) 96%, transparent);
   }
 
   body header .header-inner {
