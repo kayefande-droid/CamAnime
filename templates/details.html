@@ -36,7 +36,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v16" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v17" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -606,16 +606,23 @@
                     <span class="badge gold"><i class="fas fa-star"></i> {{ anime.rating }}</span>
                     <span class="badge">{{ anime.format }}</span>
                     <span class="badge">{{ anime.status }}</span>
-                    {% if anime.episodes %}<span class="badge">{{ anime.episodes | length }} Confirmed Episodes</span>{% else %}<span class="badge">Episodes not confirmed</span>{% endif %}
+                    {% if anime.episodes %}<span class="badge">{{ anime.episodes | length }} episodes confirmed</span>{% else %}<span class="badge">Episodes not confirmed</span>{% endif %}
                     {% if anime.season %}
                     <span class="badge">{{ anime.season }}</span>
                     {% endif %}
                 </div>
 
                 <h1 class="anime-title">{{ anime.title }}</h1>
+                {% set _t = (anime.title or '') | lower %}
+                {% set _romaji = anime.title_romaji if anime.title_romaji and anime.title_romaji | lower != _t else '' %}
+                {% set _native = anime.title_native if anime.title_native and anime.title_native | lower != _t and anime.title_native | lower != _romaji | lower else '' %}
+                {% if _romaji or _native or anime.studio %}
                 <div class="anime-subtitle">
-                    {{ anime.title_romaji }} {% if anime.title_native %}• {{ anime.title_native }}{% endif %} • Studio: {{ anime.studio }}
+                    {% if _romaji %}<span>{{ _romaji }}</span>{% endif %}
+                    {% if _native %}<span>{{ _native }}</span>{% endif %}
+                    {% if anime.studio %}<span>Animated by {{ anime.studio }}</span>{% endif %}
                 </div>
+                {% endif %}
 
                 <div class="genre-tags">
                     {% for tag in anime.tags %}

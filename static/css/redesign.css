@@ -492,7 +492,7 @@ body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
 
 body .ep-rail-item { line-height: 1.2; padding-block: .55rem; overflow: visible; }
 
-body .sidebar-title { text-wrap: balance; }
+
 
 /* Server labels read as captions, not terminal output, and the server rows keep
    clear of the schedule tab that sits in the lower-left corner. */
@@ -513,4 +513,189 @@ body .server-row-label {
   body.page-dev header .header-inner .site-logo img { width: clamp(120px, 34vw, 150px); }
   body.page-apps .search-form,
   body.page-dev .search-form { flex: 1 1 100%; max-width: none; }
+}
+
+/* ── 14. Screenshot pass: labels read as sentences, panels keep their text ───
+   Pass over home, details and watch at 360 and 1280. Each rule answers a
+defect seen in the capture, not a preference. */
+
+/* Counters were set in uppercase with wide tracking, which made four plain
+   numbers look like a dashboard widget. */
+body .stat-strip .st-cell span {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: .8rem;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* The synopsis ran the full width of the dossier card, far past a readable
+   measure at 1280. The old 165px scroll box cut the last line in half once the
+   measure narrowed, so the text now shows in full. */
+body .synopsis {
+  max-width: 68ch;
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
+}
+
+/* Alternate titles and the studio print as separate parts; with no separator
+   rule between them they ran together as one string. */
+body .anime-subtitle { display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
+
+/* "Released episodes (1180)" was clipped by the audio label beside it, then
+   its two wrapped lines overlapped once it could wrap. */
+body .sidebar-head { flex-wrap: wrap; gap: .25rem .6rem; min-width: 0; }
+body .sidebar-title {
+  white-space: normal;
+  min-width: 0;
+  line-height: 1.3;
+  font-size: .95rem;
+  text-wrap: initial;
+}
+
+/* The schedule handle is fixed over the page, so it must stay small: icon and
+   count by default, the word only while hovered or focused. */
+body .live-schedule-tab {
+  min-height: 2.6rem;
+  padding: .35rem .55rem;
+  gap: .35rem;
+}
+body .live-schedule-tab .live-schedule-tab-label {
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+}
+body .live-schedule-tab:hover .live-schedule-tab-label,
+body .live-schedule-tab:focus-visible .live-schedule-tab-label {
+  max-width: 8rem;
+  opacity: 1;
+}
+
+/* Phones: the search placeholder was cut mid-word. */
+@media (max-width: 420px) {
+  body .search-input { font-size: .82rem; }
+}
+body .search-input::placeholder { text-overflow: ellipsis; }
+
+/* ── 15. Home structure: a genre rail and a continue-watching row ──────────
+   The catalogue grid had nothing above it to orient the visit, so genres and
+   resumable titles now sit in their own horizontal rows. */
+/* The filter ribbon was a single flex row, so the rail title was squeezed into
+   a one-letter column. It now stacks: heading, then the scrolling chips. */
+body .filter-bar {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: .25rem;
+  overflow: visible;
+}
+body .rail-head { display: flex; align-items: baseline; gap: .6rem; width: 100%; margin-bottom: .5rem; }
+body .rail-title {
+  margin: 0;
+  font-size: .95rem;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--text-primary);
+}
+body .rail-clear {
+  background: none;
+  border: 0;
+  padding: .35rem .2rem;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: .82rem;
+  cursor: pointer;
+}
+body .rail-clear:hover,
+body .rail-clear:focus-visible { color: var(--text-primary); }
+
+body .genre-pills {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .45rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  padding-bottom: .3rem;
+}
+body .genre-pills > .genre-pill {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  white-space: nowrap;
+}
+
+/* Continue-watching reads as a row of resumable titles, not another grid. */
+body .anime-grid.continue-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: .8rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  padding-bottom: .35rem;
+  align-items: stretch;
+}
+body .anime-grid.continue-rail > .anime-card {
+  flex: 0 0 168px;
+  scroll-snap-align: start;
+}
+@media (min-width: 900px) {
+  /* The shared grid rule promotes the first card to a 2x2 feature tile; the
+     rail keeps every card the same width. */
+  body .anime-grid.continue-rail > .anime-card:first-child {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  body .anime-grid.continue-rail > .anime-card { flex-basis: 186px; }
+}
+
+/* The player had no background of its own, so an episode without a resolved
+   source read as a dead black rectangle. */
+body .ca-player .ca-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: .3;
+  pointer-events: none;
+}
+
+/* Phones: the watch header put the logo, the episode breadcrumb and three
+   header buttons on one row, so they printed on top of each other. Each part
+   now takes its own line. */
+@media (max-width: 640px) {
+  body.page-watch header .header-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: .3rem;
+    padding-bottom: .5rem;
+  }
+  body.page-watch header .header-inner > div:first-child { display: contents; }
+  body.page-watch header .header-inner .site-logo img { width: clamp(118px, 32vw, 148px); max-height: 40px; }
+  body.page-watch header .header-inner .breadcrumb-bar { width: 100%; min-width: 0; font-size: .82rem; }
+  body.page-watch header .header-inner .breadcrumb-bar a { max-width: none; }
+  body.page-watch header .header-inner > div:last-child { flex-wrap: wrap; gap: .4rem; align-items: center; }
+  body.page-watch header .header-inner > div:last-child > * { flex: 0 0 auto; }
+}
+
+/* Phones: the card action row is always visible on touch, and its two icon
+   buttons pushed the primary action outside the tile. */
+@media (max-width: 480px) {
+  body .card-hover-actions { padding: .55rem; }
+  body .card-action-row .card-btn-trailer { display: none; }
+  body .card-btn-play { font-size: .74rem; padding-inline: .5rem; }
+}
+
+/* Phones: the hero description was clamped to a third of a sentence. */
+@media (max-width: 480px) {
+  body .hero-desc {
+    -webkit-line-clamp: 4;
+    font-size: .9rem;
+    max-width: 40ch;
+  }
 }

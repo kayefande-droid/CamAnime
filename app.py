@@ -1685,14 +1685,16 @@ def home():
         hero_slides.insert(0, {
             "id": 0,
             "title": "Watch Anime Online Free on CamAnime",
-            "description": "Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.",
+            "description": "Stream anime with English subtitles or dub, read episode guides, and keep your watchlist and resume points on every device.",
             "banner": None,
             "image": "/static/brand/camanime-icon.svg",
-            "rating": "HD FREE",
-            "format": "STREAMING",
-            "episode": "English SUB & English DUB",
-            "genres": ["Action", "Anime"],
-            "status": "FREE",
+            # The brand card carries no rating, format or genre: those fields only
+            # describe a real title, and inventing them for the brand read as filler.
+            "rating": "",
+            "format": "",
+            "episode": "",
+            "genres": [],
+            "status": "",
             "latest_ep": False,
             "trailer_id": "",
         })

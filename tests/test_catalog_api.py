@@ -320,7 +320,7 @@ def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
     })
     assert sub_page.status_code == 200
     assert b"No provider-listed English dub is available" in sub_page.data
-    assert b"PROVIDER-LISTED DUB SERVERS" not in sub_page.data
+    assert b"Provider-listed English dub" not in sub_page.data
     assert b"if (true) {\n            showPlayerError('No provider-listed English dub is available" in sub_page.data
     assert b"embed-vidsrc-dub" not in sub_page.data
     assert b"Active Server: CamStream HD-1 (SUB)" in sub_page.data
@@ -329,7 +329,7 @@ def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
         "name": "Dub-HD", "type": "dub", "link_id": "dub-id", "slug": "matched", "ep_num": 1,
     })
     assert dub_page.status_code == 200
-    assert b"PROVIDER-LISTED ENGLISH DUB SERVERS" in dub_page.data
+    assert b"Provider-listed English dub" in dub_page.data
     assert b"CamStream Dub-HD (DUB)" in dub_page.data
     assert b"if (false) {\n            showPlayerError('No provider-listed English dub is available" in dub_page.data
 

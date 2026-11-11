@@ -44,7 +44,7 @@
     <script src="/static/js/player-ui.js?v=20261110-player" defer></script>
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v16" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v17" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -477,7 +477,7 @@
     </style>
     <link href="/static/css/header-layout.css?v=20261111-tokens" rel="stylesheet">
 </head>
-<body>
+<body class="page-watch">
 <a class="skip-link" href="#main-content">Skip to video player</a>
 
 <header>
@@ -515,6 +515,9 @@
                      over from the browser controls once it binds. Iframe providers
                      keep their own controls; this wrapper hides itself for them. -->
                 <div class="ca-player" id="caPlayer">
+                    <!-- Poster sits behind the video surface, so an unresolved episode
+                         shows the artwork instead of an empty black box. -->
+                    <img class="ca-poster" src="{{ anime.banner or anime.image or '/static/brand/camanime-icon.svg' }}" alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <video id="nativeVideo" controls playsinline preload="auto" crossorigin="anonymous" style="display: none;"></video>
                     <div class="ca-shade" aria-hidden="true"></div>
                     <button type="button" class="ca-big-play" aria-label="Play"><i class="fas fa-play" aria-hidden="true"></i></button>
@@ -614,7 +617,7 @@
             <!-- Episode sources listed by configured providers; audio options vary by episode. -->
             <div class="server-deck">
                 <div class="server-row">
-                    <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> ENGLISH SUB SERVERS:</span>
+                    <span class="server-row-label"><i class="fas fa-closed-captioning" style="color:var(--accent);"></i> English subtitles</span>
                     {% for srv in servers if srv.audio == 'sub' %}
                     <button type="button"
                             class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"
@@ -629,7 +632,7 @@
 
                 {% if bundle.audio_availability.dub %}
                 <div class="server-row">
-                    <span class="server-row-label"><i class="fas fa-headphones" style="color:#34d399;"></i> PROVIDER-LISTED ENGLISH DUB SERVERS:</span>
+                    <span class="server-row-label"><i class="fas fa-headphones" style="color:var(--accent);"></i> Provider-listed English dub</span>
                     {% for srv in servers if srv.audio == 'dub' %}
                     <button type="button"
                             class="server-btn {{ 'active' if srv.id == active_server.id else '' }}"

@@ -47,7 +47,7 @@
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/base.css?v=20261111-tokens" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v16" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v17" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -966,14 +966,16 @@
             <div class="hero-vignette"></div>
             <div class="hero-body">
                 {% if loop.first %}<h1 class="hero-title">{{ slide.title }}</h1>{% else %}<div class="hero-title">{{ slide.title }}</div>{% endif %}
+                {% if slide.rating or slide.format or slide.episode or slide.genres %}
                 <div class="hero-meta-row">
-                    <span class="meta-pill gold"><i class="fas fa-star"></i> {{ slide.rating }}</span>
-                    <span class="meta-pill">{{ slide.format }}</span>
-                    <span class="meta-pill">{{ slide.episode }}</span>
+                    {% if slide.rating %}<span class="meta-pill gold"><i class="fas fa-star"></i> {{ slide.rating }}</span>{% endif %}
+                    {% if slide.format %}<span class="meta-pill">{{ slide.format }}</span>{% endif %}
+                    {% if slide.episode %}<span class="meta-pill">{{ slide.episode }}</span>{% endif %}
                     {% for g in slide.genres[:3] %}
                     <span class="meta-pill">{{ g }}</span>
                     {% endfor %}
                 </div>
+                {% endif %}
                 <p class="hero-desc">{{ slide.description }}</p>
                 <div class="hero-ctas">
                     {% if slide.latest_ep %}
@@ -1064,6 +1066,11 @@
     {% endif %}
 
     <div class="filter-bar">
+        {% if page_type == 'home' and not active_genre and not active_format %}
+        <div class="rail-head">
+            <h2 class="rail-title">Browse by genre</h2>
+        </div>
+        {% endif %}
         <div class="genre-pills">
             <a href="{{ '/search?q=' ~ (search_query | urlencode) if page_type == 'search' else '/' }}" class="genre-pill {{ 'active' if not active_genre and not active_format and page_type == 'home' else '' }}">All Anime</a>
             {% for g in genres %}
@@ -1076,32 +1083,18 @@
          Shown only on the homepage (not on genre/format/search result pages),
          so switching genre is not hidden behind a permanent watchlist row.
          Signed-in users get server-side rows that sync to every device. ── -->
-    <section class="dev-ad" aria-labelledby="devAdTitle">
-        <span class="dev-eyebrow">Developer API · Free</span>
-        <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
-        <p class="dev-lede">Create a key, call one endpoint, play a direct MP4 on your own site. A thousand calls a day, no card, CORS enabled.</p>
-        <ul class="dev-bullets">
-            <li>Direct MP4 — no iframe, no ads</li>
-            <li>One provider, resolved live</li>
-            <li>Keys you can revoke anytime</li>
-        </ul>
-        <div class="hero-ctas">
-            <a class="btn-primary" href="/developers#keys">Create a free API key</a>
-            <a class="btn-secondary" href="/developers#docs">View the docs</a>
-        </div>
-    </section>
-
     <section class="section-block" id="watchlistSection" style="display: none;">
         <div class="section-head" style="flex-wrap: wrap; gap: 0.5rem;">
             <div class="section-title-wrap">
                 <span class="section-accent-bar"></span>
-                <h2 class="section-title">Your Watchlist & Continue Watching</h2>
+                <h2 class="section-title">Continue watching</h2>
+                <span class="section-subtitle">Saved titles and the episode to resume</span>
             </div>
-            <button type="button" onclick="clearWatchlist()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.82rem;">
-                <i class="fas fa-trash"></i> Clear List
+            <button type="button" onclick="clearWatchlist()" class="rail-clear">
+                <i class="fas fa-trash"></i> Clear list
             </button>
         </div>
-        <div class="anime-grid" id="watchlistGrid"></div>
+        <div class="anime-grid continue-rail" id="watchlistGrid"></div>
     </section>
 
     <!-- ─── PRIMARY TRENDING / SEARCH RESULTS GRID ─── -->
@@ -1168,6 +1161,20 @@
             <a href="{{ '/' if page_type != 'search' else '/search?q=' ~ (search_query | urlencode) }}" class="btn-primary">Clear filters</a>
         </div>
         {% endif %}
+    </section>
+
+    <section class="dev-ad" aria-labelledby="devAdTitle">
+        <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
+        <p class="dev-lede">Create a key, call one endpoint, play a direct MP4 on your own site. A thousand calls a day, no card, CORS enabled.</p>
+        <ul class="dev-bullets">
+            <li>Direct MP4 — no iframe, no ads</li>
+            <li>One provider, resolved live</li>
+            <li>Keys you can revoke anytime</li>
+        </ul>
+        <div class="hero-ctas">
+            <a class="btn-primary" href="/developers#keys">Create a free API key</a>
+            <a class="btn-secondary" href="/developers#docs">View the docs</a>
+        </div>
     </section>
 
     {% if page_type == 'home' and most_viewed_day is defined and most_viewed_day is not none %}
