@@ -79,6 +79,15 @@ export default {
       return json({ error: "Server error", detail: String(err && err.message) }, 500);
     }
 
+    // The Render site keeps /schedule as an entry point that opens the schedule
+    // drawer on the home page; the mirror 404'd it.
+    if (path === "/schedule") {
+      const target = new URL(request.url);
+      target.pathname = "/";
+      target.searchParams.set("schedule", "open");
+      return Response.redirect(target.toString(), 302);
+    }
+
     // Health endpoint for uptime checks / Workers Builds verification.
     if (path === "/healthz") return json({
       ok: true,
