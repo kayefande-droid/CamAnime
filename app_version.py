@@ -23,15 +23,16 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.14.0",
-    "latest_version_code": 27,
+    "latest_version": "2.15.0",
+    "latest_version_code": 28,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 27: install fix, version-stamped APK filename, home redesign, "
-        "sub/dub switching, device-delete, poster persistence, notifications."
+        "Build 28: provider-accurate DUB switching, 'DUB not yet released' "
+        "state, version + build shown in app, install fix, home redesign, "
+        "device-delete, poster persistence, notifications."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "

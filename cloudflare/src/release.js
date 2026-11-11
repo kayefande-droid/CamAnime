@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.14.0";
-export const LATEST_BUILD = 27;
+export const LATEST_VERSION = "2.15.0";
+export const LATEST_BUILD = 28;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,13 +21,15 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "a7c5ec7ce93e67e59d7e9599c29ab329a24b8e3b6cb45a1ab46b229ad5387e86";
+  "294e6b20911155728857a7bd560475d29505300d6d832c67039ed043c21578c9";
 
 /** Download filename shown to users, so saved APKs are never ambiguous. */
 export const APK_FILENAME = `CamAnime-${LATEST_VERSION}-build${LATEST_BUILD}.apk`;
 
 export const RELEASE_NOTES =
-  "Build 27: install fix (v2/v3 signing), version-stamped download filename, "
+  "Build 28: provider-accurate DUB server switching, explicit 'DUB not yet "
+  "released' state, version + build shown in app, "
+  "install fix (v2/v3 signing), version-stamped download filename, "
   "home redesign, sub/dub switching, device-delete, poster persistence, "
   "background notifications.";
 

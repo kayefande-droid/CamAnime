@@ -3351,8 +3351,8 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.14.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 27
+APP_VERSION = "2.15.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 28
 # The release tag tracks the app version, so a new build can never point
 # /get/android at an older asset (the old default was a stale v1.2.0).
 if not os.environ.get("CAMANIME_RELEASE_TAG"):

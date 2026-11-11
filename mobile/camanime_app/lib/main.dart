@@ -30,7 +30,11 @@ import 'screens/settings_screen.dart';
 import 'widgets/episode_board.dart';
 
 // ── Release line ───────────────────────────────────────
-const String appVersion = '2.12.0';
+const String appVersion = kAppVersion;
+
+/// Version and build, shown under Settings → About so an install can always be
+/// identified against the release on the website.
+const String appBuildLabel = '$kAppVersion (build $kAppBuildNumber)';
 const String appCredit = 'Made by kayefande-droid & co.';
 
 // ── Website-mirrored palette ───────────────────────────
@@ -523,7 +527,7 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
                         builder: (_) => SettingsScreen(
                             themeName: themeName,
                             onTheme: _applyTheme,
-                            version: appVersion,
+                            version: appBuildLabel,
                             credit: appCredit,
                             themes: appThemes,
                             onReplayTour: () =>
@@ -3513,6 +3517,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   onOpenAnime: _openAnime,
                   animeId: widget.animeId,
                   audio: audio,
+                  dubAvailable: _dubAvailable,
                   onAudioSwitch: _audioSwitchInPlayer,
                 )));
   }
@@ -3698,9 +3703,9 @@ class _DetailScreenState extends State<DetailScreen> {
                         if (_dubAvailable == false) ...[
                           const SizedBox(height: 6),
                           const Text(
-                            'No provider dub is published for this title yet. '
-                            'SUB is used automatically when a DUB track does '
-                            'not exist.',
+                            'English DUB is not yet released for this title. '
+                            'SUB plays by default, and DUB switches on by '
+                            'itself once the provider publishes it.',
                             style: TextStyle(
                                 color: CamColors.inkDim,
                                 fontSize: 10.5,
@@ -3881,28 +3886,34 @@ class _DetailScreenState extends State<DetailScreen> {
 
   /// Re-fetches the current episode's sources with a new audio and returns the
   /// best URL for the player. Used by the in-player audio switch.
-  Future<String?> _audioSwitchInPlayer(String newAudio) async {
-    if (widget.animeId.isEmpty) return null;
+  Future<AudioSwitchResult> _audioSwitchInPlayer(String newAudio) async {
+    if (widget.animeId.isEmpty) return const AudioSwitchResult.failed();
     final ep = currentEpisode ?? 1;
     try {
       final bundle = await Api.episodeSources(widget.animeId, ep, newAudio);
       _applyAudioAvailability(bundle);
+      // The provider decides which audio tracks exist. When it publishes no
+      // track for this language on this episode, say so instead of playing the
+      // other track under the wrong label.
+      final available =
+          ((bundle['audio_availability'] as Map?) ?? const {})[newAudio];
+      if (available != true) return const AudioSwitchResult.unavailable();
       final list = await _streamSourcesForBundle(bundle, ep,
-          preferredAudio: newAudio);
-      if (list.isEmpty) return null;
+          preferredAudio: newAudio, strictAudio: true);
+      if (list.isEmpty) return const AudioSwitchResult.unavailable();
       // Keep the rest of the screen (and the next-episode fetch) in sync with
       // the audio the user just picked, so auto-advance stays in the same
       // language instead of snapping back to the previous one.
       _setAudio(newAudio);
-      return list.first.url;
+      return AudioSwitchResult.ok(list.first.url);
     } catch (_) {
-      return null;
+      return const AudioSwitchResult.failed();
     }
   }
 
   Future<List<EpisodeSource>> _streamSourcesForBundle(
       Map<String, dynamic> bundle, int ep,
-      {String? preferredAudio}) async {
+      {String? preferredAudio, bool strictAudio = false}) async {
     final p = await SharedPreferences.getInstance();
     final saved = p.getString('stream_quality') ?? 'auto';
     final pref = (p.getBool('app_data_saver') ?? false) ? '480' : saved;
@@ -5310,7 +5321,7 @@ class _AudioSeasonBar extends StatelessWidget {
                   value: 'dub',
                   enabled: dubAvailable != false,
                   icon: Icon(Icons.headphones_rounded, size: 14),
-                  label: Text('DUB')),
+                  label: Text(dubAvailable == false ? 'DUB · SOON' : 'DUB')),
             ],
             selected: {audio},
             showSelectedIcon: false,

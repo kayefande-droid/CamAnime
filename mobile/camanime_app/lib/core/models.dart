@@ -80,6 +80,7 @@ List<EpisodeSource> episodeSourcesFromBundle(
   required String preferredAudio,
   required String Function(String) absolute,
   String qualityPreference = 'auto',
+  bool strictAudio = false,
 }) {
   final servers = (bundle['servers'] as List?) ?? const [];
   final sources = <EpisodeSource>[];
@@ -88,6 +89,12 @@ List<EpisodeSource> episodeSourcesFromBundle(
     if (raw is! Map) continue;
     final mode = (raw['playback_mode'] ?? '').toString();
     if (mode != 'mp4' && mode != 'hls') continue;
+    // A DUB switch must never quietly play the SUB file: when the caller asks
+    // for one specific track, servers carrying the other track are dropped.
+    if (strictAudio &&
+        (raw['audio'] ?? '').toString() != preferredAudio) {
+      continue;
+    }
     final path = (raw['stream_url'] ?? '').toString();
     if (path.isEmpty) continue;
     final url = absolute(path);

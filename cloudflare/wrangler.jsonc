@@ -21,7 +21,7 @@
   // Defaults the worker reads at runtime. Override per environment in the
   // dashboard (Settings → Variables) without editing code.
   "vars": {
-    "APP_VERSION": "2.14.0",
+    "APP_VERSION": "2.15.0",
     // Leave empty to keep /admin a 404, matching the Render origin's
     // CAMANIME_ADMIN_PATH policy. Set it to serve the private dashboard.
     "ADMIN_PATH": "/owner-console",
