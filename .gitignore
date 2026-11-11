@@ -44,3 +44,8 @@ render_env.json
 .env.*
 !.env.example
 .judgment/shots/
+# E2E harness (Playwright): browsers, videos, traces and the throwaway DB.
+.e2e/
+node_modules/
+playwright-report/
+test-results/

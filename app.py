@@ -299,7 +299,10 @@ def _guard_request():
         return jsonify({"status": "error", "error": "Bad request."}), 400
     if request.method in ("POST", "PUT", "PATCH") and (request.content_length or 0) > 2 * 1024 * 1024:
         return jsonify({"status": "error", "error": "Payload too large."}), 413
-    if _rate_limited(path):
+    # Page views are not an attack. Rate-limiting GET /login meant a member who
+    # reloaded the form a few times in five minutes was locked out of their own
+    # account page, so only submissions and API traffic are counted.
+    if (request.method != "GET" or path.startswith("/api/")) and _rate_limited(path):
         resp = jsonify({"status": "error",
                         "error": "Too many requests. Please slow down and try again shortly."})
         resp.status_code = 429
@@ -606,6 +609,13 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
                     timeout=10,
                 )
                 status = int(getattr(response, "status_code", 200) or 200)
+                if status == 404:
+                    # A missing title comes back as HTTP 404 plus a "Not Found"
+                    # GraphQL error. That is an answer, not an outage: record it
+                    # and stop retrying so details pages can 404 honestly.
+                    _anilist_missing_keys.add(cache_key)
+                    _mark_anilist_result(False)
+                    return {}
                 if status in (429, 500, 502, 503, 504):
                     # Rate limited or upstream blip: back off briefly, then retry.
                     time.sleep(0.6 * (attempt + 1))
@@ -628,10 +638,12 @@ def fetch_anilist(query: str, variables: Optional[Dict] = None,
         # never 404 a page that may exist.
         try:
             errors = (payload or {}).get("errors") or []
-            if (isinstance(data, dict) and data.get("Media") is None
-                    and "Media" in data
-                    and any("not found" in str(e.get("message", "")).lower()
-                            for e in errors if isinstance(e, dict))):
+            # `"Media": null` with no errors is AniList answering "no such
+            # title" — the id space is defined, so this is a definite miss, not
+            # an outage. It used to fall through to a thin provider page with a
+            # 200 status, which search engines then indexed.
+            if (isinstance(data, dict) and "Media" in data
+                    and data.get("Media") is None):
                 _anilist_missing_keys.add(cache_key)
             else:
                 _anilist_missing_keys.discard(cache_key)
@@ -1829,10 +1841,20 @@ def search():
     # Also search AnimeHeaven directly so niche / scraper-only shows appear
     heaven_matches = streaming_manager.animeheaven.search(query)[:12]
 
+    # The results page needs its own title and description: sharing a search URL
+    # used to give a preview that named nothing about the search.
+    shown = query[:80]
+    result_word = "result" if len(results) == 1 else "results"
+    page_title = (f'“{shown}” — {len(results)} anime {result_word} on CamAnime')
+    page_description = (f'Anime matching “{shown}” on CamAnime, with English subtitles '
+                        'and dubs where the provider lists them.')
+
     return render_template(
         "index.html",
         trending=results,
         heaven_recent=heaven_matches,
+        page_title=page_title,
+        page_description=page_description,
         popular_season=[],
         top_rated=[],
         featured=results[0] if results else None,
@@ -2177,6 +2199,9 @@ def watch(anime_id: int, ep_num: int):
             rel_card["episode_count"] = _count or None
             relations.append(rel_card)
 
+    # The player resumes from the account as well as the device, so it needs to
+    # know whether anyone is signed in.
+    _watch_user = _current_user()
     return render_template(
         "watch.html",
         anime={
@@ -2185,6 +2210,7 @@ def watch(anime_id: int, ep_num: int):
             "episodes": episodes,
             "relations": relations[:6],
         },
+        signed_in=bool(_watch_user and not _watch_user.get("guest")),
         ep_num=ep_num,
         current_episode_title=current_episode_title,
         total_episodes=total_episodes,

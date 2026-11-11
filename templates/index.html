@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CamAnime – Watch Anime Online Free in HD</title>
-    <meta name="description" content="Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.">
+    <title>{{ page_title or 'CamAnime – Watch Anime Online Free in HD' }}</title>
+    <meta name="description" content="{{ page_description or 'Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.' }}">
     <meta name="keywords" content="CamAnime, camanime, Cam-Anime, camanjme, watch anime online free, watch anime online, free anime streaming, HD anime, English-subbed and English-dubbed anime, anime collection, stream anime online">
     {% if page_type == 'search' or page_type == 'filter' or request.args.get('genre') or request.args.get('format') or request.args.get('status') or request.args.get('year_before') or request.args.get('sort') %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
     <meta property="og:site_name" content="CamAnime">
     <meta property="og:url" content="https://camanime.onrender.com/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="CamAnime – Watch Anime Online Free in HD">
-    <meta property="og:description" content="Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.">
+    <meta property="og:title" content="{{ page_title or 'CamAnime – Watch Anime Online Free in HD' }}">
+    <meta property="og:description" content="{{ page_description or 'Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.' }}">
     <meta property="og:image" content="https://camanime.onrender.com/static/icon-512.png">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="CamAnime – Watch Anime Online Free in HD">
-    <meta name="twitter:description" content="Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.">
+    <meta name="twitter:title" content="{{ page_title or 'CamAnime – Watch Anime Online Free in HD' }}">
+    <meta name="twitter:description" content="{{ page_description or 'Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.' }}">
     <meta name="twitter:image" content="https://camanime.onrender.com/static/icon-512.png">
     <meta property="og:image:alt" content="CamAnime — watch anime online free in HD">
     <meta name="twitter:image:alt" content="CamAnime — watch anime online free in HD">
@@ -1158,7 +1158,11 @@
         <div class="discovery-empty" role="status">
             <p>No AniList titles matched these filters. Try a different genre, format, year, or status.</p>
             {% if page_type == 'search' %}<p>{{ provider_result_count or 0 }} additional provider catalog matches are listed below when available.</p>{% endif %}
-            <a href="{{ '/' if page_type != 'search' else '/search?q=' ~ (search_query | urlencode) }}" class="btn-primary">Clear filters</a>
+            {% if page_type == 'search' %}
+            <a href="/" class="btn-primary">Clear search</a>
+            {% else %}
+            <a href="/" class="btn-primary">Clear filters</a>
+            {% endif %}
         </div>
         {% endif %}
     </section>
@@ -1570,6 +1574,9 @@
     // Watchlist Management — rendered ONLY on the homepage (page_type === 'home').
     // Genre / format / search pages skip it entirely so switching genre is obvious.
     const IS_HOME_PAGE = {{ 'true' if page_type == 'home' else 'false' }};
+    // Guests must not ask for account history: the 401 it answers with showed
+    // up as a console error on every anonymous home load.
+    const IS_SIGNED_IN = {{ 'true' if signed_in|default(false) else 'false' }};
     function readWatchlist() {
         try {
             const value = JSON.parse(localStorage.getItem('camanime_watchlist') || '[]');
@@ -1638,7 +1645,7 @@
     // Server-synced continue watching (logged-in users): replaces local rows
     // so the same account shows the same 'continue' list on every device.
     async function loadSyncedHistory() {
-        if (!IS_HOME_PAGE) return;
+        if (!IS_HOME_PAGE || !IS_SIGNED_IN) return;
         try {
             const r = await fetch('/api/history', { credentials: 'same-origin' });
             if (r.status !== 200) return;

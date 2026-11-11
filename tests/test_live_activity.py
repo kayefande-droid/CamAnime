@@ -20,6 +20,9 @@ def _fresh():
 
 
 def test_record_activity_marks_anonymous_users_as_guest():
+    # The feed is process-global, so rows recorded by other test modules are
+    # still in it when this file runs after them.
+    camanime._LIVE_ACTIVITY.clear()
     with camanime.app.test_request_context("/"):
         camanime._record_activity("stream", detail="cdn.example")
     row = camanime._LIVE_ACTIVITY[0]

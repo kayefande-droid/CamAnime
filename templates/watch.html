@@ -1064,8 +1064,26 @@
         videoEl.addEventListener('timeupdate', () => saveResumePoint(false));
         videoEl.addEventListener('pause', () => saveResumePoint(true));
         window.addEventListener('pagehide', () => saveResumePoint(true));
+        const IS_SIGNED_IN = {{ 'true' if signed_in|default(false) else 'false' }};
         let resumeTarget = 0;
         try { resumeTarget = parseFloat(localStorage.getItem(resumeKey) || '0') || 0; } catch (e) { resumeTarget = 0; }
+        // A member's position belongs to the account, not the browser. On a
+        // device with no local point yet, ask the server so our phone and our
+        // laptop continue from the same second.
+        if (IS_SIGNED_IN && !(resumeTarget > 5)) {
+            fetch('/api/history', { credentials: 'same-origin' })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => {
+                    const row = (d && d.history ? d.history : []).find(
+                        (h) => Number(h.anime_id) === {{ anime.id }});
+                    const pos = Number((row && row.position) || 0);
+                    const rowEp = Number((row && row.ep) || 0);
+                    if (!(pos > 5) || (rowEp && rowEp !== {{ ep_num }})) return;
+                    resumeTarget = pos;
+                    applyResumePoint();
+                })
+                .catch(() => {});
+        }
         const resumeNote = document.getElementById('caResumeNote');
         let resumeNoteTimer = 0;
         function clockLabel(seconds) {
