@@ -32,6 +32,7 @@ import os
 from flask import session
 
 import camanime_platform as platform
+import honeypot
 import mfa
 import push
 
@@ -293,6 +294,29 @@ def _guard_request():
     if path in ("/robots.txt", "/sitemap.xml", "/healthz") or (
             path.startswith("/google") and path.endswith(".html")):
         return None
+    # Decoy containment is the last fallback: a client that proves hostile
+    # intent is walked into an inert clone instead of being told the site is
+    # defended, and every action there becomes tamper-evident evidence.
+    # Signed-in members and API clients with a bearer token are never trapped.
+    if honeypot.enabled() and not path.startswith("/static/") and not path.startswith("/decoy"):
+        client = _client_ip()
+        browser = "text/html" in (request.headers.get("Accept") or "")
+        # Containment is a browser experience. API and tooling clients keep the
+        # honest 404/429 contract, so throttling and error semantics stay intact.
+        if browser and not session.get("user_email") and not _bearer_token():
+            if honeypot.SUSPECT_PATH.search(path):
+                honeypot.flag(client, "scanner-path")
+                honeypot.record(client, request.method, path,
+                                request.headers.get("User-Agent", ""),
+                                request.headers.get("Referer", ""),
+                                detail='{"signal":"scanner-path"}')
+                return redirect("/decoy")
+            if honeypot.is_flagged(client):
+                honeypot.record(client, request.method, path,
+                                request.headers.get("User-Agent", ""),
+                                request.headers.get("Referer", ""),
+                                detail='{"signal":"contained"}')
+                return redirect("/decoy")
     if _BLOCKED_PATTERNS.search(path):
         return jsonify({"status": "error", "error": "Not found."}), 404
     if len(path) > 512:
@@ -330,6 +354,23 @@ def _speed_headers(resp):
                 resp.set_data(_gz.compress(body, compresslevel=5))
                 resp.headers["Content-Encoding"] = "gzip"
                 resp.headers["Content-Length"] = str(len(resp.get_data()))
+    except Exception:
+        pass
+    return resp
+
+
+@app.after_request
+def _note_hostile_results(resp):
+    """Feed failures into the trapper: brute force and admin probing escalate."""
+    try:
+        path = request.path or ""
+        if not honeypot.enabled() or path.startswith("/decoy"):
+            return resp
+        if resp.status_code in (401, 403):
+            if path.startswith("/api/admin/"):
+                honeypot.note_admin_denial(_client_ip())
+            elif path in ("/api/auth/login", "/login"):
+                honeypot.note_auth_failure(_client_ip())
     except Exception:
         pass
     return resp
@@ -4484,6 +4525,80 @@ def api_admin_security_log():
     return jsonify({"status": "success",
                     "entries": app_version.list_audit(
                         request.args.get("limit", 50))})
+
+
+@app.route("/decoy", defaults={"rest": ""}, methods=["GET", "POST"])
+@app.route("/decoy/<path:rest>", methods=["GET", "POST"])
+def decoy_surface(rest: str):
+    """Inert clone served to contained clients. Nothing here is real."""
+    if not honeypot.enabled():
+        return jsonify({"status": "error", "error": "Not found."}), 404
+    ip = _client_ip()
+    ua = request.headers.get("User-Agent", "")
+    ref = request.headers.get("Referer", "")
+    variant = (rest or "").split("/")[0] or "home"
+    if variant not in ("home", "login", "admin", "settings", "popular",
+                       "schedule", "search", "watch", "reset"):
+        variant = "home"
+    if request.method == "POST":
+        body = request.get_json(silent=True) or request.form or {}
+        if not isinstance(body, dict):
+            body = {}
+        detail = {
+            "variant": variant,
+            "captured": {
+                key: honeypot.fingerprint(body.get(key))
+                for key in ("email", "password", "code", "name")
+                if body.get(key)
+            },
+            "field_count": len(body),
+        }
+        honeypot.record(ip, request.method, request.path, ua, ref,
+                        detail=json.dumps(detail, sort_keys=True))
+        time.sleep(0.6)
+        page = "admin" if variant == "admin" else "login"
+        resp = Response(render_template(
+            "decoy.html", variant=page,
+            error="Incorrect email or password. Please try again."),
+            mimetype="text/html")
+    else:
+        honeypot.record(ip, request.method, request.path, ua, ref,
+                        detail=json.dumps({"variant": variant}, sort_keys=True))
+        resp = Response(render_template("decoy.html", variant=variant),
+                        mimetype="text/html")
+    resp.headers["X-CamAnime-Decoy"] = "1"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/admin/intrusion-report")
+def api_admin_intrusion_report():
+    """Owner-only, tamper-evident bundle for a police or host report."""
+    u = _require_role("owner")
+    if not u:
+        return _admin_denied()
+    try:
+        limit = int(request.args.get("limit", 500))
+    except (TypeError, ValueError):
+        limit = 500
+    if (request.args.get("format") or "").lower() == "text":
+        return Response(honeypot.report_text(limit), mimetype="text/plain")
+    return jsonify({"status": "success", **honeypot.report(limit)})
+
+
+@app.route("/api/admin/intrusion-release", methods=["POST"])
+def api_admin_intrusion_release():
+    """Owner-only: undo a false positive so a real member is not stuck in the clone."""
+    u = _require_role("owner")
+    if not u:
+        return _admin_denied()
+    body = request.get_json(silent=True) or request.form or {}
+    ip = str((body or {}).get("ip", "")).strip()
+    if not ip:
+        return jsonify({"status": "error", "error": "ip required"}), 400
+    honeypot.release(ip)
+    app_version.audit(u["email"], "intrusion.release", ip)
+    return jsonify({"status": "success", "released": ip})
 
 
 @app.route("/api/admin/mfa", methods=["GET"])

@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 camanime_store.json
 camanime.db*
+intrusions.db*
 *.db-wal
 *.db-shm
 *.db-journal

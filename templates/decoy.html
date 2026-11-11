@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CamAnime — watch anime free</title>
+<!-- CamAnime decoy surface. Inert: no real account, session or data is reachable from here. -->
+<meta name="robots" content="noindex, nofollow">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#07080d;--panel:#0e111a;--line:rgba(255,255,255,.1);--text:#f3f5fa;--muted:#a0abc0;--accent:#FFB347;--crimson:#FF5E62}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',system-ui,sans-serif;min-height:100vh}
+a{color:inherit;text-decoration:none}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:1.5rem;padding:1rem 1.75rem;background:rgba(7,8,13,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.brand{font-family:'Bricolage Grotesque',system-ui;font-weight:800;font-size:1.35rem;letter-spacing:-.02em}
+.brand span{color:var(--accent)}
+nav{display:flex;gap:1.1rem;font-size:.88rem;color:var(--muted);flex-wrap:wrap}
+nav a:hover{color:var(--text)}
+.search{margin-left:auto;display:flex;align-items:center;gap:.5rem;background:#141926;border:1px solid var(--line);border-radius:999px;padding:.45rem .85rem;min-width:200px}
+.search input{background:none;border:0;color:var(--text);outline:none;font-size:.85rem;width:100%}
+main{padding:2rem 1.75rem 4rem;max-width:1180px;margin:0 auto}
+.hero{border:1px solid var(--line);border-radius:24px;padding:2.25rem;background:radial-gradient(circle at 15% 0%,rgba(255,179,71,.14),transparent 55%),radial-gradient(circle at 85% 30%,rgba(255,94,98,.12),transparent 50%),var(--panel);margin-bottom:2rem}
+.hero h1{font-family:'Bricolage Grotesque',system-ui;font-size:2.1rem;line-height:1.15;margin-bottom:.6rem}
+.hero p{color:var(--muted);max-width:52ch;margin-bottom:1.25rem}
+.btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--crimson));color:#07080d;font-weight:800;padding:.7rem 1.4rem;border-radius:999px;border:0;cursor:pointer;font-size:.9rem}
+.btn.ghost{background:#141926;color:var(--text);border:1px solid var(--line)}
+h2{font-family:'Bricolage Grotesque',system-ui;font-size:1.15rem;margin:1.75rem 0 .9rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:1rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;transition:transform .18s ease}
+.card:hover{transform:translateY(-3px)}
+.poster{aspect-ratio:3/4;display:flex;align-items:flex-end;padding:.7rem;font-size:.72rem;font-weight:700;color:rgba(255,255,255,.9)}
+.p1{background:linear-gradient(160deg,#2b1b4d,#6d28d9)}
+.p2{background:linear-gradient(160deg,#0f2f45,#0ea5e9)}
+.p3{background:linear-gradient(160deg,#3b1220,#e11d48)}
+.p4{background:linear-gradient(160deg,#14351f,#22c55e)}
+.p5{background:linear-gradient(160deg,#3a2a0c,#f59e0b)}
+.p6{background:linear-gradient(160deg,#1e1b4b,#6366f1)}
+.card .meta{padding:.65rem .7rem .8rem}
+.card .meta strong{display:block;font-size:.84rem;line-height:1.3}
+.card .meta small{color:var(--muted);font-size:.72rem}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.5rem;max-width:440px;margin:1rem auto}
+label{display:block;font-size:.78rem;color:var(--muted);margin:.7rem 0 .3rem}
+input[type=text],input[type=email],input[type=password]{width:100%;background:#141926;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:.7rem .9rem;font-size:.92rem;outline:none}
+input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,179,71,.14)}
+.err{background:rgba(255,94,98,.12);border:1px solid rgba(255,94,98,.4);color:#fda4af;border-radius:10px;padding:.6rem .8rem;font-size:.84rem;margin-bottom:.8rem}
+footer{border-top:1px solid var(--line);padding:1.5rem 1.75rem;color:var(--muted);font-size:.78rem;text-align:center}
+@media(max-width:640px){.search{display:none}.hero{padding:1.5rem}.hero h1{font-size:1.6rem}}
+</style>
+</head>
+<body>
+<header>
+<a class="brand" href="/decoy">Cam<span>Anime</span></a>
+<nav>
+<a href="/decoy">Home</a>
+<a href="/decoy/popular">Popular</a>
+<a href="/decoy/schedule">Schedule</a>
+<a href="/decoy/settings">Settings</a>
+<a href="/decoy/login">Sign in</a>
+</nav>
+<form class="search" method="get" action="/decoy/search">
+<input name="q" placeholder="Search anime…" autocomplete="off" aria-label="Search anime">
+<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+</form>
+</header>
+<main>
+{% if variant == 'login' %}
+<div class="panel">
+<div class="brand" style="margin-bottom:.6rem">Cam<span>Anime</span></div>
+<h1 style="font-family:'Bricolage Grotesque';font-size:1.45rem">Welcome back</h1>
+<p style="color:var(--muted);font-size:.88rem;margin:.4rem 0 1rem">Sign in with your CamAnime email and password.</p>
+{% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/decoy/login">
+<label for="dEmail">Email</label>
+<input id="dEmail" name="email" type="email" autocomplete="email" required placeholder="you@example.com">
+<label for="dPassword">Password</label>
+<input id="dPassword" name="password" type="password" autocomplete="current-password" required>
+<button class="btn" type="submit" style="width:100%;margin-top:1.1rem">Sign in securely</button>
+</form>
+<p style="color:var(--muted);font-size:.78rem;margin-top:1rem">Forgot your password? <a href="/decoy/reset" style="color:var(--accent)">Reset it here</a></p>
+</div>
+{% elif variant == 'admin' %}
+<div class="panel">
+<h1 style="font-family:'Bricolage Grotesque';font-size:1.45rem">Admin sign in</h1>
+<p style="color:var(--muted);font-size:.88rem;margin:.4rem 0 1rem">Owner console. Authorised staff only.</p>
+{% if error %}<div class="err" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/decoy/admin">
+<label for="aEmail">Email</label>
+<input id="aEmail" name="email" type="email" required>
+<label for="aPassword">Password</label>
+<input id="aPassword" name="password" type="password" required>
+<label for="aCode">Authenticator code</label>
+<input id="aCode" name="code" type="text" inputmode="numeric" maxlength="6" placeholder="6-digit code">
+<button class="btn" type="submit" style="width:100%;margin-top:1.1rem">Sign in</button>
+</form>
+</div>
+{% elif variant == 'settings' %}
+<h1 style="font-family:'Bricolage Grotesque';font-size:1.6rem;margin-bottom:.4rem">Settings</h1>
+<p style="color:var(--muted);font-size:.9rem">Account, playback and notification preferences.</p>
+<div class="panel" style="margin:1.5rem 0;max-width:none">
+<label for="sName">Display name</label><input id="sName" type="text" value="AnimeFan_CM">
+<label for="sEmail">Email</label><input id="sEmail" type="email" value="fan@example.com">
+<label for="sLang">Preferred subtitle language</label><input id="sLang" type="text" value="English">
+<button class="btn" type="button" style="margin-top:1.1rem">Save changes</button>
+</div>
+{% else %}
+<section class="hero">
+<h1>Watch anime free, sub or dub, in HD.</h1>
+<p>Thousands of series and movies, new episodes within hours of release. No account needed to start watching.</p>
+<a class="btn" href="/decoy/watch">Start watching</a>
+<a class="btn ghost" href="/decoy/login" style="margin-left:.6rem">Sign in</a>
+</section>
+<h2>Trending now</h2>
+<div class="grid">
+<a class="card" href="/decoy/watch"><div class="poster p1">EP 12 · SUB | DUB</div><div class="meta"><strong>Shadow Blade Chronicles</strong><small>Action · 2026</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p2">EP 08 · SUB | DUB</div><div class="meta"><strong>Ocean of Stars</strong><small>Drama · 2026</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p3">EP 24 · SUB</div><div class="meta"><strong>Crimson Vow</strong><small>Romance · 2025</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p4">EP 03 · SUB | DUB</div><div class="meta"><strong>Forest Keepers</strong><small>Fantasy · 2026</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p5">MOVIE · SUB | DUB</div><div class="meta"><strong>Golden Hour</strong><small>Slice of life · 2025</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p6">EP 17 · SUB | DUB</div><div class="meta"><strong>Neon Requiem</strong><small>Sci-fi · 2026</small></div></a>
+</div>
+<h2>Continue watching</h2>
+<div class="grid">
+<a class="card" href="/decoy/watch"><div class="poster p3">EP 11 · 14:22 left</div><div class="meta"><strong>Crimson Vow</strong><small>Resume</small></div></a>
+<a class="card" href="/decoy/watch"><div class="poster p1">EP 05 · 08:10 left</div><div class="meta"><strong>Shadow Blade Chronicles</strong><small>Resume</small></div></a>
+</div>
+{% endif %}
+</main>
+<footer>Made by <strong>kayefande-droid &amp; co.</strong> — free anime streaming worldwide</footer>
+</body>
+</html>
