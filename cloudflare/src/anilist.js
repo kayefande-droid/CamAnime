@@ -88,7 +88,7 @@ export async function alQuery(query, variables = {}, options = {}) {
             // AniList sits behind its own edge and rejects requests with no
             // identifying agent (the Worker default is blocked), so every
             // catalogue page 500s from Cloudflare even though it works locally.
-            "user-agent": "CamAnime/2.12.0 (+https://camanime.onrender.com)",
+            "user-agent": "CamAnime/2.13.0 (+https://camanime.onrender.com)",
           },
           body,
         });

@@ -275,7 +275,7 @@ const ORIGIN = "https://camanime.onrender.com";
 async function originFallback(url) {
   try {
     const res = await fetch(new URL(url.pathname + url.search, ORIGIN), {
-      headers: { accept: "text/html", "user-agent": "CamAnime-Edge/2.12.0" },
+      headers: { accept: "text/html", "user-agent": "CamAnime-Edge/2.13.0" },
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
     });

@@ -148,7 +148,7 @@ export async function updateManifest(env, request, url) {
   const urls = downloadUrls(url.origin);
 
   const latestBuild = row?.build ?? LATEST_BUILD;
-  const version = row?.version ?? "2.12.0";
+  const version = row?.version ?? LATEST_VERSION;
   const minBuild = row?.min_supported_build ?? MIN_SUPPORTED_BUILD;
   const known = Number.isFinite(build);
 
