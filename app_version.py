@@ -23,16 +23,17 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.12.0",
-    "latest_version_code": 23,
+    "latest_version": "2.13.0",
+    "latest_version_code": 24,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Screen ratio controls in the fullscreen player (Auto, Fit, Fill, 16:9, "
-        "4:3, 21:9, Stretch), a rebuilt responsive website, and push settings "
-        "that keep release and episode notices working while the app is closed."
+        "Build 24 rebuilds the app on the current stack and moves the release "
+        "gate to 2.13.0. The player, download folder and notification code are "
+        "unchanged from 2.12.0; the website it talks to is the new type and "
+        "manga-print pass."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "
