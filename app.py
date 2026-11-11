@@ -3311,7 +3311,7 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
 APP_VERSION = "2.14.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 25
+APP_VERSION_CODE = 26
 # The release tag tracks the app version, so a new build can never point
 # /get/android at an older asset (the old default was a stale v1.2.0).
 if not os.environ.get("CAMANIME_RELEASE_TAG"):

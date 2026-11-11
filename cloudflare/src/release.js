@@ -9,7 +9,7 @@
  * `lib/core/version_gate.dart`.
  */
 export const LATEST_VERSION = "2.14.0";
-export const LATEST_BUILD = 25;
+export const LATEST_BUILD = 26;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,7 +21,7 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "29d656dd8047d409b56cf610433fb73a8547510e4a370ddd9e0239b104ec0190";
+  "ebcc8096b4db90ad6bbb609f2f458976a22cae0e71b16a117bd436e2a15b4f1c";
 
 export const RELEASE_NOTES =
   "Build 25 fixes in-player sub/dub switching so the chosen language sticks "

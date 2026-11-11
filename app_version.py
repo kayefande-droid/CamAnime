@@ -24,7 +24,7 @@ import camanime_platform as platform
 
 DEFAULT_POLICY = {
     "latest_version": "2.14.0",
-    "latest_version_code": 25,
+    "latest_version_code": 26,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,

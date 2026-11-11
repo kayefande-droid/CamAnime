@@ -2004,9 +2004,9 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
       ));
     }
     final slides = trending.isNotEmpty ? trending.take(6).toList() : [];
+    if (featured != null) out.add(_featuredCard(featured!));
     if (slides.isNotEmpty) out.add(_slideshow(slides));
     if (resume.isNotEmpty) out.add(_resumeRail());
-    if (featured != null) out.add(_featuredCard(featured!));
     out.add(_rail('Trending Anime', trending));
     out.add(_rail('Popular this season', popular));
     out.add(_rail('Top Rated', topRated));
