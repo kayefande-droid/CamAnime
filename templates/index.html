@@ -1674,7 +1674,16 @@
                     </a>
                 </div>`;
             }).join('');
-        } catch (e) {}
+        } catch (e) {
+            // Error state: a signed-in member whose history will not load should
+            // see why the row is missing, not an empty gap.
+            const section = document.getElementById('watchlistSection');
+            const grid = document.getElementById('watchlistGrid');
+            if (section && grid && !grid.children.length) {
+                section.style.display = 'block';
+                grid.innerHTML = '<p class="discovery-empty" role="status">Could not load your saved titles. Reload the page to try again.</p>';
+            }
+        }
     }
 
     // ─── Live factual counters refresh (60s) ───
