@@ -377,7 +377,7 @@ def _inject_live_schedule_drawer(response):
             )
         script = ''
         if "/static/js/release-schedule.js" not in body:
-            script = '<script src="/static/js/release-schedule.js?v=20261019-tabprefs" defer></script>'
+            script = '<script src="/static/js/release-schedule.js?v=20261111-sched2" defer></script>'
         response.set_data(body.replace("</body>", drawer + script + "</body>", 1))
     except Exception:
         logger.warning("live schedule drawer injection failed", exc_info=True)
