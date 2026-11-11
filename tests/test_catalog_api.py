@@ -308,6 +308,9 @@ def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
                 return_value={"m3u8": f"https://media.example/{server['type']}.m3u8", "subtitles": []},
             ))
             stack.enter_context(patch.object(
+                api.streaming_manager.anikoto, "hls_heights", return_value=[],
+            ))
+            stack.enter_context(patch.object(
                 api.streaming_manager.youtube, "get_trailer_id", return_value=None,
             ))
             return api.app.test_client().get(f"/watch/123/1?audio={audio}")
@@ -316,9 +319,9 @@ def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
         "name": "HD-1", "type": "sub", "link_id": "sub-id", "slug": "matched", "ep_num": 1,
     })
     assert sub_page.status_code == 200
-    assert b"No provider-listed dub is available" in sub_page.data
+    assert b"No provider-listed English dub is available" in sub_page.data
     assert b"PROVIDER-LISTED DUB SERVERS" not in sub_page.data
-    assert b"if (true) {\n            showPlayerError('No provider-listed dub is available" in sub_page.data
+    assert b"if (true) {\n            showPlayerError('No provider-listed English dub is available" in sub_page.data
     assert b"embed-vidsrc-dub" not in sub_page.data
     assert b"Active Server: CamStream HD-1 (SUB)" in sub_page.data
 
@@ -326,9 +329,9 @@ def test_watch_page_only_displays_provider_resolved_dubs_and_falls_back(api):
         "name": "Dub-HD", "type": "dub", "link_id": "dub-id", "slug": "matched", "ep_num": 1,
     })
     assert dub_page.status_code == 200
-    assert b"PROVIDER-LISTED DUB SERVERS" in dub_page.data
+    assert b"PROVIDER-LISTED ENGLISH DUB SERVERS" in dub_page.data
     assert b"CamStream Dub-HD (DUB)" in dub_page.data
-    assert b"if (false) {\n            showPlayerError('No provider-listed dub is available" in dub_page.data
+    assert b"if (false) {\n            showPlayerError('No provider-listed English dub is available" in dub_page.data
 
 
 def test_confirmed_episodes_distinguish_airing_finished_and_unknown(api):
@@ -597,7 +600,7 @@ def test_shared_html_pages_include_accessible_live_schedule_drawer(api):
     assert b"id=\"liveScheduleDrawer\"" in response.data
     assert b"aria-label=\"Live release schedule\"" in response.data
     assert b"aria-expanded=\"false\"" in response.data
-    assert b"sync.css?v=20261110-ui" in response.data
+    assert b"sync.css?v=20261111-tokens" in response.data
     assert b"release-schedule.js?v=20261019-tabprefs" in response.data
 
 
@@ -658,7 +661,7 @@ def test_templates_include_only_desktop_tablet_mobile_breakpoints(api):
         assert b"min-width: 768px" in response.data
         assert b"max-width: 1023px" in response.data
         assert b"max-width: 767px" in response.data
-        assert b"sync.css?v=20261110-ui" in response.data
+        assert b"sync.css?v=20261111-tokens" in response.data
 
 
 def test_legacy_schedule_url_opens_shared_drawer(api, monkeypatch):

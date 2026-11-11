@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from threading import Lock, Thread
 from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, urljoin, urlparse, urlsplit
 
 import requests
