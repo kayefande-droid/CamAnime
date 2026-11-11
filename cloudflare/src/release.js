@@ -9,7 +9,7 @@
  * `lib/core/version_gate.dart`.
  */
 export const LATEST_VERSION = "2.14.0";
-export const LATEST_BUILD = 26;
+export const LATEST_BUILD = 27;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,11 +21,15 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "ebcc8096b4db90ad6bbb609f2f458976a22cae0e71b16a117bd436e2a15b4f1c";
+  "a7c5ec7ce93e67e59d7e9599c29ab329a24b8e3b6cb45a1ab46b229ad5387e86";
+
+/** Download filename shown to users, so saved APKs are never ambiguous. */
+export const APK_FILENAME = `CamAnime-${LATEST_VERSION}-build${LATEST_BUILD}.apk`;
 
 export const RELEASE_NOTES =
-  "Build 26: home redesign, sub/dub switching fix, device-delete on library "
-  "remove, poster persistence, background notifications.";
+  "Build 27: install fix (v2/v3 signing), version-stamped download filename, "
+  "home redesign, sub/dub switching, device-delete, poster persistence, "
+  "background notifications.";
 
 export const RENDER_ORIGIN = "https://camanime.onrender.com";
 export const WORKER_ORIGIN = "https://camanjme.camanime.workers.dev";

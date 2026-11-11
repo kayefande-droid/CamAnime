@@ -36,10 +36,19 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Keep the debug keystore (stable across builds, so sideloaded updates
+        // are signature-compatible) but sign with every scheme. v1 (JAR) is
+        // required for Android 6/7 devices; v2/v3 cover modern Android.
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
             // WorkManager + Room are reached reflectively; without these rules R8
             // strips them and the app crashes inside androidx.startup.

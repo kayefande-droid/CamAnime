@@ -9,6 +9,7 @@ import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import { fcmConfigured } from "./push.js";
 import {
+  APK_FILENAME,
   APK_SHA256,
   LATEST_BUILD,
   LATEST_VERSION,
@@ -218,7 +219,7 @@ async function serveApk(request, env) {
         const headers = new Headers();
         obj.writeHttpMetadata?.(headers);
         headers.set("content-type", APK_TYPE);
-        headers.set("content-disposition", 'attachment; filename="CamAnime.apk"');
+        headers.set("content-disposition", `attachment; filename="${APK_FILENAME}"`);
         headers.set("accept-ranges", "bytes");
         headers.set("cache-control", "public, max-age=3600");
         headers.set("etag", obj.httpEtag);
@@ -250,7 +251,7 @@ async function serveApk(request, env) {
       if (asset.ok) {
         const headers = new Headers(asset.headers);
         headers.set("Content-Type", APK_TYPE);
-        headers.set("Content-Disposition", 'attachment; filename="CamAnime.apk"');
+        headers.set("Content-Disposition", `attachment; filename="${APK_FILENAME}"`);
         headers.set("Cache-Control", "public, max-age=3600");
         return new Response(asset.body, { status: 200, headers });
       }

@@ -24,14 +24,14 @@ import camanime_platform as platform
 
 DEFAULT_POLICY = {
     "latest_version": "2.14.0",
-    "latest_version_code": 26,
+    "latest_version_code": 27,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 26: home redesign, sub/dub switching fix, device-delete on "
-        "library remove, poster persistence, background notifications."
+        "Build 27: install fix, version-stamped APK filename, home redesign, "
+        "sub/dub switching, device-delete, poster persistence, notifications."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "
