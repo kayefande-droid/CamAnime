@@ -138,6 +138,20 @@
     }).join('');
   }
 
+  // Error state: only shown when nothing has rendered yet, so a transient
+  // failure never replaces air dates that are already on screen.
+  function renderError() {
+    if (scheduleLoaded) return;
+    var targets = drawerList && drawerList !== list ? [list, drawerList] : [list];
+    targets.forEach(function (target) {
+      if (!target) return;
+      target.innerHTML = '<p class="schedule-empty" role="status">Could not reach the schedule source. ' +
+        '<button type="button" class="schedule-retry">Retry</button></p>';
+      var retry = target.querySelector('.schedule-retry');
+      if (retry) retry.addEventListener('click', function () { refresh(true); });
+    });
+  }
+
   function render(items, season) {
     if (list) renderList(list, items, season, false);
     if (drawerList && drawerList !== list) renderList(drawerList, items, season, true);
@@ -185,11 +199,13 @@
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
       });
-      if (!response.ok) return;
+      if (!response.ok) { renderError(); return; }
       var data = await response.json();
       if (data.status === 'success') render(data.items, data.season || {});
+      else renderError();
     } catch (error) {
       /* Keep last provider-confirmed metadata visible during transient errors. */
+      renderError();
     } finally {
       busy = false;
     }

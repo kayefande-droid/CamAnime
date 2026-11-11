@@ -44,7 +44,7 @@
     <script src="/static/js/player-ui.js?v=20261110-player" defer></script>
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/sync.css?v=20261111-tokens" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261111-v17" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261111-v18" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261106-flow" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -520,6 +520,9 @@
                     <img class="ca-poster" src="{{ anime.banner or anime.image or '/static/brand/camanime-icon.svg' }}" alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
                     <video id="nativeVideo" controls playsinline preload="auto" crossorigin="anonymous" style="display: none;"></video>
                     <div class="ca-shade" aria-hidden="true"></div>
+                    <!-- Explains the jump when a saved position is applied, so a
+                         resumed video never looks like it started mid-scene. -->
+                    <p class="ca-resume-note" id="caResumeNote" role="status" hidden></p>
                     <button type="button" class="ca-big-play" aria-label="Play"><i class="fas fa-play" aria-hidden="true"></i></button>
                     <div class="ca-loading" aria-hidden="true"><div class="ca-spinner"></div></div>
                     <div class="ca-controls">
@@ -1063,6 +1066,16 @@
         window.addEventListener('pagehide', () => saveResumePoint(true));
         let resumeTarget = 0;
         try { resumeTarget = parseFloat(localStorage.getItem(resumeKey) || '0') || 0; } catch (e) { resumeTarget = 0; }
+        const resumeNote = document.getElementById('caResumeNote');
+        let resumeNoteTimer = 0;
+        function clockLabel(seconds) {
+            const total = Math.max(0, Math.floor(seconds));
+            const h = Math.floor(total / 3600);
+            const m = Math.floor((total % 3600) / 60);
+            const s = total % 60;
+            const ss = String(s).padStart(2, '0');
+            return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+        }
         function applyResumePoint() {
             if (resumeApplied || !(resumeTarget > 5)) return;
             const d = videoEl.duration || 0;
@@ -1074,6 +1087,12 @@
                 return;
             }
             resumeApplied = true;
+            if (resumeNote) {
+                resumeNote.textContent = `Resuming at ${clockLabel(resumeTarget)}`;
+                resumeNote.hidden = false;
+                clearTimeout(resumeNoteTimer);
+                resumeNoteTimer = setTimeout(() => { resumeNote.hidden = true; }, 6000);
+            }
         }
         // Server fallback reassigns `src`, which zeroes the position, and metadata
         // can arrive before this code runs. Re-apply across the early lifecycle

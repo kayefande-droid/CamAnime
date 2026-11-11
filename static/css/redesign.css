@@ -699,3 +699,38 @@ body .ca-player .ca-poster {
     max-width: 40ch;
   }
 }
+
+/* Resume notice: says where the video starts after a saved position is applied. */
+body .ca-resume-note {
+  position: absolute;
+  top: .75rem;
+  left: .75rem;
+  z-index: 3;
+  margin: 0;
+  padding: .4rem .7rem;
+  max-width: calc(100% - 1.5rem);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--ca-shadow-card);
+  pointer-events: none;
+}
+body .ca-resume-note[hidden] { display: none; }
+
+/* Retry action inside the schedule error state. */
+body .schedule-empty .schedule-retry {
+  margin-left: .5rem;
+  padding: .3rem .7rem;
+  min-height: 32px;
+  background: var(--ca-hair);
+  color: var(--text);
+  border: 1px solid var(--border-subtle, var(--ca-border-subtle));
+  border-radius: var(--radius-sm);
+  font: inherit;
+  cursor: pointer;
+}
+body .schedule-empty .schedule-retry:hover { background: var(--ca-wash); }
+body .schedule-empty .schedule-retry:focus-visible { outline: 2px solid var(--ca-ring); outline-offset: 2px; }
