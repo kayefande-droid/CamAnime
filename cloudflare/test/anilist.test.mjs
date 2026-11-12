@@ -37,11 +37,18 @@ test("a 429 is retried after Retry-After instead of failing the page", async () 
 });
 
 test("exhausted retries surface the rate limit rather than inventing data", async () => {
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
+  let direct = 0;
+  let relay = 0;
+  globalThis.fetch = async (input) => {
+    const url = String(input && input.url ? input.url : input);
+    if (url.includes("onrender.com")) {
+      relay += 1;
+      return new Response("", { status: 502 });
+    }
+    direct += 1;
     return new Response("", { status: 429, headers: { "retry-after": "0" } });
   };
   await assert.rejects(() => alQuery("always-429"), /429/);
-  assert.equal(calls, 3, "initial try plus two retries");
+  assert.equal(direct, 3, "initial try plus two retries against AniList");
+  assert.equal(relay, 1, "one origin relay before the error surfaces");
 });
