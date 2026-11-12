@@ -507,14 +507,16 @@ class AnimeHeavenProvider(StreamingProvider):
         told apart from real episode files.
         """
         try:
-            resp = self.session.get(
+            # A bare requests call: the shared Session is not safe to use from
+            # the probe pool's threads at the same time as the main scrape.
+            resp = requests.get(
                 url,
                 headers={
                     "User-Agent": DEFAULT_UA,
                     "Referer": f"{self.base_url}/",
                     "Range": "bytes=0-0",
                 },
-                timeout=min(self.timeout, 10),
+                timeout=3,
                 allow_redirects=True,
             )
             content_range = resp.headers.get("Content-Range") or ""
@@ -580,14 +582,25 @@ class AnimeHeavenProvider(StreamingProvider):
                     if u not in raw_urls:
                         raw_urls.append(u)
 
+            # The gate page mixes the episode with 3-second promo stubs on the
+            # ct/ck mirrors (a few hundred KB each). They report video/mp4, so
+            # the player only fails once it tries to play them. Probe them in
+            # parallel with a short budget: serial probes pushed the whole
+            # episode bundle past the server's request timeout.
+            sizes: List[Optional[int]] = [None] * len(raw_urls)
+            if raw_urls:
+                with ThreadPoolExecutor(max_workers=min(4, len(raw_urls))) as pool:
+                    futures = [pool.submit(self._probe_media_size, u) for u in raw_urls]
+                    for i, fut in enumerate(futures):
+                        try:
+                            sizes[i] = fut.result(timeout=4)
+                        except Exception:
+                            sizes[i] = None
+
             sources = []
             for idx, u in enumerate(raw_urls):
                 host = urlparse(u).hostname or f"mirror-{idx+1}"
-                # The gate page mixes the episode with 3-second promo stubs on
-                # the ct/ck mirrors (a few hundred KB each). They report
-                # video/mp4, so the player only fails once it tries to play
-                # them. Anything far smaller than a real episode is dropped.
-                size = self._probe_media_size(u)
+                size = sizes[idx]
                 if size is not None and size < 2 * 1024 * 1024:
                     logger.info("[AnimeHeaven] dropping %s-byte stub source %s", size, host)
                     continue

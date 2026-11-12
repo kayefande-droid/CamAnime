@@ -417,6 +417,9 @@ async function mediaTotalSize(url) {
     const res = await fetch(url, {
       headers: { "user-agent": UA, referer: `${HEAVEN_BASE}/`, range: "bytes=0-0" },
       redirect: "follow",
+      // The CDNs are slow from some edges; a stalled probe must not hold the
+      // whole episode bundle open.
+      signal: AbortSignal.timeout(4000),
     });
     const range = res.headers.get("content-range") || "";
     const m = /\/(\d+)\s*$/.exec(range);
