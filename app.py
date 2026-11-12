@@ -1,7 +1,6 @@
 import logging
 import re
 import time
-import random
 from datetime import datetime, timezone
 from threading import Lock, Thread
 from collections import OrderedDict, deque
@@ -1839,12 +1838,12 @@ def home():
         popular_season = [format_anime_card(a) for a in fb_lists.get("popular", [])]
         top_rated = [format_anime_card(a) for a in fb_lists.get("top_rated", [])]
 
-    # Seasons / best-of rows: put this WEEK's and this MONTH's standouts in
-    # shuffled rows so users always discover something new on every visit.
+    # This WEEK's and this MONTH's rows keep the order the source published.
+    # AniList returns trending by its live trending rank and top-rated by its
+    # rating rank, so the shelf order is the real world rank instead of a
+    # reshuffle that changed the standings on every page load.
     weekly_row = [a for a in trending if a.get("status") == "Releasing"][:10]
     monthly_row = [a for a in top_rated if a.get("score", 0) >= 78][:10]
-    random.shuffle(weekly_row)
-    random.shuffle(monthly_row)
 
     # Cache each card's meta for the server-side watch-history viewer + rankings
     for card in (trending + popular_season + top_rated):
