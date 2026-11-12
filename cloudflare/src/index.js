@@ -7,6 +7,8 @@ import * as auth from "./auth.js";
 import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
+import * as media from "./media.js";
+import { guard, firewallStats } from "./firewall.js";
 import { fcmConfigured } from "./push.js";
 import {
   APK_FILENAME,
@@ -77,6 +79,11 @@ export default {
 async function handle(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Five-layer firewall (ban, rate, signatures, payload, strikes) runs before
+    // anything else so a scanner never reaches routing or a provider call.
+    const blocked = guard(request, url);
+    if (blocked) return blocked;
 
     // One canonical URL per page. A trailing slash used to 404 while the same
     // page without it worked, which broke links copied by hand or by tools.
@@ -184,6 +191,7 @@ async function handle(request, env, ctx) {
       app: "camanjme",
       architecture: "workers+d1+r2",
       bindings: { db: Boolean(env.DB), files: Boolean(env.FILES), assets: Boolean(env.ASSETS) },
+      firewall: firewallStats(),
     });
 
     // Direct Android APK download served by this Cloudflare deployment itself,
@@ -202,10 +210,11 @@ async function handle(request, env, ctx) {
       return await withSeo(page, url);
     } catch (err) {
       const status = /not found/i.test(String(err && err.message)) ? 404 : 500;
-      if (status === 500) {
-        const fallback = await originFallback(url);
-        if (fallback) return fallback;
-      }
+      // Render also owns pages this worker does not rebuild natively (the
+      // scraper, adverts, promo). A 404 here used to break those nav links even
+      // though the origin serves them fine, so both statuses try the origin.
+      const fallback = await originFallback(url);
+      if (fallback) return fallback;
       const message = status === 404 ? "Page not found." : "Something went wrong on the edge.";
       return html(errorPage(status, message), status);
     }
@@ -321,7 +330,9 @@ async function originFallback(url) {
     if (!res.ok) return null;
     if (!(res.headers.get("content-type") || "").includes("text/html")) return null;
     let body = await res.text();
-    // Keep the mirror's canonical on the mirror, not on the origin.
+    // Keep the mirror's canonical on the mirror, not on the origin, and keep
+    // AniList artwork loadable through this worker's image proxy.
+    body = media.rewriteAniListImages(body);
     body = body
       .replace(/(<link rel="canonical" href=")https:\/\/camanime\.onrender\.com/g, `$1${url.origin}`)
       .replace(/(<meta property="og:url" content=")https:\/\/camanime\.onrender\.com/g, `$1${url.origin}`);
@@ -388,6 +399,19 @@ async function apiRoutes(request, env, url, path) {
   if (p1 === "anime" && p3 === "comments") return method === "GET"
     ? api.getComments(env, request, p2, p4)
     : api.postComment(env, request, p2, p4);
+
+  // The website's community widget posts FormData to these paths (guests
+  // included). Without them the mirror rendered the forum but every post
+  // answered 404, so comments only worked on the Render host.
+  if (p1 === "community" && p2 === "comment" && method === "POST") {
+    return api.commentPost(env, request);
+  }
+  if (p1 === "community" && p2 === "like" && p3 && method === "POST") {
+    return api.commentLike(env, request, p3);
+  }
+  if (p1 === "community" && p2 === "rate" && method === "POST") {
+    return api.ratePost(env, request);
+  }
   if (p1 === "rate" && method === "POST") return api.rate(env, request, p2);
   if (p1 === "ratings" && p2 && !p3) return api.ratingSummary(env, request, p2);
 
@@ -409,6 +433,9 @@ async function apiRoutes(request, env, url, path) {
   // Streaming proxy: Range-safe media + HLS playlist rewrite (host-allowlisted).
   if (p1 === "proxy" && p2 === "media") return api.proxyMedia(env, request);
   if (p1 === "proxy" && p2 === "hls") return api.proxyHls(env, request);
+
+  // AniList artwork, relayed because its CDN refuses Cloudflare egress.
+  if (p1 === "img") return media.image(request, url);
 
   return json({ error: "Unknown API route" }, 404);
 }

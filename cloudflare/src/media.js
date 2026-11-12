@@ -482,9 +482,26 @@ async function proxyPlaylist(raw, ref) {
   });
 }
 
-async function proxyBinary(raw, ref, request, { download = false, filename = "", sniff = false } = {}) {
+async function proxyBinary(raw, ref, request, { download = false, filename = "", sniff = false, cacheKey = "" } = {}) {
   const url = assertPublicUrl(raw);
   if (!url) return new Response("Bad url", { status: 400, headers: cors() });
+
+  // HLS segments are immutable, and a player re-requests them when it seeks or
+  // re-buffers. Keeping them at the edge removes that repeat round trip.
+  let segmentCache = null;
+  if (cacheKey) {
+    try {
+      segmentCache = caches.default;
+      const hit = await segmentCache.match(cacheKey);
+      if (hit) {
+        const headers = new Headers(hit.headers);
+        headers.set("x-camanime-cache", "hit");
+        return new Response(hit.body, { status: hit.status, headers });
+      }
+    } catch {
+      segmentCache = null;
+    }
+  }
 
   let res = null;
   try {
@@ -548,9 +565,100 @@ async function proxyBinary(raw, ref, request, { download = false, filename = "",
     headers["content-disposition"] = `attachment; filename="${safe}"`;
   }
 
+  if (cacheKey) headers["x-camanime-cache"] = "miss";
+
   // Stream straight through: Workers keep the body lazy, so multi-GB files do
   // not buffer in memory.
-  return new Response(body, { status: res.status, headers });
+  const out = new Response(body, { status: res.status, headers });
+  if (segmentCache && res.status === 200) {
+    try {
+      await segmentCache.put(cacheKey, out.clone());
+    } catch {
+      // a failed cache write must never fail playback
+    }
+  }
+  return out;
+}
+
+/** AniList answers Cloudflare's egress with 403, so its poster and banner URLs
+ *  render as ERR_BLOCKED_BY_ORB on every worker page. Point them at the edge
+ *  image proxy instead, which falls back to the Render origin. */
+const ANILIST_IMG = /https:\/\/s4\.anilist\.co\/[^"'\s<>()]+/g;
+
+export function rewriteAniListImages(body) {
+  return String(body || "").replace(
+    ANILIST_IMG,
+    (m) => `/api/img?u=${encodeURIComponent(m)}`,
+  );
+}
+
+/** Edge image proxy: only AniList's CDN, cached for a year. */
+export async function image(request, url) {
+  const target = assertPublicUrl(url.searchParams.get("u") || "");
+  if (!target || !/(^|\.)anilist\.co$/i.test(target.hostname)) {
+    return new Response("Bad image url", { status: 400, headers: cors() });
+  }
+
+  let cache = null;
+  try {
+    cache = caches.default;
+  } catch {
+    cache = null;
+  }
+  const cacheKey = new Request(`https://img.camanime.local/${encodeURIComponent(target.toString())}`);
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) return hit;
+    } catch {
+      // cache read is best effort
+    }
+  }
+
+  const headers = {
+    "user-agent": UA,
+    referer: "https://anilist.co/",
+    accept: "image/avif,image/webp,image/*,*/*;q=0.8",
+  };
+  let res = null;
+  try {
+    res = await fetch(target.toString(), {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    try {
+      res = await fetch(
+        `${RENDER_ORIGIN}/api/img?u=${encodeURIComponent(target.toString())}`,
+        { signal: AbortSignal.timeout(8000) },
+      );
+    } catch {
+      res = null;
+    }
+  }
+  if (!res || !res.ok) {
+    return new Response("Image unavailable", { status: 502, headers: cors() });
+  }
+
+  const out = new Response(res.body, {
+    status: 200,
+    headers: cors({
+      "content-type": res.headers.get("content-type") || "image/jpeg",
+      "cache-control": "public, max-age=31536000, immutable",
+    }),
+  });
+  if (cache) {
+    try {
+      await cache.put(cacheKey, out.clone());
+    } catch {
+      // a failed write must not fail the image
+    }
+  }
+  return out;
 }
 
 function filenameFromUrl(url) {
@@ -571,7 +679,7 @@ export async function route(request, url, parts) {
   }
 
   if (p1 === "proxy" && p2 === "segment") {
-    return proxyBinary(target, ref, request, { sniff: true });
+    return proxyBinary(target, ref, request, { sniff: true, cacheKey: request.url });
   }
 
   if (p1 === "proxy" && p2 === "video") {

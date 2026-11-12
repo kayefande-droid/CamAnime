@@ -76,6 +76,105 @@ export async function postComment(env, request, animeId, ep) {
   return json({ ok: true, id });
 }
 
+/** Guest identity for the website's community widget: the Render host lets
+ *  visitors post with just a display name, and the mirror must not dead-end
+ *  that form. The address keeps one guest's likes idempotent. */
+function guestIdentity(request, name) {
+  const ip = request.headers.get("cf-connecting-ip") || "anon";
+  const label = String(name || "").trim().slice(0, 24);
+  return {
+    email: `guest:${ip.replace(/[^\w.:-]/g, "")}@guests.camanime.local`,
+    name: label || "Guest",
+  };
+}
+
+/** The watch page posts FormData, not JSON, so parse both shapes. */
+async function readBody(request) {
+  const type = request.headers.get("content-type") || "";
+  if (/multipart\/form-data|application\/x-www-form-urlencoded/i.test(type)) {
+    const form = await request.formData();
+    const out = {};
+    for (const [key, value] of form.entries()) out[key] = String(value);
+    return out;
+  }
+  return readJson(request);
+}
+
+/** POST /api/community/comment — the website's guest comment form. */
+export async function commentPost(env, request) {
+  const body = await readBody(request);
+  const animeId = String(body.anime_id || "").trim();
+  if (!animeId) return json({ status: "error", error: "anime_id is required." }, 400);
+  const user = await currentUser(env, request);
+  const identity = user
+    ? { email: user.email, name: String(body.name || "").trim().slice(0, 24) || user.name }
+    : guestIdentity(request, body.name);
+  const text = String(body.text || "").trim().slice(0, 1000);
+  const sticker = safeSticker(body.sticker);
+  if (!text && !sticker) {
+    return json({ status: "error", error: "Write something or tap a sticker." }, 400);
+  }
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO comments (id, anime_id, ep, email, username, text, parent, sticker, likes, liked_by, t) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,0,'[]',?9)"
+  )
+    .bind(id, animeId, String(body.ep || ""), identity.email, identity.name, text,
+      String(body.parent || "").slice(0, 64), sticker, time())
+    .run();
+  return json({ status: "success", ok: true, id, guest: !user });
+}
+
+/** POST /api/community/like/<id> — one like per identity, like the origin. */
+export async function commentLike(env, request, commentId) {
+  const user = await currentUser(env, request);
+  const identity = user
+    ? { email: user.email }
+    : guestIdentity(request, "");
+  const row = await env.DB.prepare(
+    "SELECT id, likes, liked_by FROM comments WHERE id = ?1"
+  ).bind(String(commentId)).first();
+  if (!row) return json({ status: "error", error: "Comment not found." }, 404);
+  let liked = [];
+  try {
+    liked = JSON.parse(row.liked_by || "[]");
+  } catch {
+    liked = [];
+  }
+  if (!Array.isArray(liked)) liked = [];
+  if (liked.includes(identity.email)) {
+    liked = liked.filter((e) => e !== identity.email);
+  } else {
+    liked.push(identity.email);
+  }
+  await env.DB.prepare("UPDATE comments SET likes = ?2, liked_by = ?3 WHERE id = ?1")
+    .bind(String(commentId), liked.length, JSON.stringify(liked))
+    .run();
+  return json({ status: "success", likes: liked.length });
+}
+
+/** POST /api/community/rate — the widget's 1–10 score form. */
+export async function ratePost(env, request) {
+  const body = await readBody(request);
+  const animeId = String(body.anime_id || "").trim();
+  const score = Math.max(1, Math.min(10, parseInt(body.score, 10) || 0));
+  if (!animeId || !score) {
+    return json({ status: "error", error: "anime_id and a 1-10 score are required." }, 400);
+  }
+  const user = await currentUser(env, request);
+  const email = user ? user.email : guestIdentity(request, body.name).email;
+  await env.DB.prepare(
+    "INSERT INTO ratings (anime_id, email, score, t) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(anime_id, email) DO UPDATE SET score = ?3, t = ?4"
+  ).bind(animeId, email, score, time()).run();
+  const avg = await env.DB.prepare(
+    "SELECT AVG(score) a, COUNT(*) n FROM ratings WHERE anime_id = ?1"
+  ).bind(animeId).first();
+  return json({
+    status: "success",
+    guest: !user,
+    rating: { average: Math.round((avg?.a ?? 0) * 10) / 10, count: avg?.n ?? 0, score },
+  });
+}
+
 export async function rate(env, request, animeId) {
   const user = await currentUser(env, request);
   if (!user) return json({ error: "Sign in to rate." }, 401);

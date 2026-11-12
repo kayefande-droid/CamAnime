@@ -24,4 +24,16 @@ def _isolated_intrusion_ledger(monkeypatch, tmp_path):
         honeypot._ADMIN_DENIES.clear()
     except Exception:
         pass
+    # The request firewall keeps per-address counters in the process. Tests all
+    # arrive from 127.0.0.1, so without a fresh instance the 300th request in a
+    # session would be rate limited and unrelated assertions would fail.
+    try:
+        import firewall as firewall_module
+        import app as app_module
+
+        fresh = firewall_module.Firewall()
+        firewall_module.firewall = fresh
+        app_module.firewall = fresh
+    except Exception:
+        pass
     yield

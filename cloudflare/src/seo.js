@@ -8,6 +8,7 @@
  * which is exactly the set of pages `detailsPage` can render.
  */
 import { homeGrids } from "./catalog.js";
+import { rewriteAniListImages } from "./media.js";
 
 /** Pages that exist for every visitor and return 200 without a session. */
 const PUBLIC_PATHS = ["/", "/browse", "/search", "/download"];
@@ -156,6 +157,10 @@ export async function withSeo(response, url) {
       `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>\n</head>`,
     );
   }
+
+  // AniList blocks Cloudflare egress, so an unproxied s4.anilist.co URL is
+  // blocked by the browser as an opaque response and every poster disappears.
+  body = rewriteAniListImages(body);
 
   const headers = new Headers(response.headers);
   headers.delete("content-length");

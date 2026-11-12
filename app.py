@@ -23,6 +23,7 @@ from flask import (
 )
 
 from streaming_providers import DEFAULT_UA, streaming_manager
+from firewall import firewall
 
 import hashlib
 import json
@@ -226,6 +227,34 @@ def _record_activity(kind: str, anime: str = "", ep: str = "", detail: str = "")
         })
     except Exception:
         logger.debug("live activity logging failed", exc_info=True)
+
+
+@app.before_request
+def _firewall_guard():
+    """Five-layer shield: ban, rate, signatures, payload, strikes.
+
+    Registered before the canonical redirect so a scanner is refused before it
+    touches routing, and so its strikes count even for unknown paths.
+    """
+    verdict = firewall.inspect(
+        ip=_client_ip(),
+        method=request.method,
+        path=request.path or "/",
+        query=request.query_string.decode("utf-8", "replace"),
+        user_agent=request.headers.get("User-Agent", ""),
+        content_length=request.content_length,
+    )
+    if not verdict:
+        return None
+    message, status, headers = verdict
+    if (request.path or "").startswith("/api/"):
+        response = jsonify({"error": message, "status": "blocked"})
+    else:
+        response = Response(message, status=status, mimetype="text/plain")
+    response.status_code = status
+    for key, value in headers.items():
+        response.headers[key] = value
+    return response
 
 
 @app.before_request
@@ -2829,6 +2858,50 @@ def proxy_hls():
         return jsonify({"error": str(e)}), 502
 
 
+@app.route("/api/img")
+def api_image_proxy():
+    """Relay AniList artwork.
+
+    AniList refuses Cloudflare's egress, so the edge worker rewrites every
+    s4.anilist.co URL here. Only that one host is allowed, and the bytes carry
+    a one-year immutable cache so each image crosses the network once.
+    """
+    target = request.args.get("u", "").strip()
+    try:
+        parsed = urlparse(target)
+    except Exception:
+        parsed = None
+    if not parsed or parsed.scheme not in ("http", "https") or parsed.hostname not in {
+        "s4.anilist.co", "img.anili.st",
+    }:
+        return jsonify({"error": "Only AniList artwork is relayed here."}), 400
+    try:
+        resp = requests.get(
+            target,
+            headers={
+                "User-Agent": DEFAULT_UA,
+                "Referer": "https://anilist.co/",
+                "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+            },
+            timeout=15,
+            stream=True,
+        )
+        if resp.status_code >= 400:
+            resp.close()
+            return jsonify({"error": f"Artwork upstream {resp.status_code}"}), 502
+        ctype = (resp.headers.get("Content-Type") or "image/jpeg").lower()
+        if not ctype.startswith("image/"):
+            resp.close()
+            return jsonify({"error": "Upstream did not return an image"}), 502
+        payload = resp.content
+        response = Response(payload, mimetype=ctype.split(";")[0])
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+    except Exception as e:
+        logger.warning(f"Image proxy failed ({target}): {e}")
+        return jsonify({"error": "Artwork unavailable"}), 502
+
+
 @app.route("/api/proxy/video")
 def proxy_video():
     """Streams direct MP4 video with full HTTP Range support for instant seeking."""
@@ -4378,6 +4451,7 @@ _APP_HEADER_PLATFORM = "X-CamAnime-Platform"
 _APP_HEADER_INSTALL = "X-CamAnime-Install"
 
 _VERSION_EXEMPT_PREFIXES = (
+    "/api/img",
     "/api/version", "/api/app/version", "/api/app/ping", "/api/app/push-token",
     "/api/announcements", "/api/public/counters", "/healthz",
     "/static/", "/get/", "/admin", "/login", "/logout", "/settings",
