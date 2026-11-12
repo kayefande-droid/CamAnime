@@ -1032,13 +1032,16 @@ export async function episodeBundle({
   if (heavenId) {
     const info = await heavenAnimeInfo(heavenId);
     const target = info?.episodes?.find((e) => Math.round(e.num) === episode);
+    if (target) heavenEpKey = target.key;
+    let resolved = { sources: [] };
+    if (target) resolved = await heavenStreamSources(target.key, heavenId);
+    // No episode key at all means the gate could not be crawled from here; the
+    // origin bundle is the only way that provider still appears on the edge.
+    if (!resolved.sources.length && anilistId) {
+      const mirrored = await heavenSourcesFromRender(anilistId, episode);
+      if (mirrored.length) resolved = { ...resolved, sources: mirrored };
+    }
     if (target) {
-      heavenEpKey = target.key;
-      const resolved = await heavenStreamSources(target.key, heavenId);
-      if (!resolved.sources.length && anilistId) {
-        const mirrored = await heavenSourcesFromRender(anilistId, episode);
-        if (mirrored.length) resolved.sources = mirrored;
-      }
       // The player page mixes the episode file with unrelated promo sources on
       // other hosts (ax.animeheaven.me). Files carrying this episode's key are
       // the real mirrors, so they are offered first.

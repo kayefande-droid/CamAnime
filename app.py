@@ -2005,6 +2005,7 @@ def home():
     )
 
 
+@app.route("/browse")
 @app.route("/search")
 def search():
     query = (request.args.get("q") or "").strip()
