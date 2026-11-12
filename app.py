@@ -493,6 +493,7 @@ MEDIA_FRAGMENT = """
   seasonYear
   averageScore
   popularity
+  rankings { rank type allTime context season year }
   genres
   studios(isMain: true) { nodes { name } }
   trailer { id site thumbnail }
@@ -968,6 +969,10 @@ def _kitsu_to_media(item: Dict) -> Dict:
         "seasonYear": year,
         "averageScore": score,
         "popularity": a.get("userCount") or 0,
+        # Kitsu publishes its own ranks; carry them so the app never has to
+        # infer a position from a list order.
+        "rank": a.get("ratingRank"),
+        "popularity_rank": a.get("popularityRank"),
         "genres": [],
         "studios": {"nodes": []},            "trailer": ({"site": "Youtube", "id": trailer_id} if trailer_id else None),
             "nextAiringEpisode": None,
@@ -1020,6 +1025,10 @@ def _jikan_to_media(item: Dict) -> Dict:
         "seasonYear": item.get("year") or "",
         "averageScore": score,
         "popularity": item.get("members") or 0,
+        # Jikan's `rank` is MAL's score rank and its `popularity` field is a
+        # rank, not a member count (members stay in `popularity` above).
+        "rank": item.get("rank"),
+        "popularity_rank": item.get("popularity"),
         "genres": [g.get("name") for g in (item.get("genres") or []) if g.get("name")],
         "studios": {"nodes": [{"name": s.get("name")} for s in (item.get("studios") or []) if s.get("name")]},            "trailer": ({"site": "Youtube", "id": yt_id} if yt_id else None),
             "nextAiringEpisode": None,
@@ -1502,6 +1511,98 @@ def _confirmed_episode_count(anime: Dict, provider_episodes=None,
     return max(_confirmed_episode_numbers(anime, provider_episodes, now_ts), default=0)
 
 
+_DUB_FLAG_CACHE: Dict[int, Tuple[float, Dict]] = {}
+_DUB_FLAG_TTL = 6 * 3600
+_DUB_FLAG_LOCK = Lock()
+
+
+def _cached_dub_flag(anime_id) -> Optional[bool]:
+    """Provider-published dub flag, only when it has already been resolved.
+
+    Catalogue rows must never pay for a provider round trip: this reads what
+    `/api/v1/dub-availability` has already established and returns None while
+    the answer is still unknown, so no card claims a dub that was not seen.
+    """
+    try:
+        aid = int(anime_id)
+    except (TypeError, ValueError):
+        return None
+    with _DUB_FLAG_LOCK:
+        entry = _DUB_FLAG_CACHE.get(aid)
+    if not entry:
+        return None
+    ts, flags = entry
+    if time.time() - ts > _DUB_FLAG_TTL:
+        return None
+    return flags.get("dub")
+
+
+def _source_ranks(anime: Dict) -> Dict:
+    """Ranking numbers exactly as the metadata source publishes them.
+
+    AniList returns a `rankings` list (rated / popular / trending, all-time and
+    seasonal). Kitsu and Jikan adapters carry a single rating rank and a
+    popularity rank. Nothing here is derived from list position, and a rank the
+    source did not publish stays None so the UI can omit it.
+    """
+    def _int(value) -> Optional[int]:
+        try:
+            rank = int(value)
+        except (TypeError, ValueError):
+            return None
+        return rank if rank > 0 else None
+
+    out = {"rated": None, "popular": None, "trending": None}
+    for entry in (anime.get("rankings") or []):
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("type") or "").upper()
+        rank = _int(entry.get("rank"))
+        if kind == "RATED" and out["rated"] is None:
+            out["rated"] = rank
+        elif kind == "POPULAR" and out["popular"] is None:
+            out["popular"] = rank
+        elif kind == "TRENDING" and out["trending"] is None:
+            out["trending"] = rank
+    # Fallback adapters expose one source rank each; use theirs, never a guess.
+    out["rated"] = out["rated"] or _int(anime.get("rank"))
+    out["popular"] = out["popular"] or _int(anime.get("popularity_rank"))
+    out["source"] = {
+        "kitsu": "Kitsu",
+        "jikan": "Jikan",
+    }.get(str(anime.get("_source") or ""), "AniList")
+    return out
+
+
+def _provider_audio_flags(titles: List[str]) -> Dict:
+    """Which audio tracks the provider's episode index lists for a title.
+
+    Anikoto stamps every episode with data-sub / data-dub. A title counts as
+    dubbed only when it lists at least one dub episode, and the exact episode
+    numbers are returned so rows can badge the episodes that really have it.
+    """
+    names = [t for t in (titles or []) if t]
+    if not names:
+        return {"dub": None, "sub": None, "dub_episodes": [], "source": ""}
+    slug = streaming_manager.anikoto.find_best_slug(names)
+    if not slug:
+        return {"dub": None, "sub": None, "dub_episodes": [], "source": "anikoto"}
+    episodes = streaming_manager.anikoto.get_episodes(slug) or []
+    if not episodes:
+        return {"dub": None, "sub": None, "dub_episodes": [], "source": "anikoto"}
+    dub_eps = sorted(
+        int(ep.get("num"))
+        for ep in episodes
+        if ep.get("has_dub") and str(ep.get("num", "")).replace(".", "", 1).isdigit()
+    )
+    return {
+        "dub": bool(dub_eps),
+        "sub": any(bool(ep.get("has_sub")) for ep in episodes),
+        "dub_episodes": dub_eps,
+        "source": "anikoto",
+    }
+
+
 def format_anime_card(anime: Dict) -> Dict:
     if not anime:
         return {}
@@ -1538,6 +1639,10 @@ def format_anime_card(anime: Dict) -> Dict:
 
     score = anime.get("averageScore")
     rating = f"{score / 10:.1f}" if score else "N/A"
+    try:
+        popularity = int(anime.get("popularity") or 0)
+    except (TypeError, ValueError):
+        popularity = 0
 
     return {
         "id": anime.get("id"),
@@ -1570,6 +1675,11 @@ def format_anime_card(anime: Dict) -> Dict:
         "genres": (anime.get("genres") or [])[:4],
         "studio": studio_name,
         "trailer_id": yt_id,
+        # Source-owned ranking data. None means the source published no rank,
+        # so the client can leave the badge off instead of inventing one.
+        "popularity": popularity,
+        "ranks": _source_ranks(anime),
+        "dub_available": _cached_dub_flag(anime.get("id")),
     }
 
 
@@ -3351,8 +3461,8 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.15.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
-APP_VERSION_CODE = 28
+APP_VERSION = "2.16.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION_CODE = 29
 # The release tag tracks the app version, so a new build can never point
 # /get/android at an older asset (the old default was a stale v1.2.0).
 if not os.environ.get("CAMANIME_RELEASE_TAG"):
@@ -3702,6 +3812,83 @@ def api_v1_catalog_home():
     cards["featured"] = (cards["trending"] or cards["popular"] or [None])[0]
     response = jsonify({"status": "success", "catalog_source": "AniList", "catalog": cards})
     response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    return response
+
+
+@app.route("/api/v1/dub-availability")
+def api_v1_dub_availability():
+    """Provider-published dub episodes for up to 24 anime ids.
+
+    The catalogue itself has no dub data (AniList does not publish audio
+    tracks), so this is the one place the app asks: the answer is the
+    provider's own episode index, cached for six hours. Unknown answers are
+    omitted rather than reported as "no dub".
+    """
+    raw_ids = (request.args.get("ids") or "").replace(" ", "")
+    ids: List[int] = []
+    for chunk in raw_ids.split(","):
+        if not chunk:
+            continue
+        if not chunk.isdigit():
+            return _catalog_error("ids must be a comma-separated list of anime ids.", 400)
+        ids.append(int(chunk))
+    if not ids:
+        return _catalog_error("Provide at least one anime id.", 400)
+    if any(aid <= 0 for aid in ids):
+        return _catalog_error("Anime ids must be positive.", 400)
+    if len(ids) > 24:
+        return _catalog_error("Ask for at most 24 anime ids per call.", 400)
+    ids = list(dict.fromkeys(ids))
+
+    now = time.time()
+    resolved: Dict[int, Dict] = {}
+    missing: List[int] = []
+    with _DUB_FLAG_LOCK:
+        for aid in ids:
+            entry = _DUB_FLAG_CACHE.get(aid)
+            if entry and now - entry[0] <= _DUB_FLAG_TTL:
+                resolved[aid] = entry[1]
+            else:
+                missing.append(aid)
+
+    if missing:
+        data = fetch_anilist(
+            "query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids, type: ANIME) "
+            "{ id title { romaji english native } } } }",
+            {"ids": missing},
+        )
+        titles_by_id: Dict[int, List[str]] = {}
+        for media in ((data or {}).get("Page", {}).get("media") or []):
+            try:
+                titles_by_id[int(media.get("id"))] = _media_titles(media)
+            except (TypeError, ValueError):
+                continue
+
+        def _resolve(aid: int) -> Tuple[int, Dict]:
+            try:
+                return aid, _provider_audio_flags(titles_by_id.get(aid) or [])
+            except Exception:
+                return aid, {"dub": None, "sub": None,
+                             "dub_episodes": [], "source": ""}
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for aid, flags in pool.map(_resolve, missing):
+                if flags.get("dub") is None:
+                    continue
+                with _DUB_FLAG_LOCK:
+                    _DUB_FLAG_CACHE[aid] = (time.time(), flags)
+                resolved[aid] = flags
+
+    payload = {str(aid): resolved[aid] for aid in ids if aid in resolved}
+    response = jsonify({
+        "status": "success",
+        "availability": payload,
+        "note": (
+            "dub/dub_episodes come from the streaming provider's own episode "
+            "index; a title missing here is unknown, not confirmed undubbed."
+        ),
+    })
+    response.headers["Cache-Control"] = "public, max-age=900, stale-while-revalidate=3600"
     return response
 
 

@@ -835,3 +835,59 @@ def test_single_account_and_counter_reads_avoid_store_snapshot(api, monkeypatch)
             "email": "admin@camanime.local", "password": "correct-password", "action": "signin"
         })
         assert response.status_code in (302, 303)
+
+
+def test_card_ranks_come_from_the_source(api):
+    raw = anime()
+    raw["rankings"] = [
+        {"rank": 4, "type": "TRENDING", "allTime": False},
+        {"rank": 12, "type": "RATED", "allTime": True},
+        {"rank": 77, "type": "POPULAR", "allTime": True},
+    ]
+    card = api.format_anime_card(raw)
+    assert card["ranks"]["rated"] == 12
+    assert card["ranks"]["trending"] == 4
+    assert card["ranks"]["popular"] == 77
+    assert card["ranks"]["source"] == "AniList"
+
+    # A source that published no rank gets no rank: nothing is inferred from
+    # the order the card happened to arrive in.
+    bare = api.format_anime_card(anime(anime_id=555))
+    assert bare["ranks"]["rated"] is None
+    assert bare["ranks"]["popular"] is None
+    assert bare["ranks"]["trending"] is None
+
+
+def test_dub_availability_uses_provider_episode_index(api, monkeypatch):
+    monkeypatch.setattr(api, "_DUB_FLAG_CACHE", {})
+    raw = anime(anime_id=4242)
+    monkeypatch.setattr(api, "fetch_anilist", lambda *a, **k: {"Page": {"media": [raw]}})
+
+    class _Anikoto:
+        def find_best_slug(self, titles):
+            assert titles
+            return "attack-on-titan"
+
+        def get_episodes(self, slug):
+            return [
+                {"num": 1, "has_sub": True, "has_dub": True},
+                {"num": 2, "has_sub": True, "has_dub": False},
+            ]
+
+    monkeypatch.setattr(api.streaming_manager, "anikoto", _Anikoto())
+    body = api.app.test_client().get("/api/v1/dub-availability?ids=4242").get_json()
+    entry = body["availability"]["4242"]
+    assert entry["dub"] is True
+    assert entry["dub_episodes"] == [1]
+    assert entry["sub"] is True
+
+    # Catalogue cards then report the resolved flag without another lookup.
+    assert api.format_anime_card(raw)["dub_available"] is True
+
+
+def test_dub_availability_rejects_bad_ids(api):
+    client = api.app.test_client()
+    assert client.get("/api/v1/dub-availability").status_code == 400
+    assert client.get("/api/v1/dub-availability?ids=abc").status_code == 400
+    assert client.get("/api/v1/dub-availability?ids=-3").status_code == 400
+    assert client.get("/api/v1/dub-availability?ids=" + ",".join(["1"] * 25)).status_code == 400

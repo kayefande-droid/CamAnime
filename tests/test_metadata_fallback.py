@@ -381,3 +381,20 @@ def test_ongoing_series_watch_plays_video(monkeypatch):
     assert src.status_code == 200
     servers = src.get_json()["servers"]
     assert servers and servers[0]["stream_url"].startswith("https://")
+
+
+def test_fallback_ranks_come_from_kitsu_and_jikan():
+    kitsu = dict(KITSU_ITEM)
+    kitsu["attributes"] = dict(KITSU_ITEM["attributes"], ratingRank=42, popularityRank=7)
+    kmedia = api._kitsu_to_media(kitsu)
+    assert kmedia["rank"] == 42
+    assert kmedia["popularity_rank"] == 7
+    assert api.format_anime_card(kmedia)["ranks"]["rated"] == 42
+
+    jikan = dict(JIKAN_ITEM, rank=15, popularity=5)
+    jmedia = api._jikan_to_media(jikan)
+    assert jmedia["rank"] == 15
+    assert jmedia["popularity_rank"] == 5
+    jcard = api.format_anime_card(jmedia)
+    assert jcard["ranks"]["rated"] == 15
+    assert jcard["ranks"]["source"] == "Jikan"

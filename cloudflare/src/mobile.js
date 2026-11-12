@@ -38,6 +38,8 @@ const CARD_FIELDS = `
   episodes
   genres
   averageScore
+  popularity
+  rankings { rank type allTime }
   description
   trailer { id site }
 `;
@@ -78,6 +80,15 @@ export function card(m) {
     episodes: m?.episodes ?? null,
     genres: m?.genres || [],
     score: m?.averageScore ?? null,
+    popularity: m?.popularity ?? null,
+    // Source-published ranks only: rated / popular / trending. Missing entries
+    // stay null so the app can omit the badge instead of inventing a position.
+    ranks: {
+      rated: (m?.rankings || []).find((r) => r?.type === "RATED")?.rank ?? null,
+      popular: (m?.rankings || []).find((r) => r?.type === "POPULAR")?.rank ?? null,
+      trending: (m?.rankings || []).find((r) => r?.type === "TRENDING")?.rank ?? null,
+      source: "AniList",
+    },
     synopsis: stripHtml(m?.description),
     trailer_id: trailer,
   };

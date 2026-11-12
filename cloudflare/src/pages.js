@@ -1,3 +1,4 @@
+import { renderSettings } from "./settings_page.js";
 /** CamAnime edge pages: same branding/classes as the Render site, Jinja-free HTML builders. */
 import { esc, BRAND } from "./util.js";
 import { card } from "./catalog.js";
@@ -32,7 +33,11 @@ function head(title, desc) {
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Same faces as the Render templates, so the shared stylesheets compute
+     identical type on both hosts. Font Awesome is the icon set those
+     templates use for card badges and nav items. -->
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
@@ -57,30 +62,48 @@ export function chrome(title, desc, userName, inner, active = "home", opts = {})
     <div class="brand-group">
       <a class="site-logo" href="/" aria-label="CamAnime — Watch, discover, enjoy"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy"></a>
       <nav class="nav-links">
-        <a class="nav-link ${active === "home" ? "active" : ""}" href="/">Home</a>
-        <a class="nav-link ${active === "library" ? "active" : ""}" href="/library">My Library</a>
-        <a class="nav-link ${active === "download" ? "active" : ""}" href="/download">Downloads</a>
-        <a class="nav-link ${active === "settings" ? "active" : ""}" href="/settings">Settings</a>
-        <a class="nav-link ${active === "dev" ? "active" : ""}" href="/developers">Developers</a>
+        <a class="nav-link ${active === "home" ? "active" : ""}" href="/"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+        <a class="nav-link ${active === "library" ? "active" : ""}" href="/library"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
+        <a class="nav-link ${active === "download" ? "active" : ""}" href="/download"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
+        <a class="nav-link ${active === "settings" ? "active" : ""}" href="/settings"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
+        <a class="nav-link ${active === "dev" ? "active" : ""}" href="/developers"><i class="fas fa-code" aria-hidden="true"></i> Developers</a>
         ${userName ? `<a class="nav-link" href="/settings">Account (${esc(userName)})</a>` : `<a class="nav-link" href="/login">Sign in</a>`}
       </nav>
     </div>
     <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open menu" onclick="toggleMobileNav()"><i class="fas fa-bars" aria-hidden="true"></i></button>
+    <div class="header-actions">
+      <form action="/search" method="get" class="search-form" role="search">
+        <input type="search" name="q" class="search-input" aria-label="Search anime catalogue" placeholder="Search anime, seasons, movies..." required>
+        <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
+      </form>
+    </div>
   </div>
   <nav class="mobile-nav" id="mobileNav" aria-label="Menu">
-    <a href="/">Home</a>
-    <a href="/library">My Library</a>
-    <a href="/download">Downloads</a>
-    <a href="/settings">Settings</a>
-    <a href="/developers">Developers API</a>
+    <a href="/"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+    <a href="/library"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
+    <a href="/download"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
+    <a href="/settings"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
+    <a href="/developers"><i class="fas fa-code" aria-hidden="true"></i> Developers API</a>
     ${userName ? `<a href="/settings">Account (${esc(userName)})</a>` : `<a href="/login">Sign in</a>`}
   </nav>
 </header>
 <main class="${mainClass}" id="main-content" tabindex="-1">
 ${inner}
 </main>
-<footer style="text-align:center;color:var(--text-muted,#64708a);padding:2rem 1rem;border-top:1px solid var(--border-subtle, rgba(255,255,255,.08))">
-  <p>CamAnime — watch anime free. Independent Cloudflare deployment (camanjme); not affiliated with the Render origin.</p>
+<footer>
+  <div class="footer-inner">
+    <div><strong style="color: var(--text-primary);">CamAnime</strong> — anime discovery, episode metadata, release schedule and the provider listings this deployment can actually play.</div>
+    <div style="display: flex; gap: 1.25rem; flex-wrap: wrap;">
+      <a href="/" style="color: var(--text-secondary); text-decoration: none;">Home</a>
+      <a href="/developers" style="color: var(--text-secondary); text-decoration: none;">Developer API</a>
+      <a href="/download" style="color: var(--accent); text-decoration: none;"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Get the apps</a>
+      <a href="/settings" style="color: var(--text-secondary); text-decoration: none;">Settings</a>
+    </div>
+  </div>
+  <div class="footer-inner" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border-subtle, rgba(255,255,255,.08)); display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: var(--text-secondary); font-size: .78rem;">
+    <span>© 2026 CamAnime. All rights reserved.</span>
+    <span>Independent Cloudflare deployment (camanjme) — not affiliated with the Render origin.</span>
+  </div>
 </footer>
 <script>
 function toggleMobileNav(force) {
@@ -97,22 +120,42 @@ document.addEventListener('keydown', function (e) { if (e.key === 'Escape') togg
 }
 
 export function homePage(grids, userName) {
-  const section = (title, items) => `
-    <section>
-      <h2 class="section-title">${esc(title)}</h2>
-      <div class="anime-grid">${items.map(card).join("")}</div>
-    </section>`;
-  const inner = `
-    <section class="hero">
-      <div class="hero-inner">
-        <h1 class="hero-title">Stream anime free.<br>No ads. ${userName ? "Welcome back, " + esc(userName) + "." : "No sign-up wall."}</h1>
-        <p class="hero-sub">Trending, airing and movie picks — synced to the AniList catalogue with the full CamAnime theme system (8 themes, data saver, quality control).</p>
-        <div class="hero-ctas">
-          <a class="btn-primary" href="#trending">Start watching</a>
-          <a class="btn-secondary" href="/settings">Site settings</a>
+  const section = (title, subtitle, items, id) => `
+    <section class="section-block"${id ? ` id="${id}"` : ""}>
+      <div class="section-head">
+        <div class="section-title-wrap">
+          <span class="section-accent-bar" aria-hidden="true"></span>
+          <h2 class="section-title">${esc(title)}</h2>
+          <span class="section-subtitle">${esc(subtitle)}</span>
         </div>
       </div>
-    </section>
+      <div class="anime-grid">${items.map(card).join("")}</div>
+    </section>`;
+  const hero = (grids.trending || [])[0];
+  const rating = hero?.averageScore ? (hero.averageScore / 10).toFixed(1) : "";
+  const heroMeta = [
+    rating ? `<span class="meta-pill gold"><i class="fas fa-star" aria-hidden="true"></i> ${rating}</span>` : "",
+    hero?.format ? `<span class="meta-pill">${esc(hero.format)}</span>` : "",
+    hero?.seasonYear ? `<span class="meta-pill">${esc(hero.seasonYear)}</span>` : "",
+    ...(hero?.genres || []).slice(0, 3).map((g) => `<span class="meta-pill">${esc(g)}</span>`),
+  ].join("");
+  const inner = `
+    ${hero ? `
+    <section class="hero-spotlight" id="heroCarousel">
+      <div class="hero-slide active">
+        <img class="hero-backdrop" src="${esc(hero.bannerImage || hero.coverImage?.extraLarge || hero.coverImage?.large || "")}" alt="${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}" decoding="async" referrerpolicy="no-referrer">
+        <div class="hero-vignette"></div>
+        <div class="hero-body">
+          <h1 class="hero-title">${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}</h1>
+          ${heroMeta ? `<div class="hero-meta-row">${heroMeta}</div>` : ""}
+          <p class="hero-desc">${userName ? `Welcome back, ${esc(userName)}. ` : ""}Trending on AniList right now, with provider listings resolved live on this deployment.</p>
+          <div class="hero-ctas">
+            <a class="btn-primary" href="/anime/${hero.id}"><i class="fas fa-circle-info" aria-hidden="true"></i> View details</a>
+            <a class="btn-secondary" href="/anime/${hero.id}"><i class="fas fa-layer-group" aria-hidden="true"></i> Episodes &amp; download</a>
+          </div>
+        </div>
+      </div>
+    </section>` : ""}
     <section class="dev-ad" aria-labelledby="devAdTitle">
       <span class="dev-eyebrow">Developer API · Free</span>
       <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
@@ -127,9 +170,9 @@ export function homePage(grids, userName) {
         <a class="btn-secondary" href="/developers#docs">View the docs</a>
       </div>
     </section>
-    <section id="trending">${section("Trending now", grids.trending)}</section>
-    ${section("Airing this season", grids.airing)}
-    ${section("Popular movies", grids.movies)}
+    ${section("Trending now", "What AniList is trending this hour", grids.trending || [], "trending")}
+    ${section("Airing this season", "Currently airing, highest rated first", grids.airing || [])}
+    ${section("Popular movies", "Most followed anime films", grids.movies || [])}
   `;
   return chrome("Watch anime free", "CamAnime on Cloudflare: trending anime, search, watch pages and the community forum.", userName, inner);
 }
@@ -444,65 +487,7 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
 }
 
 export function settingsPage(user) {
-  const THEMES = ["midnight", "light", "vibrant", "sakura", "forest", "obsidian", "neo", "tokyo"];
-  const LAYOUTS = ["classic", "cinema", "compact", "minimal", "wide", "magazine", "wall"];
-  const themeRow = THEMES.map((t) => `<button type="button" class="ca-theme-btn" data-theme-name="${t}">${t === "midnight" ? "Midnight" : t[0].toUpperCase() + t.slice(1)}</button>`).join("");
-  const layoutRow = LAYOUTS.map((l) => `<button type="button" class="ca-theme-btn" data-layout-name="${l}">${l[0].toUpperCase() + l.slice(1)}</button>`).join("");
-  const account = user
-    ? `<div class="panel-box"><h2 class="section-title">Account</h2><p>Signed in as <strong>${esc(user.name)}</strong> (${esc(user.email)}).</p><form onsubmit='fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"}).then(function(){location.href="/"})'><button class="btn-danger" type="submit">Sign out</button></form></div>`
-    : `<div class="panel-box"><h2 class="section-title">Account</h2><p><a href="/login">Sign in</a> to save comments, ratings and resume points on this deployment.</p></div>`;
-  const inner = `
-    <h1 class="section-title">Site settings</h1>
-    <div class="panel-box" style="margin-bottom:1rem">
-      <h2 class="section-title">Theme</h2>
-      <p class="muted">Eight themes, applied instantly and remembered on this device.</p>
-      <div class="ca-theme-row" role="group" aria-label="Site theme">${themeRow}</div>
-    </div>
-    <div class="panel-box" style="margin-bottom:1rem">
-      <h2 class="section-title">Layout template</h2>
-      <p class="muted">Seven complete layout recipes — grid shape, poster style, hero scale and spacing reflow across every page.</p>
-      <div class="ca-theme-row" role="group" aria-label="Layout template">${layoutRow}</div>
-      <p class="muted" id="layoutNote"></p>
-    </div>
-    ${account}
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var root = document.documentElement;
-      var LABELS = { classic: 'Classic — the original layout.', cinema: 'Cinema — big posters, wide stage.', compact: 'Compact — dense grid, landscape posters.', minimal: 'Minimal — flat editorial.', wide: 'Wide — full-bleed for large screens.', magazine: 'Magazine — editorial column.', wall: 'Poster Wall — dense poster grid.' };
-      function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
-      var themes = ['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'];
-      var layouts = ['classic','cinema','compact','minimal','wide','magazine','wall'];
-      var themeBtns = document.querySelectorAll('[data-theme-name]');
-      var layoutBtns = document.querySelectorAll('[data-layout-name]');
-      var note = document.getElementById('layoutNote');
-      var t = ls('camanime-theme') || 'midnight'; if (themes.indexOf(t) === -1) t = 'midnight';
-      var l = ls('camanime-layout') || 'classic'; if (layouts.indexOf(l) === -1) l = 'classic';
-      function paint(nodes, attr, cur) {
-        for (var i = 0; i < nodes.length; i++) { nodes[i].classList.toggle('active', nodes[i].getAttribute(attr) === cur); }
-      }
-      function setTheme(name) {
-        if (window.caSetTheme) window.caSetTheme(name);
-        else { root.setAttribute('data-theme', name); try { localStorage.setItem('camanime-theme', name); } catch (e) {} }
-        paint(themeBtns, 'data-theme-name', name);
-      }
-      function setLayout(name) {
-        if (window.caSetLayout) window.caSetLayout(name);
-        else { root.setAttribute('data-layout', name); try { localStorage.setItem('camanime-layout', name); } catch (e) {} }
-        paint(layoutBtns, 'data-layout-name', name);
-        if (note) note.textContent = LABELS[name] || '';
-      }
-      paint(themeBtns, 'data-theme-name', t);
-      paint(layoutBtns, 'data-layout-name', l);
-      if (note) note.textContent = LABELS[l] || '';
-      for (var i = 0; i < themeBtns.length; i++) {
-        (function (btn) { btn.onclick = function () { setTheme(btn.getAttribute('data-theme-name')); }; })(themeBtns[i]);
-      }
-      for (var j = 0; j < layoutBtns.length; j++) {
-        (function (btn) { btn.onclick = function () { setLayout(btn.getAttribute('data-layout-name')); }; })(layoutBtns[j]);
-      }
-    });
-    </script>`;
-  return chrome("Settings", "CamAnime settings: themes, layouts and account.", user?.name, inner, "settings");
+  return renderSettings(user, chrome, esc);
 }
 
 /**

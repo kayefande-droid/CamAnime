@@ -881,3 +881,33 @@ html[data-data="low"] body { background-attachment: scroll; }
 @media (max-width: 720px) {
   .ca-appearance-toggle { width: 34px; height: 34px; }
 }
+
+/* ── Settings page shell (shared by both hosts) ───────────────────
+   The Render template carries the same rules inline; putting them in the
+   shared stylesheet lets the Cloudflare mirror reuse the markup verbatim. */
+.set-wrap { max-width: 760px; margin: 0 auto; padding: clamp(1rem, 4vw, 2rem); }
+.set-head { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 1.5rem; flex-wrap: wrap; }
+.set-head h1 { font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.5rem, 1.3rem + 1.5vw, 2rem); }
+.set-card { background: var(--bg-elevated, #0e111a); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 18px; padding: clamp(1rem, 3vw, 1.5rem); margin-bottom: 1.1rem; }
+.set-card h2 { font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif; font-size: clamp(1.05rem, 1rem + .4vw, 1.25rem); margin-bottom: .35rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.set-card p { color: var(--text-secondary, #a0abc0); font-size: .9rem; margin-bottom: .9rem; }
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: .6rem; }
+.theme-pick { display: flex; align-items: center; gap: .55rem; background: var(--bg-input, #141926); border: 2px solid var(--line, rgba(255,255,255,.12)); border-radius: 12px; padding: .7rem .8rem; cursor: pointer; font-weight: 700; font-size: .9rem; color: inherit; }
+.theme-pick.active { border-color: var(--accent, #FFB347); }
+.theme-dot { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; border: 2px solid rgba(255,255,255,.25); }
+.row-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: var(--bg-input, #141926); border: 1px solid var(--line, rgba(255,255,255,.1)); border-radius: 12px; padding: .8rem 1rem; margin-bottom: .6rem; flex-wrap: wrap; }
+.row-toggle .lab { font-weight: 700; font-size: .95rem; }
+.row-toggle .hint { font-size: .82rem; color: var(--text-secondary, #a0abc0); width: 100%; }
+.switch { position: relative; width: 56px; height: 32px; flex: 0 0 auto; cursor: pointer; display: inline-block; }
+.switch input { position: absolute; opacity: 0; inset: 0; cursor: pointer; z-index: 2; margin: 0; }
+.switch .track { position: absolute; inset: 0; background: #2a3350; border-radius: 999px; transition: background .2s; }
+.switch .thumb { position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .2s; }
+.switch input:checked ~ .track { background: #10B981; }
+.switch input:checked ~ .thumb { left: 28px; }
+.seg { display: flex; gap: .6rem; flex-wrap: wrap; }
+.seg button { flex: 1 1 120px; background: var(--bg-input, #141926); border: 2px solid var(--line, rgba(255,255,255,.12)); border-radius: 12px; padding: .7rem; font-weight: 800; font-size: .9rem; color: var(--text-secondary, #a0abc0); cursor: pointer; }
+.seg button.active { border-color: var(--accent, #FFB347); color: var(--accent, #FFB347); }
+.name-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+.name-row input, .login-fields input { flex: 1 1 220px; min-width: 0; background: var(--bg-input, #141926); border: 1px solid var(--line, rgba(255,255,255,.14)); color: inherit; border-radius: 12px; padding: .75rem .9rem; font-size: .95rem; }
+.set-card .btn-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: .4rem; }
+.storage-line { font-size: .85rem; color: var(--text-secondary, #a0abc0); margin-top: .6rem; font-family: ui-monospace, monospace; }

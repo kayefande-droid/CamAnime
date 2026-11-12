@@ -17,6 +17,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications 22.x uses java.time and other JDK APIs
+        // through AAR metadata that requires desugaring on minSdk 24.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -75,6 +78,8 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
     // Periodic anime-advert notifications (every 30 minutes = 2 per hour).
     implementation("androidx.work:work-runtime-ktx:2.9.1")
 

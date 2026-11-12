@@ -76,15 +76,29 @@ export async function watchContext(id, epNum) {
   return { anime: m, episodes: eps, current: ep, epNum };
 }
 
-export function card({ coverImage, title, id, averageScore, format }) {
+/**
+ * The same card anatomy the Render templates render, using the shared
+ * stylesheet classes: poster with badges, hover actions, and a body link.
+ * Nothing here invents data — a missing score or year simply omits the chip.
+ */
+export function card({ coverImage, title, id, averageScore, format, seasonYear, status }) {
   const name = title.english || title.romaji || title.native || "Untitled";
   const img = coverImage?.extraLarge || coverImage?.large || coverImage?.medium || "";
-  return `<a class="anime-card" href="/anime/${id}">
-    <span class="card-poster-wrap"><img src="${esc(img)}" alt="${esc(name)}" loading="lazy" decoding="async"></span>
-    <span class="card-title">${esc(name)}</span>
-    ${averageScore ? `<span class="card-score">★ ${(averageScore / 10).toFixed(1)}</span>` : ""}
-    ${format ? `<span class="card-format">${esc(format)}</span>` : ""}
-  </a>`;
+  const rating = averageScore ? (averageScore / 10).toFixed(1) : "";
+  const meta = [format || "TV", seasonYear || status || "Anime"];
+  return `<div class="anime-card">
+    <div class="card-poster-wrap">
+      ${rating ? `<div class="card-badges-top"><span class="score-badge">★ ${rating}</span></div>` : ""}
+      <img src="${esc(img)}" alt="${esc(name)} poster" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='/static/brand/camanime-icon.svg'">
+      <div class="card-hover-actions"><div class="card-action-row">
+        <a class="card-btn-play" href="/anime/${id}"><i class="fas fa-circle-info" aria-hidden="true"></i> Episode details</a>
+      </div></div>
+    </div>
+    <a class="card-body" href="/anime/${id}" style="text-decoration:none;">
+      <div class="card-title">${esc(name)}</div>
+      <div class="card-submeta"><span>${esc(meta[0])}</span><span>${esc(meta[1])}</span></div>
+    </a>
+  </div>`;
 }
 
 // esc is imported lazily-free here to avoid a cycle: define inline

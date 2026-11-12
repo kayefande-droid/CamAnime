@@ -903,3 +903,62 @@ body .hero-ctas .btn-secondary:active { transform: none; box-shadow: 2px 2px 0 0
   body .hero-ctas .btn-primary:active,
   body .hero-ctas .btn-secondary:active { transform: none; }
 }
+
+/* ── Anime ink layer ──────────────────────────────────────────────
+   Shared by the Render site and the Cloudflare mirror: both load this
+   file, so one block keeps the two deployments visually identical. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, .045) 1px, transparent 1.4px);
+  background-size: 5px 5px;
+  opacity: .5;
+  mix-blend-mode: soft-light;
+}
+
+body .hero-spotlight { position: relative; isolation: isolate; }
+
+body .hero-spotlight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: repeating-conic-gradient(from 0deg at 82% 26%,
+    rgba(255, 255, 255, .085) 0deg 1deg, transparent 1deg 4deg);
+  -webkit-mask-image: radial-gradient(circle at 82% 26%, #000 0 30%, transparent 60%);
+  mask-image: radial-gradient(circle at 82% 26%, #000 0 30%, transparent 60%);
+  opacity: .55;
+}
+
+body .hero-spotlight > * { position: relative; z-index: 1; }
+
+body .section-title::before {
+  width: .42em;
+  height: .42em;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: linear-gradient(135deg, var(--accent, #FFB347), var(--accent-crimson, #FF5E62));
+}
+
+body .anime-card { transition: transform .22s ease, box-shadow .22s ease; }
+
+body .anime-card:hover {
+  transform: translateY(-4px) rotate(-.35deg);
+  box-shadow: 5px 6px 0 rgba(var(--accent-rgb, 255, 179, 71), .2);
+}
+
+body .anime-card:hover .anime-poster-ink,
+body .anime-card:hover .poster { border-color: rgba(var(--accent-rgb, 255, 179, 71), .55); }
+
+body .btn-primary,
+body .nav-link.active {
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, .35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .anime-card, body .anime-card:hover { transition: none; transform: none; }
+}

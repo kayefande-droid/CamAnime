@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'core/ad_notifications.dart';
 import 'core/app_updater.dart';
+import 'core/background_notifications.dart';
 import 'core/version_gate.dart';
 import 'core/app_notifications.dart';
 import 'core/app_config.dart';
@@ -140,6 +141,10 @@ Future<void> main() async {
   unawaited(RemoteConfig.refresh());
   // FCM registration. A build with no Firebase config simply stays quiet.
   unawaited(PushService.init());
+  // Second delivery path: a WorkManager job every six hours posts
+  // announcements and new-build notices even when the app is closed and even
+  // when this build has no FCM token.
+  unawaited(BackgroundNotifications.init());
   // Honor a notification tap or the scheduled two-minute alarm that asks the app
   // to start the live update now.
   unawaited(() async {
@@ -203,7 +208,15 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
     final link = PushService.pendingLink.value;
     if (link == null || link.isEmpty || !mounted) return;
     PushService.pendingLink.value = null;
-    final parts = Uri.tryParse(link)?.pathSegments ?? const <String>[];
+    final uri = Uri.tryParse(link);
+    if (uri == null) return;
+    // A notification payload is attacker-adjacent input: only our own host (or
+    // a bare in-app path) may name an anime, and anything else is dropped.
+    if (uri.hasScheme &&
+        !(uri.scheme == 'https' && uri.host == Uri.parse(apiHost).host)) {
+      return;
+    }
+    final parts = uri.pathSegments;
     if (parts.length < 2) return;
     if (parts[0] != 'watch' && parts[0] != 'anime') return;
     final id = parts[1];
@@ -1165,8 +1178,15 @@ class Api {
 
   static Future<void> postComment(String animeId, String text) async {
     final fd = {'anime_id': animeId, 'text': text, 'name': await guestName()};
+    // Send the account token: without it the server minted a fresh guest for
+    // every post, so the same person's comments appeared under a different
+    // guest name each time and never belonged to their profile. The thread is
+    // public either way, but attribution has to be the real account.
+    final h = Map<String, String>.from(await headers());
+    h.remove('content-type');
     final r = await http
-        .post(Uri.parse('${base()}/api/community/comment'), body: fd)
+        .post(Uri.parse('${base()}/api/community/comment'),
+            body: fd, headers: h)
         .timeout(const Duration(seconds: 15));
     final d = json.decode(r.body) as Map<String, dynamic>;
     if (d['status'] != 'success') throw Exception(d['error'] ?? 'Post failed');
@@ -1178,8 +1198,11 @@ class Api {
       'score': '$score',
       'name': await guestName()
     };
+    final h = Map<String, String>.from(await headers());
+    h.remove('content-type');
     final r = await http
-        .post(Uri.parse('${base()}/api/community/rate'), body: fd)
+        .post(Uri.parse('${base()}/api/community/rate'),
+            body: fd, headers: h)
         .timeout(const Duration(seconds: 15));
     final d = json.decode(r.body) as Map<String, dynamic>;
     if (d['status'] != 'success') throw Exception(d['error'] ?? 'Rate failed');
@@ -1215,6 +1238,11 @@ class Api {
     await p.setString('api_token', d['token']);
     await p.setString('user_email', (d['user'] as Map)['email']);
     await p.setString('username', (d['user'] as Map)['name']);
+    // The role comes from the same account row the website uses, so the app
+    // recognises an owner/developer/support sign-in instead of treating every
+    // session as an ordinary viewer.
+    await p.setString(
+        'user_role', ((d['user'] as Map)['role'] ?? 'user').toString());
     return d['user'] as Map<String, dynamic>;
   }
 
@@ -1226,6 +1254,7 @@ class Api {
     final p = await SharedPreferences.getInstance();
     await p.remove('api_token');
     await p.remove('user_email');
+    await p.remove('user_role');
   }
 
   /// Signed-in user profile: also tells us the role (admin vs user).
@@ -1493,13 +1522,77 @@ class MediaDownloadCancelled implements Exception {
 }
 
 // ── Shared widgets ─────────────────────────────────────
+/// The metadata source's own rank for a title, ready to print.
+///
+/// Returns null when the source published no rank for that kind, so a card
+/// never shows a number that is really just its position in a list.
+String? itemRankLabel(Map item, String? kind) {
+  if (kind == null) return null;
+  final ranks = item['ranks'];
+  if (ranks is! Map) return null;
+  final n = int.tryParse('${ranks[kind] ?? ''}');
+  if (n == null || n <= 0) return null;
+  final prefix = switch (kind) {
+    'rated' => 'TOP',
+    'popular' => 'POP',
+    _ => 'TREND',
+  };
+  return '$prefix #$n';
+}
+
+/// Provider-published dub episodes per anime id, keyed by id.
+Future<Map<String, Map>> loadDubAvailability(List<String> ids) async {
+  if (ids.isEmpty) return {};
+  final r = await http
+      .get(Uri.parse('$apiHost/api/v1/dub-availability?ids=${ids.join(',')}'))
+      .timeout(const Duration(seconds: 25));
+  final body = json.decode(r.body) as Map<String, dynamic>;
+  final raw = (body['availability'] as Map?) ?? const {};
+  return raw.map((k, v) => MapEntry('$k', (v as Map).cast<String, dynamic>()));
+}
+
+/// Stamps a DUB badge on the cards whose title the provider actually dubs.
+///
+/// Availability is additive: any failure just leaves the cards without a
+/// badge, and a title the server could not check is never marked "no dub".
+Future<void> markDubAvailability(List items, void Function() refresh) async {
+  final ids = <String>{};
+  for (final item in items) {
+    if (item is! Map) continue;
+    final id = '${item['id'] ?? ''}';
+    if (id.isNotEmpty) ids.add(id);
+    if (ids.length >= 20) break;
+  }
+  if (ids.isEmpty) return;
+  try {
+    final flags = await loadDubAvailability(ids.toList());
+    if (flags.isEmpty) return;
+    var changed = false;
+    for (final item in items) {
+      if (item is! Map) continue;
+      final flag = flags['${item['id']}'];
+      if (flag != null && flag['dub'] == true && item['dub'] != true) {
+        item['dub'] = true;
+        changed = true;
+      }
+    }
+    if (changed) refresh();
+  } catch (_) {
+    // No badge is better than a wrong badge.
+  }
+}
+
 class PosterCard extends StatelessWidget {
   final Map item;
   final double width;
-  const PosterCard({super.key, required this.item, this.width = 128});
+
+  /// Which source rank to print on the poster, e.g. 'trending' or 'rated'.
+  final String? rankKey;
+  const PosterCard({super.key, required this.item, this.width = 128, this.rankKey});
 
   @override
   Widget build(BuildContext context) {
+    final rank = itemRankLabel(item, rankKey);
     return GestureDetector(
       onTap: () => Navigator.push(
           context,
@@ -1514,7 +1607,43 @@ class PosterCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             child: AspectRatio(
               aspectRatio: 2 / 2.85,
-              child: CachedPosterImage(url: (item['image'] ?? '').toString()),
+              child: Stack(fit: StackFit.expand, children: [
+                CachedPosterImage(url: (item['image'] ?? '').toString()),
+                if (item['dub'] == true)
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(5)),
+                      child: const Text('DUB',
+                          style: TextStyle(
+                              color: amber,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+                if (rank != null)
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: amber,
+                          borderRadius: BorderRadius.circular(5)),
+                      child: Text(rank,
+                          style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+              ]),
             ),
           ),
           const SizedBox(height: 6),
@@ -2011,9 +2140,15 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     if (featured != null) out.add(_featuredCard(featured!));
     if (slides.isNotEmpty) out.add(_slideshow(slides));
     if (resume.isNotEmpty) out.add(_resumeRail());
-    out.add(_rail('Trending Anime', trending));
-    out.add(_rail('Popular this season', popular));
-    out.add(_rail('Top Rated', topRated));
+    if (!_dubBulkRequested && (trending.isNotEmpty || popular.isNotEmpty)) {
+      _dubBulkRequested = true;
+      unawaited(markDubAvailability([...trending, ...popular], () {
+        if (mounted) setState(() {});
+      }));
+    }
+    out.add(_rail('Trending Anime', trending, rankKey: 'trending'));
+    out.add(_rail('Popular this season', popular, rankKey: 'popular'));
+    out.add(_rail('Top Rated', topRated, rankKey: 'rated'));
     out.add(_rail('Recently Added', fresh));
     out.add(_rail('Popular Movies', movies));
     out.add(_rail('Popular Series', series));
@@ -2212,7 +2347,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     return '$m:$ss';
   }
 
-  Widget _rail(String title, List items) =>
+  Widget _rail(String title, List items, {String? rankKey}) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -2230,7 +2365,10 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, i) => PosterCard(item: items[i] as Map),
+                  // rankKey prints the metadata source's own rank, so a rail
+                  // never numbers itself 1..n.
+                  itemBuilder: (_, i) =>
+                      PosterCard(item: items[i] as Map, rankKey: rankKey),
                 ),
         ),
       ]);
@@ -2243,6 +2381,10 @@ class _Slideshow extends StatefulWidget {
   @override
   State<_Slideshow> createState() => _SlideshowState();
 }
+
+/// One bulk dub request per app session: the catalogue fills badges on the
+/// next frame instead of making every poster fetch its own flag.
+bool _dubBulkRequested = false;
 
 class _SlideshowState extends State<_Slideshow> {
   final _ctrl = PageController(viewportFraction: 0.92);
@@ -2279,6 +2421,11 @@ class _SlideshowState extends State<_Slideshow> {
           itemBuilder: (_, i) {
             final item = widget.items[i] as Map;
             final img = (item['banner'] ?? item['image'] ?? '').toString();
+            // The rank shown is the one the metadata source published, never
+            // the slide's position in this carousel.
+            final slideRank = itemRankLabel(item, 'trending') ??
+                itemRankLabel(item, 'rated') ??
+                itemRankLabel(item, 'popular');
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               child: GestureDetector(
@@ -2309,13 +2456,14 @@ class _SlideshowState extends State<_Slideshow> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
+                              if (slideRank != null)
+                                Container(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
                                       color: amber,
                                       borderRadius: BorderRadius.circular(6)),
-                                  child: Text('TRENDING #${i + 1}',
+                                  child: Text(slideRank,
                                       style: const TextStyle(
                                           color: Colors.black,
                                           fontSize: 10,
@@ -2771,6 +2919,9 @@ class _DetailScreenState extends State<DetailScreen> {
   /// server has actually reported whether the provider lists it.
   bool? _dubAvailable;
 
+  /// Episodes the provider's own index marks as dubbed; empty until checked.
+  Set<int> _dubEpisodes = {};
+
   void _applyAudioAvailability(Map<String, dynamic> bundle) {
     final raw = bundle['audio_availability'];
     if (raw is! Map || raw['dub'] is! bool) return;
@@ -2838,14 +2989,34 @@ class _DetailScreenState extends State<DetailScreen> {
   String trailerId = '';
   bool trailerBusy = false;
 
-  /// Real episode count from the website. Never fabricates a number: titles
-  /// still airing report their aired count through `next_airing_episode`.
+  /// Episodes that actually exist, from the website's own count.
+  ///
+  /// A still-airing series must never be numbered up to AniList's planned
+  /// total: that would draw rows for episodes that have not aired. The aired
+  /// count (`latest_ep`, else the next episode minus one) is the ceiling, and
+  /// when even that is unknown the board stays empty instead of inventing
+  /// rows.
   int get totalEps {
-    final n = int.tryParse((info['episode_count'] ?? '').toString()) ?? 0;
-    if (n > 0) return n > 500 ? 500 : n;
-    final next =
-        int.tryParse((info['next_airing_episode'] ?? '').toString()) ?? 0;
-    return next > 1 ? next - 1 : 0;
+    final aired = int.tryParse('${info['latest_ep'] ?? ''}') ?? 0;
+    // The detail payload sends the next episode as a bare number; older
+    // responses sent the AniList object. Accept both without guessing.
+    final rawNext = info['next_airing_episode'];
+    final next = int.tryParse(rawNext is Map
+            ? '${rawNext['episode'] ?? ''}'
+            : '${rawNext ?? ''}') ??
+        0;
+    final status = '${info['status'] ?? ''}'.toLowerCase();
+    final airing = status.contains('releas') || status.contains('airing');
+    final reported = int.tryParse(
+            '${info['episode_count'] ?? info['total_episodes'] ?? ''}') ??
+        0;
+
+    int clampCount(int n) => n > 500 ? 500 : (n > 0 ? n : 0);
+    if (airing) {
+      final confirmed = aired > 0 ? aired : (next > 1 ? next - 1 : 0);
+      return clampCount(confirmed);
+    }
+    return clampCount(reported > 0 ? reported : aired);
   }
 
   /// Real related seasons/series for this anime, straight from the catalogue.
@@ -2872,6 +3043,8 @@ class _DetailScreenState extends State<DetailScreen> {
     // Resolve the servers for the episode the user is most likely to start in
     // the background, so the first Play/Download tap responds instantly.
     if (!dataSaver) unawaited(_warmFirstEpisode());
+    // Comments are shared, not per-install: the existing thread is loaded on
+    // open, so other people's comments are visible before this user posts.
     await _loadComments();
   }
 
@@ -2886,8 +3059,35 @@ class _DetailScreenState extends State<DetailScreen> {
         trailerId = (d['trailer_id'] ?? '').toString().trim();
         loading = false;
       });
+      unawaited(_loadDubAvailability());
     } catch (_) {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  /// Asks the API which episodes the provider itself publishes in English.
+  ///
+  /// This is the same index the audio switch uses, so a DUB badge on an
+  /// episode row is the provider's claim about that episode, not a guess from
+  /// the title-level flag.
+  Future<void> _loadDubAvailability() async {
+    try {
+      final flags = await loadDubAvailability([widget.animeId]);
+      final entry = flags[widget.animeId];
+      if (entry == null || !mounted) return;
+      final dub = entry['dub'] == true;
+      final episodes = <int>{};
+      for (final raw in (entry['dub_episodes'] as List?) ?? const []) {
+        final n = int.tryParse('$raw');
+        if (n != null && n > 0) episodes.add(n);
+      }
+      setState(() {
+        _dubEpisodes = episodes;
+        if (dub) _dubAvailable = true;
+        if (!dub && audio == 'dub') audio = 'sub';
+      });
+    } catch (_) {
+      // A missing answer leaves the rows unbadged rather than wrong.
     }
   }
 
@@ -3849,6 +4049,7 @@ class _DetailScreenState extends State<DetailScreen> {
         selected: selected,
         previews: previews,
         progress: watch,
+        dubEpisodes: _dubEpisodes,
         onPlay: _play,
         onToggleSelect: (ep, sel) => setState(() {
           if (sel) {
@@ -4832,6 +5033,11 @@ class _AuthCardState extends State<_AuthCard> {
   final password = TextEditingController();
   bool busy = false;
   String? who;
+  String _role = '';
+
+  /// Roles with staff access on the website ("admin" is the legacy owner row).
+  bool get _staff =>
+      const {'owner', 'developer', 'support', 'admin'}.contains(_role);
 
   @override
   void initState() {
@@ -4839,12 +5045,27 @@ class _AuthCardState extends State<_AuthCard> {
     _who();
   }
 
-  // The website identifies the signed-in user; the app only needs the email.
-  // Administrative roles are intentionally not read here: the APK has no admin
-  // surface, so it never needs to know or display one.
+  // The website identifies the signed-in user and their role together. The
+  // app has no admin controls, but it must recognise staff accounts rather
+  // than showing an owner the same account row as a viewer.
   Future<void> _who() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted) setState(() => who = p.getString('user_email'));
+    final email = p.getString('user_email');
+    final role = (p.getString('user_role') ?? '').toLowerCase();
+    if (mounted) setState(() { who = email; _role = role; });
+    if (email == null || email.isEmpty) return;
+    // Refresh from the server when possible; the cached value is the fallback
+    // so a role change still applies after the next sign-in.
+    try {
+      final me = await Api.me();
+      final fresh = ((me['user'] as Map?) ?? const {})['role']
+          .toString()
+          .toLowerCase();
+      if (fresh.isNotEmpty && mounted) {
+        await p.setString('user_role', fresh);
+        setState(() => _role = fresh);
+      }
+    } catch (_) {}
   }
 
   Future<void> _go(bool register) async {
@@ -4881,10 +5102,32 @@ class _AuthCardState extends State<_AuthCard> {
                   color: mint.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12)),
               child: const Icon(Icons.verified_user, color: mint)),
-          title:
-              Text(who!, style: const TextStyle(fontWeight: FontWeight.w800)),
-          subtitle: const Text('Synced automatically when you comment or rate',
-              style: TextStyle(color: muted, fontSize: 12)),
+          title: Row(children: [
+            Flexible(
+                child: Text(who!,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800))),
+            if (_staff) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                    color: amber.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(6)),
+                child: const Text('ADMIN',
+                    style: TextStyle(
+                        color: amber,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w900)),
+              ),
+            ],
+          ]),
+          subtitle: Text(
+              _staff
+                  ? '${_role.isEmpty ? 'admin' : _role} account — synced with the website'
+                  : 'Synced automatically when you comment or rate',
+              style: const TextStyle(color: muted, fontSize: 12)),
           trailing: TextButton(
               onPressed: () async {
                 await Api.signOut();

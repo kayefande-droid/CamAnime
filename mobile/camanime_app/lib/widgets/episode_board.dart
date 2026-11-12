@@ -60,6 +60,10 @@ class EpisodeBoard extends StatefulWidget {
   final Set<int> selected;
   final Map<int, EpisodePreview> previews;
   final Map<int, double> progress;
+
+  /// Episodes the provider's own episode index marks as dubbed. Empty means
+  /// "not known", so no row prints a DUB badge on a guess.
+  final Set<int> dubEpisodes;
   final ValueChanged<int> onPlay;
   final void Function(int ep, bool select) onToggleSelect;
   final ValueChanged<int> onDownload;
@@ -76,6 +80,7 @@ class EpisodeBoard extends StatefulWidget {
     required this.imageBuilder,
     this.previews = const {},
     this.progress = const {},
+    this.dubEpisodes = const {},
     this.currentEpisode,
   });
 
@@ -378,6 +383,21 @@ class _EpisodeBoardState extends State<EpisodeBoard> {
                   ],
                 ),
               ),
+              if (widget.dubEpisodes.contains(ep)) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: CamColors.accent.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(5)),
+                  child: const Text('DUB',
+                      style: TextStyle(
+                          color: CamColors.accent,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900)),
+                ),
+                const SizedBox(width: 4),
+              ],
               _trailing(ep, completed, downloading, playablePart, task),
               const SizedBox(width: 4),
             ],

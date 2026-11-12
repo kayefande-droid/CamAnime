@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../core/models.dart';
+import 'version_gate.dart' show kAppVersion;
 
 /// Tracks update download and install state used by the UI.
 class UpdateState {
@@ -78,22 +79,26 @@ class AppUpdater {
       final uri = Uri.parse(rawUrl);
       final host = Uri.parse(_base()).host;
       if (uri.host != host && uri.host != 'localhost' && uri.host != '10.0.2.2') return null;
-      if (['http', 'https'].contains(uri.scheme)) return rawUrl;
+      // An APK is code the user installs: it is only ever fetched over TLS.
+      if (uri.scheme == 'https' && uri.hasAuthority) return rawUrl;
     } catch (_) {
       return null;
     }
     return null;
   }
 
-  /// Asks the website what the current release is.
+  /// Asks the website what the current release is — metadata only.
   ///
-  /// Returns null when the check cannot be made (offline, odd response), so an
-  /// update check never blocks or breaks normal app use.
-  static Future<UpdateInfo?> check({required String current}) async {
+  /// This is the call the "Check for updates" button makes. It must stay
+  /// cheap: an earlier version downloaded and hashed the whole 56 MB APK
+  /// before it could answer, so on a slow link the button looked dead and a
+  /// failed download was reported as "you are on the latest version". The
+  /// artifact is fetched only after the user confirms the update.
+  static Future<UpdateInfo?> checkMetadata({required String current}) async {
     try {
       final res = await http
           .get(Uri.parse('${_base()}/api/version'))
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 15));
       if (res.statusCode != 200) return null;
       final data = json.decode(res.body);
       if (data is! Map) return null;
@@ -113,17 +118,8 @@ class AppUpdater {
         return null;
       }
 
-      final summary = await http.readBytes(Uri.parse(url))
-          .timeout(const Duration(seconds: 240), onTimeout: () => throw Exception('timeout'));
-      final computed = sha256.convert(summary).toString().toLowerCase();
-      if (computed != serverHash) {
-        debugPrint('Update APK SHA-256 mismatch: expected $serverHash, got $computed.');
-        return null;
-      }
-
       return UpdateInfo(
         version: latest,
-        apkBytes: summary,
         apkUrl: url,
         apkSha256: serverHash,
         notes: (data['whats_new'] ?? '').toString().trim(),
@@ -134,42 +130,87 @@ class AppUpdater {
     }
   }
 
-  /// Downloads the release APK to a temporary file. The caller must have the
-  /// metadata; this path is used only for explicit UI downloads (the banner's
-  /// Update Now action), which already validated that the metadata is present.
+  /// Metadata plus the verified artifact, for callers that install immediately.
+  static Future<UpdateInfo?> check({required String current}) async {
+    final info = await checkMetadata(current: current);
+    if (info == null) return null;
+    final file = await download(info, onProgress: (_) {});
+    if (file == null) return null;
+    try {
+      return UpdateInfo(
+        version: info.version,
+        apkUrl: info.apkUrl,
+        apkBytes: await file.readAsBytes(),
+        apkSha256: info.apkSha256,
+        notes: info.notes,
+      );
+    } finally {
+      if (await file.exists()) await file.delete();
+    }
+  }
+
+  /// Downloads the release APK to a temporary file and verifies its SHA-256.
+  ///
+  /// Streams to disk when the metadata has no bytes attached (the normal path
+  /// now), so a 56 MB release never sits in memory and progress is real. The
+  /// hash is computed from the file stream for the same reason.
   static Future<File?> download(
     UpdateInfo info, {
     required void Function(double) onProgress,
   }) async {
+    if (info.apkSha256 == null || !isValidSha256(info.apkSha256!)) {
+      debugPrint('download() called without a verified SHA-256; aborting.');
+      return null;
+    }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/camanime-update.apk');
     if (await file.exists()) await file.delete();
-    final sink = file.openWrite();
-    var received = 0;
-    final total = info.apkBytes?.length ?? 0;
-    if (total > 0) {
-      for (var chunk = 0; chunk < info.apkBytes!.length; chunk += 64 * 1024) {
-        final end = (chunk + 64 * 1024).clamp(0, total);
-        sink.write(info.apkBytes!.sublist(chunk, end));
-        received = end;
-        onProgress(received / total);
+
+    final attached = info.apkBytes;
+    if (attached != null && attached.isNotEmpty) {
+      await file.writeAsBytes(attached, flush: true);
+      onProgress(1.0);
+    } else {
+      final client = http.Client();
+      try {
+        final request = http.Request('GET', Uri.parse(info.apkUrl));
+        final response = await client
+            .send(request)
+            .timeout(const Duration(seconds: 60));
+        if (response.statusCode != 200) return null;
+        final total = response.contentLength ?? 0;
+        final sink = file.openWrite();
+        var received = 0;
+        try {
+          await for (final chunk in response.stream) {
+            sink.add(chunk);
+            received += chunk.length;
+            if (total > 0) onProgress((received / total).clamp(0.0, 1.0));
+          }
+        } finally {
+          await sink.close();
+        }
+        if (total > 0 && received != total) {
+          debugPrint('Update download truncated: $received of $total bytes.');
+          await file.delete();
+          return null;
+        }
+        onProgress(1.0);
+      } catch (err) {
+        debugPrint('Update download failed: $err');
+        if (await file.exists()) await file.delete();
+        return null;
+      } finally {
+        client.close();
       }
     }
-    await sink.close();
-    onProgress(1.0);
 
-    if (file.existsSync() && info.apkSha256 != null && !isValidSha256(info.apkSha256!)) {
-      debugPrint('download() called without a verified SHA-256; aborting.');
+    final computed =
+        (await sha256.bind(file.openRead()).first).toString().toLowerCase();
+    if (computed != info.apkSha256!.toLowerCase()) {
+      debugPrint('Download SHA-256 mismatch: expected ${info.apkSha256}, got $computed.');
       await file.delete();
       return null;
-    }
-    if (file.existsSync()) {
-      final computed = sha256.convert(await file.readAsBytes()).toString().toLowerCase();
-      if (computed != info.apkSha256) {
-        debugPrint('Download SHA-256 mismatch: expected ${info.apkSha256}, got $computed.');
-        await file.delete();
-        return null;
-      }
     }
     return file;
   }
@@ -371,12 +412,17 @@ class AppUpdater {
   }
 
   /// Real installed version, so a stale constant can never hide an update.
+  ///
+  /// Falls back to the compiled version when the native side cannot answer
+  /// (desktop, a stripped platform channel): an empty current version would
+  /// make every release look newer and put the user in an install loop.
   static Future<String> installedVersion() async {
-    if (!Platform.isAndroid) return '';
+    if (!Platform.isAndroid) return kAppVersion;
     try {
-      return await _channel.invokeMethod<String>('versionName') ?? '';
+      final reported = await _channel.invokeMethod<String>('versionName') ?? '';
+      return reported.trim().isEmpty ? kAppVersion : reported.trim();
     } catch (_) {
-      return '';
+      return kAppVersion;
     }
   }
 }
