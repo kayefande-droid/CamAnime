@@ -453,6 +453,39 @@ async function mediaTotalSize(url) {
   }
 }
 
+/**
+ * AnimeHeaven mirrors resolved by the Render origin.
+ *
+ * The gate refuses Cloudflare egress often enough that the worker's own scrape
+ * comes back empty. The Render deployment sits on a different network and does
+ * resolve it, so its mp4 mirrors are adopted here — still played and downloaded
+ * through this worker's proxy — instead of dropping the provider entirely.
+ */
+async function heavenSourcesFromRender(animeId, episode) {
+  if (!animeId) return [];
+  try {
+    const res = await fetch(
+      `https://camanime.onrender.com/api/episode-sources/${animeId}/${episode}?audio=sub`,
+      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.servers || [])
+      .filter((s) => s.provider === "animeheaven" && s.raw_url)
+      .map((s) => ({
+        url: s.raw_url,
+        quality: "Source MP4",
+        label: s.name,
+        isM3u8: false,
+        isMp4: true,
+        referer: `${HEAVEN_BASE}/`,
+        unverified: true,
+      }));
+  } catch {
+    return [];
+  }
+}
+
 export async function heavenStreamSources(episodeKey, refererSiteId) {
   const key = `heaven_stream_${episodeKey}`;
   const hit = cacheGet(key);
@@ -991,6 +1024,10 @@ export async function episodeBundle({
     if (target) {
       heavenEpKey = target.key;
       const resolved = await heavenStreamSources(target.key, heavenId);
+      if (!resolved.sources.length && anilistId) {
+        const mirrored = await heavenSourcesFromRender(anilistId, episode);
+        if (mirrored.length) resolved.sources = mirrored;
+      }
       // The player page mixes the episode file with unrelated promo sources on
       // other hosts (ax.animeheaven.me). Files carrying this episode's key are
       // the real mirrors, so they are offered first.
