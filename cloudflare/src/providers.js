@@ -20,6 +20,19 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+const UA_POOL = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+];
+/** A fresh browser identity per request: one constant UA is the easiest scrape
+ *  to fingerprint, and the client hints make the navigation look like a real
+ *  desktop visit rather than a fetch from a server. */
+function pickUA() {
+  return UA_POOL[Math.floor(Math.random() * UA_POOL.length)];
+}
+
 export const HEAVEN_BASE = "https://animeheaven.me";
 export const ANIKOTO_BASE = "https://anikoto.net";
 export const KIWI_BASE = "https://mapper.nekostream.site";
@@ -449,6 +462,12 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
     : `${HEAVEN_BASE}/`;
   const res = await getText(`${HEAVEN_BASE}/gate.php`, {
     headers: {
+      "user-agent": pickUA(),
+      "accept-language": "en-US,en;q=0.9",
+      "sec-ch-ua": '"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+      "upgrade-insecure-requests": "1",
       referer,
       origin: HEAVEN_BASE,
       "sec-fetch-dest": "document",

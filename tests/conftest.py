@@ -28,12 +28,15 @@ def _isolated_intrusion_ledger(monkeypatch, tmp_path):
     # arrive from 127.0.0.1, so without a fresh instance the 300th request in a
     # session would be rate limited and unrelated assertions would fail.
     try:
-        import firewall as firewall_module
-        import app as app_module
+        import sys
 
-        fresh = firewall_module.Firewall()
-        firewall_module.firewall = fresh
-        app_module.firewall = fresh
+        firewall_module = sys.modules.get("firewall")
+        app_module = sys.modules.get("app")
+        if firewall_module is not None:
+            fresh = firewall_module.Firewall()
+            firewall_module.firewall = fresh
+            if app_module is not None:
+                app_module.firewall = fresh
     except Exception:
         pass
     yield

@@ -236,6 +236,12 @@ def _firewall_guard():
     Registered before the canonical redirect so a scanner is refused before it
     touches routing, and so its strikes count even for unknown paths.
     """
+    try:
+        import honeypot as _honeypot
+
+        skip_signature = bool(_honeypot.enabled() and _honeypot.SUSPECT_PATH.search(request.path or ""))
+    except Exception:
+        skip_signature = False
     verdict = firewall.inspect(
         ip=_client_ip(),
         method=request.method,
@@ -243,6 +249,7 @@ def _firewall_guard():
         query=request.query_string.decode("utf-8", "replace"),
         user_agent=request.headers.get("User-Agent", ""),
         content_length=request.content_length,
+        skip_signature=skip_signature,
     )
     if not verdict:
         return None

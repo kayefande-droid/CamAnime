@@ -153,6 +153,7 @@ class Firewall:
         query: str = "",
         user_agent: str = "",
         content_length: Optional[int] = None,
+        skip_signature: bool = False,
     ) -> Optional[Tuple[str, int, Dict[str, str]]]:
         """Return (message, status, headers) when the request must be refused."""
 
@@ -163,11 +164,16 @@ class Firewall:
 
         wait = self._rate_exceeded(ip, path)
         if wait:
-            self.strike(ip, "rate")
+            # A rate limit is a pace signal, not an attack: striking it would
+            # turn an honest burst (or a login typo streak) into a ban and lock
+            # the visitor out of every other route.
             return ("Too many requests. Slow down and retry shortly.", 429,
                     {"Retry-After": str(wait), "X-CamAnime-Firewall": "rate"})
 
-        hit = self._signature_hit(path, query)
+        # The honeypot owns its trap paths: it answers a browsing scanner with
+        # the decoy clone and records the visit. Blocking here would hide that
+        # trap behind a bare 404.
+        hit = None if skip_signature else self._signature_hit(path, query)
         if hit:
             self.strike(ip, "signature")
             # 404, not 403: the site already answers unknown paths with its
@@ -191,6 +197,14 @@ class Firewall:
                     {"X-CamAnime-Firewall": "scanner"})
 
         return None
+
+    def reset(self) -> None:
+        """Clear all counters. Used between tests and after a rule change."""
+        with self._lock:
+            self._hits.clear()
+            self._strikes.clear()
+            self._bans.clear()
+            self._blocked_total = 0
 
     def stats(self) -> Dict[str, int]:
         with self._lock:

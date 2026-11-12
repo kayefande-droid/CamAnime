@@ -114,7 +114,8 @@ export function guard(request, url) {
     for (const key of [...hits.keys()].slice(0, 2000)) hits.delete(key);
   }
   if (stamps.length > limit) {
-    strike(ip);
+    // Pace signal, not an attack: striking it would turn an honest burst into
+    // a ban and lock the visitor out of every other route.
     return deny("Too many requests. Slow down and retry shortly.", 429, {
       "retry-after": "60",
       "x-camanime-firewall": "rate",

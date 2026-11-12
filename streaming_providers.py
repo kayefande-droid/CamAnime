@@ -18,6 +18,7 @@ import base64
 import json
 import logging
 import os
+import random
 import re
 import threading
 import time
@@ -266,17 +267,87 @@ class AnimeHeavenProvider(StreamingProvider):
     - Stream Resolution: GET /gate.php with Cookie `key=<episode_key>` -> extracts direct MP4 links
     """
 
+    _UA_POOL = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+    )
+
     def __init__(self, timeout: int = 12):
         super().__init__(timeout)
         self.base_url = "https://animeheaven.me"
         self.session = _new_session()
-        self.session.headers.update({
-            "User-Agent": DEFAULT_UA,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": f"{self.base_url}/",
-            "Origin": self.base_url,
-        })
+        self._warmed_at = 0.0
+        self.session.headers.update(self._stealth_headers())
+
+    def _stealth_headers(self, referer: str = "", ajax: bool = False) -> Dict[str, str]:
+        """A believable browser request instead of one fixed scraper identity.
+
+        The provider fingerprints a constant UA/header set quickly. Rotating a
+        small pool of current desktop browsers, sending the client hints and
+        fetch metadata a real navigation carries, and varying the order-free
+        extras keeps the scrape looking like ordinary traffic. It is not a
+        guarantee against blocking, just far less distinctive.
+        """
+        ua = random.choice(self._UA_POOL)
+        chrome = "Chrome" in ua
+        headers = {
+            "User-Agent": ua,
+            "Accept": "*/*" if ajax else "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": random.choice(("en-US,en;q=0.9", "en-GB,en;q=0.8", "en-US,en;q=0.7,fr;q=0.3")),
+            "Referer": referer or f"{self.base_url}/",
+            "DNT": "1",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "empty" if ajax else "document",
+            "Sec-Fetch-Mode": "cors" if ajax else "navigate",
+            "Sec-Fetch-Site": "same-origin",
+        }
+        if chrome:
+            headers.update({
+                "sec-ch-ua": '"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"' if "Windows" in ua else '"macOS"',
+            })
+        return headers
+
+    def _warm_session(self) -> None:
+        """Land on the homepage first so the session has the provider cookies a
+        real visit would already hold before any gate request."""
+        if time.time() - self._warmed_at < 600:
+            return
+        try:
+            self.session.get(
+                f"{self.base_url}/",
+                headers=self._stealth_headers(),
+                timeout=min(self.timeout, 8),
+            )
+        except Exception:
+            logger.debug("[AnimeHeaven] warm-up failed", exc_info=True)
+        self._warmed_at = time.time()
+
+    def _fetch(self, url: str, *, referer: str = "", cookies: str = ""):
+        """GET with a fresh browser identity per attempt and backoff on a
+        challenge response (403/429/503), which is how the gate answers a
+        crawler it recognises."""
+        last_error: Optional[Exception] = None
+        for attempt in range(2):
+            headers = self._stealth_headers(referer)
+            if cookies:
+                headers["Cookie"] = cookies
+            try:
+                resp = self.session.get(url, headers=headers, timeout=self.timeout)
+                if resp.status_code in (403, 429, 503) and attempt == 0:
+                    time.sleep(0.6 + random.random() * 0.9)
+                    continue
+                resp.raise_for_status()
+                return resp
+            except Exception as exc:
+                last_error = exc
+                time.sleep(0.4 + random.random() * 0.7)
+        if last_error:
+            raise last_error
+        raise RuntimeError("fetch failed")
 
     def _abs_url(self, path_or_url: str) -> str:
         if not path_or_url:
@@ -382,8 +453,8 @@ class AnimeHeavenProvider(StreamingProvider):
 
         try:
             url = f"{self.base_url}/anime.php?{site_id}"
-            resp = self.session.get(url, timeout=self.timeout)
-            resp.raise_for_status()
+            self._warm_session()
+            resp = self._fetch(url, referer=f"{self.base_url}/")
             soup = BeautifulSoup(resp.text, "html.parser")
 
             title_el = soup.select_one(".infotitle")
@@ -562,23 +633,12 @@ class AnimeHeavenProvider(StreamingProvider):
             else f"{self.base_url}/"
         )
         try:
-            headers = {
-                "User-Agent": DEFAULT_UA,
-                "Referer": referer,
-                "Origin": self.base_url,
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Cache-Control": "no-cache",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "same-origin",
-                "Cookie": f"key={episode_key}",
-            }
-            resp = self.session.get(
+            self._warm_session()
+            resp = self._fetch(
                 f"{self.base_url}/gate.php",
-                headers=headers,
-                timeout=self.timeout,
+                referer=referer,
+                cookies=f"key={episode_key}",
             )
-            resp.raise_for_status()
             html = resp.text
 
             if re.search(r"watch\s+episode\s+on\s+animeheaven\.me", html, re.I):
