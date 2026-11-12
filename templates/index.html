@@ -269,9 +269,12 @@
             visibility: visible;
             transition: opacity var(--ca-dur-base) var(--ca-ease-soft);
             pointer-events: auto;
-            position: relative;
+            /* Every slide stays absolute. The active one used to become a
+               relative flex item, so each rotation changed which slide owned
+               the hero's flow, reflowed the block and made the page jump as
+               the crossfade started. The stage's own min-height sizes it. */
+            position: absolute;
             width: 100%;
-            min-height: 490px;
         }
         .hero-backdrop {
             position: absolute;

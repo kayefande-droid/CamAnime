@@ -499,6 +499,34 @@ class AnimeHeavenProvider(StreamingProvider):
             return [], "Unknown"
         return info.get("episodes", []), info.get("title", "Unknown")
 
+    def _probe_media_size(self, url: str) -> Optional[int]:
+        """Total byte size of a direct media URL, or None when unknown.
+
+        A one-byte range request returns ``Content-Range: bytes 0-0/<total>``
+        without dragging the file down, which is how the stub mirrors above are
+        told apart from real episode files.
+        """
+        try:
+            resp = self.session.get(
+                url,
+                headers={
+                    "User-Agent": DEFAULT_UA,
+                    "Referer": f"{self.base_url}/",
+                    "Range": "bytes=0-0",
+                },
+                timeout=min(self.timeout, 10),
+                allow_redirects=True,
+            )
+            content_range = resp.headers.get("Content-Range") or ""
+            m = re.search(r"/(\d+)\s*$", content_range)
+            if m:
+                return int(m.group(1))
+            length = resp.headers.get("Content-Length")
+            return int(length) if length and length.isdigit() else None
+        except Exception as e:
+            logger.debug("[AnimeHeaven] size probe failed for %s: %s", url, e)
+            return None
+
     def get_streaming_sources(self, episode_key: str, referer_site_id: Optional[str] = None) -> Dict:
         """
         Resolve an AnimeHeaven episode key via gate.php with Cookie: key=<episode_key>.
@@ -555,6 +583,14 @@ class AnimeHeavenProvider(StreamingProvider):
             sources = []
             for idx, u in enumerate(raw_urls):
                 host = urlparse(u).hostname or f"mirror-{idx+1}"
+                # The gate page mixes the episode with 3-second promo stubs on
+                # the ct/ck mirrors (a few hundred KB each). They report
+                # video/mp4, so the player only fails once it tries to play
+                # them. Anything far smaller than a real episode is dropped.
+                size = self._probe_media_size(u)
+                if size is not None and size < 2 * 1024 * 1024:
+                    logger.info("[AnimeHeaven] dropping %s-byte stub source %s", size, host)
+                    continue
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({
                     "url": u,
@@ -565,6 +601,16 @@ class AnimeHeavenProvider(StreamingProvider):
                     "isMp4": True,
                     "referer": f"{self.base_url}/",
                 })
+            if not sources and raw_urls:
+                # Never trade a working player for a clean list.
+                sources = [{
+                    "url": raw_urls[0],
+                    "quality": "Source MP4",
+                    "label": "Direct MP4 (Primary CDN)",
+                    "isM3u8": False,
+                    "isMp4": True,
+                    "referer": f"{self.base_url}/",
+                }]
 
             result = {
                 "sources": sources,
