@@ -2858,6 +2858,46 @@ def proxy_hls():
         return jsonify({"error": str(e)}), 502
 
 
+@app.route("/api/media/size")
+def api_media_size():
+    """Report a provider media file's total size for the edge mirror.
+
+    The Cloudflare worker cannot always reach the AnimeHeaven CDNs, so it asks
+    this host instead of dropping a source it could not measure.
+    """
+    target = request.args.get("u", "").strip()
+    try:
+        parsed = urlparse(target)
+    except Exception:
+        parsed = None
+    allowed = ("animeheaven.me", "anikoto.net", "nexabloom.top", "megaplay.buzz", "vidwish.live")
+    if (not parsed or parsed.scheme not in ("http", "https")
+            or not parsed.hostname
+            or not any(parsed.hostname.lower().endswith(h) for h in allowed)):
+        return jsonify({"error": "Only provider media hosts are measured here."}), 400
+    try:
+        resp = requests.get(
+            target,
+            headers={
+                "User-Agent": DEFAULT_UA,
+                "Referer": "https://animeheaven.me/",
+                "Range": "bytes=0-0",
+            },
+            timeout=(3, 4),
+            allow_redirects=True,
+            stream=True,
+        )
+        content_range = resp.headers.get("Content-Range") or ""
+        match = re.search(r"/(\d+)\s*$", content_range)
+        length = resp.headers.get("Content-Length")
+        resp.close()
+        size = int(match.group(1)) if match else (int(length) if (length or "").isdigit() else None)
+        return jsonify({"size": size})
+    except Exception as e:
+        logger.warning(f"Media size probe failed ({target}): {e}")
+        return jsonify({"error": "Probe failed"}), 502
+
+
 @app.route("/api/img")
 def api_image_proxy():
     """Relay AniList artwork.
@@ -4474,7 +4514,7 @@ _APP_HEADER_PLATFORM = "X-CamAnime-Platform"
 _APP_HEADER_INSTALL = "X-CamAnime-Install"
 
 _VERSION_EXEMPT_PREFIXES = (
-    "/api/img",
+    "/api/img", "/api/media/size",
     "/api/version", "/api/app/version", "/api/app/ping", "/api/app/push-token",
     "/api/announcements", "/api/public/counters", "/healthz",
     "/static/", "/get/", "/admin", "/login", "/logout", "/settings",

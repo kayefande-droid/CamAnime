@@ -499,6 +499,53 @@ class AnimeHeavenProvider(StreamingProvider):
             return [], "Unknown"
         return info.get("episodes", []), info.get("title", "Unknown")
 
+    def _probe_sizes(self, urls: List[str]) -> Dict[str, Optional[int]]:
+        """Map each media URL to its total byte size, with a hard deadline.
+
+        A one-byte range request answers ``Content-Range: bytes 0-0/<total>``
+        cheaply. The pool is never joined: requests that overrun are abandoned
+        so a slow CDN cannot delay the episode bundle.
+        """
+        if not urls:
+            return {}
+        out: Dict[str, Optional[int]] = {u: None for u in urls}
+        pool = ThreadPoolExecutor(max_workers=min(4, len(urls)))
+        futures = {pool.submit(self._probe_size, u): u for u in urls}
+        deadline = time.time() + 4.0
+        try:
+            for future, url in futures.items():
+                remaining = max(0.05, deadline - time.time())
+                try:
+                    out[url] = future.result(timeout=remaining)
+                except Exception:
+                    out[url] = None
+                if time.time() >= deadline:
+                    break
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+        return out
+
+    def _probe_size(self, url: str) -> Optional[int]:
+        try:
+            resp = requests.get(
+                url,
+                headers={
+                    "User-Agent": DEFAULT_UA,
+                    "Referer": f"{self.base_url}/",
+                    "Range": "bytes=0-0",
+                },
+                timeout=(2, 2),
+                allow_redirects=True,
+            )
+            content_range = resp.headers.get("Content-Range") or ""
+            m = re.search(r"/(\d+)\s*$", content_range)
+            if m:
+                return int(m.group(1))
+            length = resp.headers.get("Content-Length")
+            return int(length) if length and length.isdigit() else None
+        except Exception:
+            return None
+
     def get_streaming_sources(self, episode_key: str, referer_site_id: Optional[str] = None) -> Dict:
         """
         Resolve an AnimeHeaven episode key via gate.php with Cookie: key=<episode_key>.
@@ -557,9 +604,20 @@ class AnimeHeavenProvider(StreamingProvider):
             # blocked probe can outlive its timeout and hang the whole bundle),
             # so the player drops a stub itself the moment its real duration
             # comes back short.
+            # The gate page mixes the episode with 3-second promo stubs on the
+            # ct/ck mirrors (about 600 KB each, advertised as video/mp4). Probe
+            # them in parallel with a hard deadline and no join on the pool: a
+            # blocked CDN must never hold the bundle open (that bug once took
+            # the whole watch route past the request timeout).
+            sizes = self._probe_sizes(raw_urls)
+
             sources = []
             for idx, u in enumerate(raw_urls):
                 host = urlparse(u).hostname or f"mirror-{idx+1}"
+                size = sizes.get(u)
+                if size is not None and size < 2 * 1024 * 1024:
+                    logger.info("[AnimeHeaven] dropping %s-byte stub mirror %s", size, host)
+                    continue
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({
                     "url": u,

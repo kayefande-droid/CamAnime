@@ -407,6 +407,39 @@ export function parseGateSources(html) {
   return urls;
 }
 
+/** Total byte size for a direct media URL, or null when unknown.
+ *  The gate page mixes the episode with ~600 KB promo stubs on the ct/ck
+ *  mirrors; they advertise video/mp4 and only fail once played. A one-byte
+ *  range answers the total cheaply, and Cloudflare egress is sometimes refused,
+ *  so an unknown answer is retried through the Render origin. */
+async function mediaTotalSize(url) {
+  try {
+    const res = await fetch(url, {
+      headers: { "user-agent": UA, referer: `${HEAVEN_BASE}/`, range: "bytes=0-0" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(3000),
+    });
+    const range = res.headers.get("content-range") || "";
+    const m = /\/(\d+)\s*$/.exec(range);
+    if (m) return Number(m[1]);
+    const len = res.headers.get("content-length");
+    if (len) return Number(len);
+  } catch {
+    // fall through to the origin probe
+  }
+  try {
+    const res = await fetch(
+      `https://camanime.onrender.com/api/media/size?u=${encodeURIComponent(url)}`,
+      { signal: AbortSignal.timeout(4000) },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Number.isFinite(data?.size) ? data.size : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function heavenStreamSources(episodeKey, refererSiteId) {
   const key = `heaven_stream_${episodeKey}`;
   const hit = cacheGet(key);
@@ -431,7 +464,11 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
     return { sources: [], provider: "animeheaven", error: "placeholder player" };
   }
   const urls = parseGateSources(res.text);
-  const sources = urls.map((url, idx) => {
+  const sizes = await Promise.all(urls.map((u) => mediaTotalSize(u)));
+  const real = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
+  // If every file looks like a stub, keep the first rather than an empty player.
+  const kept = real.length ? real : urls.slice(0, 1);
+  const sources = kept.map((url, idx) => {
     const host = safeHost(url);
     return {
       url,
