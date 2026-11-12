@@ -271,11 +271,20 @@
     video.addEventListener('waiting', function () { box.classList.add('loading'); });
     video.addEventListener('stalled', function () { box.classList.add('loading'); });
     video.addEventListener('seeking', function () { box.classList.add('loading'); });
-    video.addEventListener('playing', function () { box.classList.remove('loading'); clearError(); wake(); });
+    video.addEventListener('playing', function () {
+      box.classList.remove('loading');
+      // Artwork is a pre-play backdrop only; it must never sit over frames.
+      box.classList.add('is-playing');
+      clearError();
+      wake();
+    });
+    video.addEventListener('loadstart', function () { box.classList.remove('is-playing'); });
+    video.addEventListener('emptied', function () { box.classList.remove('is-playing'); });
     video.addEventListener('canplay', function () { box.classList.remove('loading'); });
     video.addEventListener('seeked', function () { box.classList.remove('loading'); });
     video.addEventListener('error', function () {
       box.classList.remove('loading');
+      box.classList.remove('is-playing');
       var code = video.error && video.error.code;
       showError(code === 4
         ? 'This source is no longer available. Try another server.'

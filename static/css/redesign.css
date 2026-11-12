@@ -709,7 +709,17 @@ body .ca-player .ca-poster {
   object-fit: cover;
   opacity: .3;
   pointer-events: none;
+  /* An absolutely positioned sibling paints above the non-positioned
+     <video>, so the artwork sat on top of every frame at 30% opacity.
+     The video now owns the top layer; the poster is only the pre-play
+     backdrop and leaves as soon as playback starts. */
+  z-index: 0;
+  transition: opacity .25s ease;
 }
+body .ca-player video { position: relative; z-index: 1; }
+body .ca-player.is-playing .ca-poster,
+body .ca-player.is-playing .ca-shade { opacity: 0; visibility: hidden; }
+body .ca-player.is-playing { background: #000; }
 
 /* Phones: the watch header put the logo, the episode breadcrumb and three
    header buttons on one row, so they printed on top of each other. Each part

@@ -14,6 +14,12 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
+// Cloudflare's egress is intermittently refused by the AnimeHeaven CDNs: the
+// identical URL streams fine from Render, but the edge fetch fails for a while
+// and every player that picked one of those mirrors got a 502. Retrying the
+// same proxy path on Render keeps the first servers playable.
+const RENDER_ORIGIN = "https://camanime.onrender.com";
+
 const PRIVATE_HOST =
   /^(localhost|127\.|0\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?|.*\.local$|.*\.internal$)/i;
 
@@ -380,6 +386,21 @@ async function hlsDownload(raw, ref, request, { title = "", height = 0 } = {}) {
   return new Response(body, { status: 200, headers });
 }
 
+async function viaRender(pathAndQuery, range) {
+  try {
+    const headers = {};
+    if (range) headers.range = range;
+    const res = await fetch(RENDER_ORIGIN + pathAndQuery, {
+      headers,
+      redirect: "follow",
+    });
+    if (!res.ok && res.status !== 206) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
 async function upstream(raw, ref, request) {
   const url = assertPublicUrl(raw);
   if (!url) return null;
@@ -430,11 +451,22 @@ function looksLikePlaylist(url, contentType, bodyStart) {
 async function proxyPlaylist(raw, ref) {
   const url = assertPublicUrl(raw);
   if (!url) return new Response("Bad url", { status: 400, headers: cors() });
-  const res = await fetch(url.toString(), {
-    headers: { "user-agent": UA, referer: ref || `${url.origin}/`, accept: "*/*" },
-    redirect: "follow",
-  });
-  if (!res.ok) {
+  let res = null;
+  try {
+    res = await fetch(url.toString(), {
+      headers: { "user-agent": UA, referer: ref || `${url.origin}/`, accept: "*/*" },
+      redirect: "follow",
+    });
+  } catch {
+    res = null;
+  }
+  if (!res || !res.ok) {
+    const relayed = await viaRender(
+      `/api/proxy/hls?url=${encodeURIComponent(raw)}&ref=${encodeURIComponent(ref || "")}`,
+    );
+    if (relayed) res = relayed;
+  }
+  if (!res || !res.ok) {
     return new Response("Upstream playlist unavailable", {
       status: 502,
       headers: cors(),
@@ -454,8 +486,21 @@ async function proxyBinary(raw, ref, request, { download = false, filename = "",
   const url = assertPublicUrl(raw);
   if (!url) return new Response("Bad url", { status: 400, headers: cors() });
 
-  const res = await upstream(raw, ref, request);
+  let res = null;
+  try {
+    res = await upstream(raw, ref, request);
+  } catch {
+    res = null;
+  }
   if (!res) return new Response("Bad url", { status: 400, headers: cors() });
+  if (!res.ok && res.status !== 206) {
+    const here = new URL(request.url);
+    const relayed = await viaRender(
+      here.pathname + here.search,
+      request.headers.get("range"),
+    );
+    if (relayed) res = relayed;
+  }
   if (!res.ok && res.status !== 206) {
     return new Response(`Upstream ${res.status}`, { status: 502, headers: cors() });
   }
