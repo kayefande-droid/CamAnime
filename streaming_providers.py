@@ -499,36 +499,6 @@ class AnimeHeavenProvider(StreamingProvider):
             return [], "Unknown"
         return info.get("episodes", []), info.get("title", "Unknown")
 
-    def _probe_media_size(self, url: str) -> Optional[int]:
-        """Total byte size of a direct media URL, or None when unknown.
-
-        A one-byte range request returns ``Content-Range: bytes 0-0/<total>``
-        without dragging the file down, which is how the stub mirrors above are
-        told apart from real episode files.
-        """
-        try:
-            # A bare requests call: the shared Session is not safe to use from
-            # the probe pool's threads at the same time as the main scrape.
-            resp = requests.get(
-                url,
-                headers={
-                    "User-Agent": DEFAULT_UA,
-                    "Referer": f"{self.base_url}/",
-                    "Range": "bytes=0-0",
-                },
-                timeout=3,
-                allow_redirects=True,
-            )
-            content_range = resp.headers.get("Content-Range") or ""
-            m = re.search(r"/(\d+)\s*$", content_range)
-            if m:
-                return int(m.group(1))
-            length = resp.headers.get("Content-Length")
-            return int(length) if length and length.isdigit() else None
-        except Exception as e:
-            logger.debug("[AnimeHeaven] size probe failed for %s: %s", url, e)
-            return None
-
     def get_streaming_sources(self, episode_key: str, referer_site_id: Optional[str] = None) -> Dict:
         """
         Resolve an AnimeHeaven episode key via gate.php with Cookie: key=<episode_key>.
@@ -583,27 +553,13 @@ class AnimeHeavenProvider(StreamingProvider):
                         raw_urls.append(u)
 
             # The gate page mixes the episode with 3-second promo stubs on the
-            # ct/ck mirrors (a few hundred KB each). They report video/mp4, so
-            # the player only fails once it tries to play them. Probe them in
-            # parallel with a short budget: serial probes pushed the whole
-            # episode bundle past the server's request timeout.
-            sizes: List[Optional[int]] = [None] * len(raw_urls)
-            if raw_urls:
-                with ThreadPoolExecutor(max_workers=min(4, len(raw_urls))) as pool:
-                    futures = [pool.submit(self._probe_media_size, u) for u in raw_urls]
-                    for i, fut in enumerate(futures):
-                        try:
-                            sizes[i] = fut.result(timeout=4)
-                        except Exception:
-                            sizes[i] = None
-
+            # ct/ck mirrors. Probing them here cost more than it saved (a
+            # blocked probe can outlive its timeout and hang the whole bundle),
+            # so the player drops a stub itself the moment its real duration
+            # comes back short.
             sources = []
             for idx, u in enumerate(raw_urls):
                 host = urlparse(u).hostname or f"mirror-{idx+1}"
-                size = sizes[idx]
-                if size is not None and size < 2 * 1024 * 1024:
-                    logger.info("[AnimeHeaven] dropping %s-byte stub source %s", size, host)
-                    continue
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({
                     "url": u,

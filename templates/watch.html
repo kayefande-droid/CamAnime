@@ -871,6 +871,16 @@
             video.style.display = 'block';
             video.src = srv.stream_url;
             video.load();
+            // AnimeHeaven's ct/ck mirrors sometimes serve a 3–4 second promo
+            // stub instead of the episode. Duration is the only reliable
+            // signal, so a short file hands over to the next server instead of
+            // looping a preview.
+            video.addEventListener('loadedmetadata', function () {
+                if (!isFinite(video.duration) || video.duration <= 0) return;
+                if (video.duration >= 20) return;
+                noteServerFail('This source only serves a short preview — switching server…');
+                autoTryNextServer(srv.id);
+            }, { once: true });
             try { window.caTrack('play', '{{ anime.id }}', '{{ ep_num }}'); } catch (e) {}
             video.play().catch(() => {});
         } else if (srv.playback_mode === 'hls') {

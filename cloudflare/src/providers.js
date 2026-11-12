@@ -407,30 +407,6 @@ export function parseGateSources(html) {
   return urls;
 }
 
-/** Total byte size of a direct media URL, or null when the host won't say.
- *  A one-byte range keeps the probe cheap; the total comes back in
- *  Content-Range. The gate page mixes the episode with 3-second promo stubs on
- *  the ct/ck mirrors, which report video/mp4 and only fail once the player
- *  tries to play them. */
-async function mediaTotalSize(url) {
-  try {
-    const res = await fetch(url, {
-      headers: { "user-agent": UA, referer: `${HEAVEN_BASE}/`, range: "bytes=0-0" },
-      redirect: "follow",
-      // The CDNs are slow from some edges; a stalled probe must not hold the
-      // whole episode bundle open.
-      signal: AbortSignal.timeout(4000),
-    });
-    const range = res.headers.get("content-range") || "";
-    const m = /\/(\d+)\s*$/.exec(range);
-    if (m) return Number(m[1]);
-    const len = res.headers.get("content-length");
-    return len ? Number(len) : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function heavenStreamSources(episodeKey, refererSiteId) {
   const key = `heaven_stream_${episodeKey}`;
   const hit = cacheGet(key);
@@ -455,11 +431,7 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
     return { sources: [], provider: "animeheaven", error: "placeholder player" };
   }
   const urls = parseGateSources(res.text);
-  const sizes = await Promise.all(urls.map((u) => mediaTotalSize(u)));
-  const realUrls = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
-  // Never trade a working player for a clean list.
-  const keptUrls = realUrls.length ? realUrls : urls.slice(0, 1);
-  const sources = keptUrls.map((url, idx) => {
+  const sources = urls.map((url, idx) => {
     const host = safeHost(url);
     return {
       url,
