@@ -2164,13 +2164,28 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
     if (featured != null) out.add(_featuredCard(featured!));
     if (slides.isNotEmpty) out.add(_slideshow(slides));
     if (resume.isNotEmpty) out.add(_resumeRail());
-    if (!_dubBulkRequested && (trending.isNotEmpty || popular.isNotEmpty)) {
-      _dubBulkRequested = true;
-      unawaited(markDubAvailability([...trending, ...popular], () {
-        if (mounted) setState(() {});
-      }));
+    if (!_dubBulkRequested) {
+      // Every rail on this screen gets checked, not just the first two, so a
+      // dub availability badge cannot be missing simply because the title sat
+      // in a later row. The helper caps the request at the server's 24 ids.
+      final everyCard = <Map>[
+        ...trending.whereType<Map>(),
+        ...popular.whereType<Map>(),
+        ...topRated.whereType<Map>(),
+        ...fresh.whereType<Map>(),
+        ...movies.whereType<Map>(),
+        ...series.whereType<Map>(),
+      ];
+      if (everyCard.isNotEmpty) {
+        _dubBulkRequested = true;
+        unawaited(markDubAvailability(everyCard, () {
+          if (mounted) setState(() {});
+        }));
+      }
     }
-    out.add(_rail('Trending Anime', trending, rankKey: 'trending'));
+    // AniList publishes no trending rank, so this rail prints the current rating
+    // rank instead of a badge that could never exist.
+    out.add(_rail('Trending Anime', trending, rankKey: 'rated'));
     out.add(_rail('Popular this season', popular, rankKey: 'popular'));
     out.add(_rail('Top Rated', topRated, rankKey: 'rated'));
     out.add(_rail('Recently Added', fresh));
