@@ -1551,18 +1551,34 @@ def _source_ranks(anime: Dict) -> Dict:
             return None
         return rank if rank > 0 else None
 
+    # AniList publishes RATED and POPULAR ranks twice: `allTime: false` is the
+    # current ranking (this season/year, the one that moves day to day) and
+    # `allTime: true` is the historical standing. The current rank wins so the
+    # number on a card is today's position, not a decade-old one. AniList has no
+    # TRENDING rank type at all, so that stays None: no invented numbers.
     out = {"rated": None, "popular": None, "trending": None}
+    current = {"rated": None, "popular": None}
     for entry in (anime.get("rankings") or []):
         if not isinstance(entry, dict):
             continue
         kind = str(entry.get("type") or "").upper()
         rank = _int(entry.get("rank"))
-        if kind == "RATED" and out["rated"] is None:
-            out["rated"] = rank
-        elif kind == "POPULAR" and out["popular"] is None:
-            out["popular"] = rank
+        all_time = bool(entry.get("allTime"))
+        if kind == "RATED":
+            if all_time and out["rated"] is None:
+                out["rated"] = rank
+            elif not all_time and current["rated"] is None:
+                current["rated"] = rank
+        elif kind == "POPULAR":
+            if all_time and out["popular"] is None:
+                out["popular"] = rank
+            elif not all_time and current["popular"] is None:
+                current["popular"] = rank
         elif kind == "TRENDING" and out["trending"] is None:
             out["trending"] = rank
+    out["rated"] = current["rated"] or out["rated"]
+    out["popular"] = current["popular"] or out["popular"]
+    out["window"] = "current" if (current["rated"] or current["popular"]) else "all-time"
     # Fallback adapters expose one source rank each; use theirs, never a guess.
     out["rated"] = out["rated"] or _int(anime.get("rank"))
     out["popular"] = out["popular"] or _int(anime.get("popularity_rank"))
