@@ -463,7 +463,13 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
   if (/watch\s+episode\s+on\s+animeheaven\.me/i.test(res.text)) {
     return { sources: [], provider: "animeheaven", error: "placeholder player" };
   }
-  const urls = parseGateSources(res.text);
+  // ct/ck are the promo hosts: every file observed there is a ~3.7s clip of the
+  // episode token, advertised as video/mp4. Dropping the host is deterministic
+  // where a size probe (often refused from Cloudflare) is not.
+  const urls = parseGateSources(res.text).filter((u) => {
+    const host = safeHost(u).toLowerCase();
+    return !host.startsWith("ct.") && !host.startsWith("ck.");
+  });
   const sizes = await Promise.all(urls.map((u) => mediaTotalSize(u)));
   const real = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
   // If every file looks like a stub, keep the first rather than an empty player.

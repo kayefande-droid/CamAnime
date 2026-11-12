@@ -613,7 +613,14 @@ class AnimeHeavenProvider(StreamingProvider):
 
             sources = []
             for idx, u in enumerate(raw_urls):
-                host = urlparse(u).hostname or f"mirror-{idx+1}"
+                host = (urlparse(u).hostname or f"mirror-{idx+1}").lower()
+                # ct/ck are the promo hosts on AnimeHeaven: every observed file
+                # there is a ~3.7-second clip of the same token name, and a
+                # probe from here often times out before it can measure them.
+                # Dropping the host is deterministic where a timeout is not.
+                if host.startswith(("ct.", "ck.")):
+                    logger.info("[AnimeHeaven] skipping promo-stub host %s", host)
+                    continue
                 size = sizes.get(u)
                 if size is not None and size < 2 * 1024 * 1024:
                     logger.info("[AnimeHeaven] dropping %s-byte stub mirror %s", size, host)
