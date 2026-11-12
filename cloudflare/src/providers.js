@@ -493,11 +493,13 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
   // A stub must never be offered as the only mp4: the real HLS servers are
   // listed alongside it, and a 3-second clip reads as a broken player. The
   // mirror host names rotate (ct, ck, cy...), so only the measured size counts.
-  // Only a measured episode-sized file is offered. An unmeasured source is
-  // the exact case that used to surface a 609 KB promo clip as a server, and
-  // the HLS servers below always cover playback when no mp4 qualifies.
-  const kept = urls.filter((_, i) => sizes[i] != null && sizes[i] >= 2 * 1024 * 1024);
-  const sources = kept.map((url, idx) => {
+  // A measured stub is dropped outright. When Cloudflare cannot measure a file
+  // at all the mirror is still offered, but flagged unverified so the player
+  // never makes it the default source ahead of a server that resolved.
+  const kept = urls
+    .map((url, i) => ({ url, size: sizes[i] }))
+    .filter(({ size }) => size == null || size >= 2 * 1024 * 1024);
+  const sources = kept.map(({ url, size }, idx) => {
     const host = safeHost(url);
     return {
       url,
@@ -506,6 +508,7 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
       isM3u8: false,
       isMp4: true,
       referer: `${HEAVEN_BASE}/`,
+      unverified: size == null,
     };
   });
   const out = {
@@ -1188,6 +1191,9 @@ export async function episodeBundle({
       "Only qualities and audio tracks published by the source are listed. " +
       "CamAnime does not re-encode video or invent dubs.",
     active_server:
-      servers.find((s) => s.audio === audioPref) || servers[0] || null,
+      servers.find((s) => s.audio === audioPref && !s.unverified) ||
+      servers.find((s) => !s.unverified) ||
+      servers.find((s) => s.audio === audioPref) ||
+      servers[0] || null,
   };
 }

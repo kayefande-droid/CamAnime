@@ -682,12 +682,14 @@ class AnimeHeavenProvider(StreamingProvider):
                     logger.info("[AnimeHeaven] skipping promo-stub host %s", host)
                     continue
                 size = sizes.get(u)
-                # Only a measured episode-sized file is offered: an unmeasured
-                # source is how a 609 KB promo clip used to reach the player, and
-                # the HLS servers cover playback when no mp4 qualifies.
-                if size is None or size < 2 * 1024 * 1024:
-                    logger.info("[AnimeHeaven] dropping unverified source %s (%s bytes)", host, size)
+                # A measured stub is dropped outright. An unmeasured mirror is
+                # still listed (the CDN refuses probes often enough that this is
+                # the normal case) but flagged so it never becomes the default
+                # source ahead of a server that actually resolved.
+                if size is not None and size < 2 * 1024 * 1024:
+                    logger.info("[AnimeHeaven] dropping %s-byte stub mirror %s", size, host)
                     continue
+                unverified = size is None
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({
                     "url": u,
@@ -697,6 +699,7 @@ class AnimeHeavenProvider(StreamingProvider):
                     "isM3u8": False,
                     "isMp4": True,
                     "referer": f"{self.base_url}/",
+                    "unverified": unverified,
                 })
 
             result = {
@@ -1683,8 +1686,10 @@ class StreamingManager:
             "requested_audio": preferred_audio,
             "audio_fallback": preferred_audio == "dub" and not audio_availability["dub"],
             "active_server": next(
-                (server for server in servers if server.get("audio") == preferred_audio),
-                servers[0] if servers else None,
+                (s for s in servers if s.get("audio") == preferred_audio and not s.get("unverified")),
+                next((s for s in servers if not s.get("unverified")),
+                     next((s for s in servers if s.get("audio") == preferred_audio),
+                          servers[0] if servers else None)),
             ),
         }
         if cache_ttl > 0:

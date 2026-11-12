@@ -20,6 +20,47 @@ const ENDPOINT = "https://graphql.anilist.co";
 /** body -> Promise<payload> for requests currently in flight. */
 const inFlight = new Map();
 
+/**
+ * D1 is the crash-proof layer: Cloudflare egress to AniList is refused with 403
+ * often enough that a page render cannot depend on a live call. Every successful
+ * payload is stored here and served for 30 days, so a 403 degrades to slightly
+ * older catalogue data instead of a 500 page.
+ */
+let d1 = null;
+export function bindStore(env) {
+  d1 = env?.DB || null;
+}
+
+const D1_DIRECT = 30 * 24 * 60 * 60;
+
+async function readD1(body) {
+  if (!d1) return null;
+  try {
+    const row = await d1
+      .prepare("SELECT body FROM edge_cache WHERE key = ?1 AND t > ?2")
+      .bind("al:" + body, Math.floor(Date.now() / 1000) - D1_DIRECT)
+      .first();
+    return row?.body ? JSON.parse(row.body) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeD1(body, payload) {
+  if (!d1) return;
+  try {
+    await d1
+      .prepare(
+        "INSERT INTO edge_cache(key, body, t) VALUES (?1, ?2, ?3) " +
+          "ON CONFLICT(key) DO UPDATE SET body = excluded.body, t = excluded.t"
+      )
+      .bind("al:" + body, JSON.stringify(payload), Math.floor(Date.now() / 1000))
+      .run();
+  } catch {
+    // A cache write must never fail the request.
+  }
+}
+
 export function store() {
   return typeof caches !== "undefined" && caches.default ? caches.default : null;
 }
@@ -71,6 +112,8 @@ export async function alQuery(query, variables = {}, options = {}) {
 
   const cached = await readCache(body);
   if (cached) return cached;
+  const stored = await readD1(body);
+  if (stored) return stored;
 
   const running = inFlight.get(body);
   if (running) return running;
@@ -113,9 +156,16 @@ export async function alQuery(query, variables = {}, options = {}) {
         throw lastError;
       }
 
-      if (!response.ok) throw new Error(`AniList ${response.status}`);
+      if (!response.ok) {
+        // 403/401 from Cloudflare egress is a block, not a bad query: serve the
+        // stored copy rather than taking the page down.
+        const stale = await readD1(body);
+        if (stale) return stale;
+        throw new Error(`AniList ${response.status}`);
+      }
       const payload = await response.json();
       await writeCache(body, payload, ttl);
+      await writeD1(body, payload);
       return payload;
     }
     const stale = await readCache(body);

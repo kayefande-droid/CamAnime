@@ -4,6 +4,7 @@ import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorP
 import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
+import { bindStore as bindAniList } from "./anilist.js";
 import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
@@ -79,6 +80,9 @@ export default {
 async function handle(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // Give the AniList client the D1 binding so catalogue reads survive a block.
+    bindAniList(env);
 
     // Five-layer firewall (ban, rate, signatures, payload, strikes) runs before
     // anything else so a scanner never reaches routing or a provider call.
@@ -209,6 +213,7 @@ async function handle(request, env, ctx) {
       const page = await pageRoutes(request, env, ctx, path);
       return await withSeo(page, url);
     } catch (err) {
+      console.error("page route failed", path, err && err.stack || String(err));
       const status = /not found/i.test(String(err && err.message)) ? 404 : 500;
       // Render also owns pages this worker does not rebuild natively (the
       // scraper, adverts, promo). A 404 here used to break those nav links even
