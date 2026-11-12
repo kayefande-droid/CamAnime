@@ -2905,6 +2905,28 @@ def api_media_size():
         return jsonify({"error": "Probe failed"}), 502
 
 
+@app.route("/api/anilist", methods=["POST"])
+def api_anilist_relay() -> Any:
+    """Relay AniList GraphQL for the edge deployment.
+
+    AniList refuses Cloudflare's egress with 403, so the worker posts catalogue
+    queries here instead of failing every page. Only a query string and its
+    variables are forwarded, and the process-wide cache in ``fetch_anilist``
+    keeps a burst of worker page views from spending the API quota.
+    """
+    body = request.get_json(silent=True) or {}
+    query = body.get("query")
+    variables = body.get("variables")
+    if not isinstance(query, str) or not query.strip():
+        return jsonify({"error": "query is required"}), 400
+    if variables is not None and not isinstance(variables, dict):
+        return jsonify({"error": "variables must be an object"}), 400
+    data = fetch_anilist(query, variables or {})
+    if not data:
+        return jsonify({"error": "AniList unavailable"}), 502
+    return jsonify({"data": data})
+
+
 @app.route("/api/img")
 def api_image_proxy():
     """Relay AniList artwork.
@@ -4521,7 +4543,7 @@ _APP_HEADER_PLATFORM = "X-CamAnime-Platform"
 _APP_HEADER_INSTALL = "X-CamAnime-Install"
 
 _VERSION_EXEMPT_PREFIXES = (
-    "/api/img", "/api/media/size",
+    "/api/img", "/api/media/size", "/api/anilist",
     "/api/version", "/api/app/version", "/api/app/ping", "/api/app/push-token",
     "/api/announcements", "/api/public/counters", "/healthz",
     "/static/", "/get/", "/admin", "/login", "/logout", "/settings",

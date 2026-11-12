@@ -106,6 +106,36 @@ function retryDelayMs(response, attempt) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * AniList reached through the Render origin.
+ *
+ * Cloudflare's egress is refused with 403 by AniList, which used to take every
+ * catalogue page down. The origin runs on a different network, so the same
+ * GraphQL body is relayed there and the result is stored like a native fetch.
+ */
+const ORIGIN = "https://camanime.onrender.com";
+
+async function viaOrigin(body) {
+  try {
+    const res = await fetch(`${ORIGIN}/api/anilist`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        "user-agent": "CamAnime/2.13.0 (+https://camanime.onrender.com)",
+      },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const payload = await res.json();
+    return payload && payload.data && Object.keys(payload.data).length ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+
 export async function alQuery(query, variables = {}, options = {}) {
   const { ttl = 600, retries = 2 } = options;
   const body = JSON.stringify({ query, variables });
@@ -158,9 +188,15 @@ export async function alQuery(query, variables = {}, options = {}) {
 
       if (!response.ok) {
         // 403/401 from Cloudflare egress is a block, not a bad query: serve the
-        // stored copy rather than taking the page down.
+        // stored copy, then the origin relay, rather than failing the page.
         const stale = await readD1(body);
         if (stale) return stale;
+        const proxied = await viaOrigin(body);
+        if (proxied) {
+          await writeCache(body, proxied, ttl);
+          await writeD1(body, proxied);
+          return proxied;
+        }
         throw new Error(`AniList ${response.status}`);
       }
       const payload = await response.json();
