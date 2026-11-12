@@ -23,8 +23,8 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.17.2",
-    "latest_version_code": 32,
+    "latest_version": "2.17.3",
+    "latest_version_code": 33,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,

@@ -1138,11 +1138,52 @@ class Api {
   }
 
   /// Same streaming servers the website uses for this episode.
+  ///
+  /// Resolved bundles are the slowest request in the app (the server has to
+  /// scrape the provider), so they are memoised in memory and on disk for ten
+  /// minutes. A tap on Download or Play therefore reuses a bundle the user
+  /// already fetched, even after leaving the title and coming back.
+  static final Map<String, Map<String, dynamic>> _episodeMemo = {};
+  static final Map<String, int> _episodeMemoAt = {};
+  static const Duration _episodeTtl = Duration(minutes: 10);
+
+  static Future<File> _episodeCacheFile(String url) async {
+    final dir = await getApplicationSupportDirectory();
+    final name = '${url.hashCode.toRadixString(16)}-${url.length}';
+    return File('${dir.path}/episode_$name.json');
+  }
+
+  static bool _episodeFresh(int stamp) =>
+      DateTime.now().millisecondsSinceEpoch - stamp < _episodeTtl.inMilliseconds;
+
   static Future<Map<String, dynamic>> episodeSources(
       String animeId, int ep, String audio) async {
-    final response = await _get(Uri.parse(
-        '${base()}/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio'));
-    return json.decode(response.body) as Map<String, dynamic>;
+    final url =
+        '${base()}/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio';
+    final memo = _episodeMemo[url];
+    if (memo != null && _episodeFresh(_episodeMemoAt[url] ?? 0)) return memo;
+    final cache = await _episodeCacheFile(url);
+    try {
+      if (await cache.exists() &&
+          _episodeFresh(await cache.lastModified().then(
+              (t) => t.millisecondsSinceEpoch))) {
+        final stored = json.decode(await cache.readAsString()) as Map<String, dynamic>;
+        _episodeMemo[url] = stored;
+        _episodeMemoAt[url] = DateTime.now().millisecondsSinceEpoch;
+        return stored;
+      }
+    } catch (_) {
+      // A broken cache file must never block a fresh request.
+    }
+    final response = await _get(Uri.parse(url));
+    final bundle = json.decode(response.body) as Map<String, dynamic>;
+    _episodeMemo[url] = bundle;
+    _episodeMemoAt[url] = DateTime.now().millisecondsSinceEpoch;
+    try {
+      await cache.parent.create(recursive: true);
+      await cache.writeAsString(json.encode(bundle), flush: true);
+    } catch (_) {}
+    return bundle;
   }
 
   /// Official YouTube trailer id for a title, resolved by the website (AniList

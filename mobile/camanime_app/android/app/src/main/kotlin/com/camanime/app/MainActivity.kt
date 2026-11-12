@@ -107,6 +107,28 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "disable" -> result.success(true)
+                    // Ask for POST_NOTIFICATIONS again (Android shows the system
+                    // prompt only while it can; afterwards settings is the path).
+                    "request" -> {
+                        requestNotificationPermission()
+                        result.success(true)
+                    }
+                    // Opens this app's notification page, which is the only way
+                    // back once the user has denied the permission twice.
+                    "openSettings" -> {
+                        try {
+                            val intent = android.content.Intent(
+                                android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                            ).putExtra(
+                                android.provider.Settings.EXTRA_APP_PACKAGE,
+                                packageName
+                            )
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
+                    }
                     // Diagnostics screen: report the real OS state instead of
                     // guessing from the in-app switch.
                     "status" -> {

@@ -39,6 +39,25 @@ class AppNotifications {
   /// Returns `permission` as granted/denied (or unknown off Android) plus the
   /// notification manager's own `enabled` flag, which also turns false when the
   /// user blocks the channel in system settings.
+  /// Asks Android for notification permission again.
+  static Future<void> requestPermission() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod<void>('request');
+    } catch (_) {}
+  }
+
+  /// Opens the OS notification settings for this app (the recovery path when
+  /// the system prompt no longer appears).
+  static Future<bool> openSettings() async {
+    if (!Platform.isAndroid) return false;
+    try {
+      return await _channel.invokeMethod<bool>('openSettings') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<Map<String, dynamic>> status() async {
     final result = <String, dynamic>{
       'supported': Platform.isAndroid,

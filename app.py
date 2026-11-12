@@ -1510,6 +1510,11 @@ def _confirmed_episode_count(anime: Dict, provider_episodes=None,
     return max(_confirmed_episode_numbers(anime, provider_episodes, now_ts), default=0)
 
 
+# Resolved episode bundles, keyed by (anime, episode, audio, heaven id).
+_SOURCES_CACHE: Dict[Tuple, Tuple[float, Dict]] = {}
+_SOURCES_LOCK = Lock()
+_SOURCES_TTL = 8 * 60
+
 _DUB_FLAG_CACHE: Dict[int, Tuple[float, Dict]] = {}
 _DUB_FLAG_TTL = 6 * 3600
 _DUB_FLAG_LOCK = Lock()
@@ -2508,6 +2513,19 @@ def api_episode_sources(anime_id: int, ep_num: int):
             pass
     if not titles or not any(titles):
         titles = [f"Anime {anime_id}"]
+    # A resolved episode bundle is the slow part (provider scrape plus stream
+    # resolution). Memoise it briefly so the next tap — this user or any other —
+    # starts playing/downloading without repeating that work.
+    cache_key = (anime_id, ep_num, audio, heaven_id)
+    now = time.time()
+    with _SOURCES_LOCK:
+        cached = _SOURCES_CACHE.get(cache_key)
+        if cached and now - cached[0] <= _SOURCES_TTL:
+            response = jsonify(cached[1])
+            response.headers["Cache-Control"] = "private, max-age=240"
+            response.headers["X-CamAnime-Cache"] = "hit"
+            return response
+
     bundle = streaming_manager.get_full_episode_bundle(
         anilist_id=anime_id,
         ep_num=ep_num,
@@ -2516,7 +2534,17 @@ def api_episode_sources(anime_id: int, ep_num: int):
         preferred_audio=audio,
         heaven_override=heaven_id,
     )
-    return jsonify(bundle)
+    if bundle and (bundle.get("servers") or bundle.get("active_server")):
+        with _SOURCES_LOCK:
+            _SOURCES_CACHE[cache_key] = (time.time(), bundle)
+            if len(_SOURCES_CACHE) > 400:
+                # Drop the oldest half rather than growing without bound.
+                for stale in sorted(_SOURCES_CACHE, key=lambda k: _SOURCES_CACHE[k][0])[:200]:
+                    _SOURCES_CACHE.pop(stale, None)
+    response = jsonify(bundle)
+    response.headers["Cache-Control"] = "private, max-age=240"
+    response.headers["X-CamAnime-Cache"] = "miss"
+    return response
 
 
 @app.route("/api/heaven/search")
@@ -3476,7 +3504,7 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.17.2"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.17.3"  # keep aligned with mobile/camanime_app/pubspec.yaml
 APP_VERSION_CODE = 29
 # The release tag tracks the app version, so a new build can never point
 # /get/android at an older asset (the old default was a stale v1.2.0).

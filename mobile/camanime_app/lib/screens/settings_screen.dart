@@ -1104,6 +1104,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     }
   }
 
+  /// Asks the OS once; if the prompt no longer appears (denied twice) the app
+  /// sends the user straight to the notification settings for this app.
+  Future<void> _fixNotifications() async {
+    if (_permission == 'denied') {
+      await AppNotifications.requestPermission();
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _load();
+      if (_permission == 'granted' && _notificationsEnabled) return;
+    }
+    await AppNotifications.openSettings();
+  }
+
   String _ago(int stamp) {
     if (stamp <= 0) return 'never checked';
     final diff = DateTime.now().difference(
@@ -1191,6 +1203,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   _row('Permission', permission, tone: permissionTone),
                   _row('In-app alerts',
                       AppNotifications.enabled ? 'On' : 'Off'),
+                  if (_permission != 'granted' || !_notificationsEnabled)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: _fixNotifications,
+                          icon: const Icon(Icons.notifications_active_outlined,
+                              size: 18),
+                          label: Text(_permission == 'denied'
+                              ? 'Allow notifications'
+                              : 'Open notification settings'),
+                        ),
+                      ),
+                    ),
                 ]),
                 _group('Updates', [
                   _row('Installed build', _installed.isEmpty ? 'unknown' : _installed),
