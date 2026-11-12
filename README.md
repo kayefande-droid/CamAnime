@@ -62,6 +62,16 @@ Owner-only runbooks, release-signing procedures, provider notes and incident ste
 
 Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
 
+### Reaching the CLI on a restrictive mobile network
+
+The Freebuff launcher downloads its agent binary from `codebuff.com/api/releases/*`. Some carriers (MTN Cameroon data was the reported case) cannot reach that host even though Wi-Fi works fine. The Cloudflare worker relays exactly that path, and nothing else:
+
+```bash
+NEXT_PUBLIC_CODEBUFF_APP_URL=https://camanjme.camanime.workers.dev/fb freebuff
+```
+
+The relay forwards only `GET/HEAD /fb/api/releases/…` to the fixed upstream host, so it is not an open proxy. If the carried connection blocks the agent's own API traffic as well, a DNS override (Android Private DNS `one.one.one.one`) or Cloudflare WARP is the fix — a Worker cannot carry a CONNECT tunnel.
+
 ### Pushing a live app update to installed devices
 
 The app has no Firebase dependency. When the backend publishes an announcement whose `action` is `"update"`, every open or foregrounded app install that fetches the `/api/announcements` feed shows a heads-up notification; tapping it starts the in-app update immediately — it downloads the release APK with a progress dialog, verifies the SHA-256, opens Android's package installer, and after the user confirms restarts into the new build.

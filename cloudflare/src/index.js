@@ -86,6 +86,44 @@ async function handle(request, env, ctx) {
       return Response.redirect(target.toString(), 308);
     }
 
+    // CLI relay for MTN Cameroon. The Freebuff launcher downloads its agent
+    // binary from codebuff.com/api/releases/*, and that host is unreachable on
+    // some mobile carriers. Only that release path is forwarded — never an
+    // arbitrary URL — and the launcher can be pointed at it with
+    // NEXT_PUBLIC_CODEBUFF_APP_URL=https://<this worker>/fb
+    if (path === "/fb/api/releases" || path.startsWith("/fb/api/releases/")) {
+      const suffix = path.slice("/fb".length);
+      let upstream;
+      try {
+        upstream = await fetch(new URL(suffix + url.search, "https://codebuff.com"), {
+          method: request.method === "HEAD" ? "HEAD" : "GET",
+          headers: {
+            accept: request.headers.get("accept") || "*/*",
+            "user-agent": "CamAnime-Relay/1.0",
+          },
+        });
+      } catch (err) {
+        return new Response(
+          JSON.stringify({ error: "release relay unreachable", detail: String(err) }),
+          { status: 502, headers: { "content-type": "application/json" } },
+        );
+      }
+      const headers = new Headers();
+      for (const name of [
+        "content-type",
+        "content-length",
+        "content-disposition",
+        "etag",
+        "last-modified",
+      ]) {
+        const value = upstream.headers.get(name);
+        if (value) headers.set(name, value);
+      }
+      headers.set("cache-control", "public, max-age=300");
+      headers.set("x-camanime-relay", "codebuff");
+      return new Response(upstream.body, { status: upstream.status, headers });
+    }
+
     // Real static assets (same CSS/JS/icons the Render site serves) via the ASSETS binding.
     // The bundle mounts static/ at the asset root, so /static/css/x.css must be
     // requested as /css/x.css. Without this rewrite every asset 404s.
