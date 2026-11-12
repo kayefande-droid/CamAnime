@@ -972,3 +972,95 @@ body .nav-link.active {
 @media (prefers-reduced-motion: reduce) {
   body .anime-card, body .anime-card:hover { transition: none; transform: none; }
 }
+
+
+/* ── 21. Fluid layout, steadier hero, calmer motion ────────────────────────
+   Phone, tablet, laptop and ultrawide all share one geometry: the hero is a
+   single clipped box instead of a stack of absolutely placed layers, the logo
+   is bounded by the header row at every width, and taps get real hit areas.
+   Motion is limited to colour/opacity/transform so nothing animates layout. */
+:root {
+  --ca-ease: cubic-bezier(.22, .61, .36, 1);
+  --ca-dur: 220ms;
+  --ca-dur-fast: 140ms;
+}
+
+/* Header: one row height everywhere, artwork can never outgrow it. */
+body header .header-inner {
+  min-height: clamp(56px, 8vw, 68px);
+  gap: clamp(.5rem, 2vw, 1.25rem);
+}
+body header .site-logo { flex: 0 1 auto; min-width: 0; max-width: 46vw; }
+body header .site-logo img {
+  width: clamp(112px, 18vw, 168px);
+  max-width: 100%;
+  height: auto;
+  max-height: clamp(32px, 6vw, 44px);
+  object-fit: contain;
+}
+
+/* Hero: one box. The backdrop fills it, the copy sits on top, nothing reflows. */
+body .hero-spotlight { overflow: clip; contain: paint; }
+body .hero-slide,
+body .hero-slide.active { position: relative; inset: auto; width: 100%; }
+body .hero-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+body .hero-body { position: relative; z-index: 2; }
+
+/* Ultrawide: more cards per row rather than fatter cards. */
+@media (min-width: 1400px) {
+  body .anime-grid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: clamp(1rem, 1.4vw, 1.6rem);
+  }
+  body .hero-title { max-width: 30ch; }
+}
+
+/* Small phones: stack the hero actions full width so neither is a sliver. */
+@media (max-width: 480px) {
+  body .anime-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr)); }
+  body .hero-body { padding: 1rem .9rem 2rem; }
+  body .hero-ctas { gap: .5rem; }
+  body .hero-ctas .btn-primary,
+  body .hero-ctas .btn-secondary { flex: 1 1 100%; }
+}
+@media (max-width: 360px) {
+  body .anime-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Interaction: consistent easing, no layout animation, real touch targets. */
+body .btn-primary, body .btn-secondary, body .ctrl-btn, body .nav-link,
+body .ep-chip, body .ca-theme-btn, body .search-btn, body .card-btn-play {
+  transition:
+    background-color var(--ca-dur) var(--ca-ease),
+    color var(--ca-dur) var(--ca-ease),
+    border-color var(--ca-dur) var(--ca-ease),
+    box-shadow var(--ca-dur) var(--ca-ease),
+    transform var(--ca-dur-fast) var(--ca-ease),
+    filter var(--ca-dur-fast) var(--ca-ease);
+}
+body .btn-primary:active, body .btn-secondary:active, body .ctrl-btn:active,
+body .search-btn:active { transform: scale(.98); }
+@media (pointer: coarse) {
+  body .ctrl-btn, body .nav-link, body .ca-theme-btn, body .ep-chip, body .search-btn {
+    min-height: 44px;
+  }
+}
+@media (hover: none) {
+  body .anime-card:hover { transform: none; }
+}
+
+/* Long catalogue pages: off-screen sections skip paint until scrolled to. */
+body .section-block { content-visibility: auto; contain-intrinsic-size: auto 620px; }
+
+/* Metered connection: the layout stays, the hero bytes do not. */
+@media (prefers-reduced-data: reduce) {
+  body .hero-backdrop { display: none; }
+  body .hero-spotlight { background: var(--bg-elevated, #121722); }
+  body .section-block { content-visibility: visible; }
+}

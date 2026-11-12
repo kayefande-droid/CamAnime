@@ -33,6 +33,8 @@ function head(title, desc) {
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="manifest" href="/static/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <!-- Same faces as the Render templates, so the shared stylesheets compute
      identical type on both hosts. Font Awesome is the icon set those
      templates use for card badges and nav items. -->
@@ -41,7 +43,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261112-ink">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-responsive">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -143,7 +145,7 @@ export function homePage(grids, userName) {
     ${hero ? `
     <section class="hero-spotlight" id="heroCarousel">
       <div class="hero-slide active">
-        <img class="hero-backdrop" src="${esc(hero.bannerImage || hero.coverImage?.extraLarge || hero.coverImage?.large || "")}" alt="${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}" decoding="async" referrerpolicy="no-referrer">
+        <img class="hero-backdrop" src="${esc(hero.bannerImage || hero.coverImage?.extraLarge || hero.coverImage?.large || "")}" alt="${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}" width="1600" height="900" fetchpriority="high" decoding="async" referrerpolicy="no-referrer">
         <div class="hero-vignette"></div>
         <div class="hero-body">
           <h1 class="hero-title">${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}</h1>
