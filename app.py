@@ -1879,27 +1879,10 @@ def home():
 
     hero_slides = [a for a in trending if a.get("banner")][:6] or trending[:5]
 
-    # Brand spotlight: the first hero slide on the homepage is always the CamAnime
-    # brand card so the official brand name, logo and tagline are what search engines
-    # and first-time visitors see. Real anime still rotate through the rest of the carousel.
-    if hero_slides:
-        hero_slides.insert(0, {
-            "id": 0,
-            "title": "Watch Anime Online Free on CamAnime",
-            "description": "Stream anime with English subtitles or dub, read episode guides, and keep your watchlist and resume points on every device.",
-            "banner": None,
-            "image": "/static/brand/camanime-icon.svg",
-            # The brand card carries no rating, format or genre: those fields only
-            # describe a real title, and inventing them for the brand read as filler.
-            "rating": "",
-            "format": "",
-            "episode": "",
-            "genres": [],
-            "status": "",
-            "latest_ep": False,
-            "trailer_id": "",
-        })
-
+    # The hero used to open on a synthetic brand card whose only artwork was the
+    # logo, so the first screen of the homepage was a full-bleed app icon that
+    # then jumped to real anime. Real titles lead the carousel now; the brand
+    # name still appears in the page title and the hidden page heading.
     featured = hero_slides[0] if hero_slides else None
 
     # Anime Classics: real AniList cards (covers auto-refresh hourly via the
