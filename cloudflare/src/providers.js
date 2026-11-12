@@ -482,7 +482,8 @@ async function heavenSourcesFromRender(animeId, episode) {
     const data = await res.json();
     return (data.servers || [])
       .map((s) => ({ ...s, url: s.raw_url || originUrlOf(s.stream_url) }))
-      .filter((s) => s.provider === "animeheaven" && s.url)
+      // The origin labels the provider "AnimeHeaven", so the match is folded.
+      .filter((s) => String(s.provider || "").toLowerCase() === "animeheaven" && s.url)
       .map((s) => ({
         url: s.url,
         quality: "Source MP4",
