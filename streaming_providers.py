@@ -682,8 +682,11 @@ class AnimeHeavenProvider(StreamingProvider):
                     logger.info("[AnimeHeaven] skipping promo-stub host %s", host)
                     continue
                 size = sizes.get(u)
-                if size is not None and size < 2 * 1024 * 1024:
-                    logger.info("[AnimeHeaven] dropping %s-byte stub mirror %s", size, host)
+                # Only a measured episode-sized file is offered: an unmeasured
+                # source is how a 609 KB promo clip used to reach the player, and
+                # the HLS servers cover playback when no mp4 qualifies.
+                if size is None or size < 2 * 1024 * 1024:
+                    logger.info("[AnimeHeaven] dropping unverified source %s (%s bytes)", host, size)
                     continue
                 label = "Direct MP4 (Primary CDN)" if idx == 0 else f"Direct MP4 ({host.split('.')[0].upper()} Mirror)"
                 sources.append({

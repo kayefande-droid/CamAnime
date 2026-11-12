@@ -493,7 +493,10 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
   // A stub must never be offered as the only mp4: the real HLS servers are
   // listed alongside it, and a 3-second clip reads as a broken player. The
   // mirror host names rotate (ct, ck, cy...), so only the measured size counts.
-  const kept = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
+  // Only a measured episode-sized file is offered. An unmeasured source is
+  // the exact case that used to surface a 609 KB promo clip as a server, and
+  // the HLS servers below always cover playback when no mp4 qualifies.
+  const kept = urls.filter((_, i) => sizes[i] != null && sizes[i] >= 2 * 1024 * 1024);
   const sources = kept.map((url, idx) => {
     const host = safeHost(url);
     return {
