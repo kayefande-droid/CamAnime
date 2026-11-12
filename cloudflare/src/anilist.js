@@ -105,6 +105,30 @@ function retryDelayMs(response, attempt) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Catalogue read with one guaranteed fallback.
+ *
+ * A blocked or failed graphql.anilist.co call used to surface as a 500 page no
+ * matter where in the retry loop it failed (403, reset connection, timeouts).
+ * The wrapper catches every such failure and relays the same query through the
+ * origin, then stores the result so the next page render needs neither.
+ */
+export async function alQuery(query, variables = {}, options = {}) {
+  const body = JSON.stringify({ query, variables });
+  try {
+    return await alQueryLive(query, variables, options);
+  } catch (err) {
+    console.error("anilist direct failed", err && err.message || String(err));
+    const proxied = await viaOrigin(body);
+    if (proxied) {
+      await writeCache(body, proxied, options.ttl ?? 600);
+      await writeD1(body, proxied);
+      return proxied;
+    }
+    throw err;
+  }
+}
+
 
 /**
  * AniList reached through the Render origin.
@@ -136,7 +160,7 @@ async function viaOrigin(body) {
 }
 
 
-export async function alQuery(query, variables = {}, options = {}) {
+async function alQueryLive(query, variables = {}, options = {}) {
   const { ttl = 600, retries = 2 } = options;
   const body = JSON.stringify({ query, variables });
 

@@ -461,6 +461,16 @@ async function mediaTotalSize(url) {
  * resolve it, so its mp4 mirrors are adopted here — still played and downloaded
  * through this worker's proxy — instead of dropping the provider entirely.
  */
+/** The direct CDN url inside an origin proxy link (/api/proxy/video?url=...). */
+function originUrlOf(streamUrl) {
+  if (!streamUrl) return "";
+  try {
+    return new URL(streamUrl, "https://camanime.onrender.com").searchParams.get("url") || "";
+  } catch {
+    return "";
+  }
+}
+
 async function heavenSourcesFromRender(animeId, episode) {
   if (!animeId) return [];
   try {
@@ -471,9 +481,10 @@ async function heavenSourcesFromRender(animeId, episode) {
     if (!res.ok) return [];
     const data = await res.json();
     return (data.servers || [])
-      .filter((s) => s.provider === "animeheaven" && s.raw_url)
+      .map((s) => ({ ...s, url: s.raw_url || originUrlOf(s.stream_url) }))
+      .filter((s) => s.provider === "animeheaven" && s.url)
       .map((s) => ({
-        url: s.raw_url,
+        url: s.url,
         quality: "Source MP4",
         label: s.name,
         isM3u8: false,
