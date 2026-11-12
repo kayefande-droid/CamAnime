@@ -12,7 +12,7 @@
 import { json } from "./util.js";
 import { getComments } from "./api.js";
 import { alQuery } from "./anilist.js";
-import { episodeBundle } from "./providers.js";
+import { episodeBundle, anikotoEpisodes, anikotoFindBestSlug } from "./providers.js";
 import { route as mediaRoute } from "./media.js";
 import {
   APK_SHA256,
@@ -118,6 +118,124 @@ export async function catalogHome() {
     movies: pick(data?.movies),
     series: pick(data?.series),
     featured: trendingRows[0] || null,
+  };
+}
+
+/** Provider dub flags live for six hours, same TTL as the Flask cache. */
+const DUB_TTL_SECONDS = 6 * 60 * 60;
+const DUB_MEMO = new Map();
+
+const dubCacheUrl = (id) => `https://dub-cache.camanime.internal/v1/${id}`;
+
+/**
+ * Dub episodes exactly as the provider's episode index lists them.
+ *
+ * Anikoto stamps every row with data-sub / data-dub, so a title is dubbed only
+ * when at least one episode really has a dub track; the numbers are kept so
+ * episode rows can badge only the episodes that exist in that audio.
+ */
+export function dubFlags(episodes) {
+  const rows = Array.isArray(episodes) ? episodes : [];
+  if (!rows.length) return { dub: null, sub: null, dub_episodes: [], source: "anikoto" };
+  const dub_episodes = rows
+    .filter((ep) => ep?.has_dub && /^\d+(\.\d+)?$/.test(String(ep?.num ?? "")))
+    .map((ep) => Math.trunc(Number(ep.num)))
+    .sort((a, b) => a - b);
+  return {
+    dub: dub_episodes.length > 0,
+    sub: rows.some((ep) => Boolean(ep?.has_sub)),
+    dub_episodes,
+    source: "anikoto",
+  };
+}
+
+async function readDubCache(id) {
+  const memo = DUB_MEMO.get(id);
+  if (memo && Date.now() - memo.at < DUB_TTL_SECONDS * 1000) return memo.flags;
+  if (typeof caches === "undefined") return null;
+  try {
+    const hit = await caches.default.match(dubCacheUrl(id));
+    if (!hit) return null;
+    const flags = await hit.json();
+    DUB_MEMO.set(id, { at: Date.now(), flags });
+    return flags;
+  } catch {
+    return null;
+  }
+}
+
+async function writeDubCache(id, flags) {
+  DUB_MEMO.set(id, { at: Date.now(), flags });
+  if (typeof caches === "undefined") return;
+  try {
+    await caches.default.put(
+      dubCacheUrl(id),
+      new Response(JSON.stringify(flags), {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": `max-age=${DUB_TTL_SECONDS}`,
+        },
+      }),
+    );
+  } catch {
+    // Caching is best effort; the answer is still correct without it.
+  }
+}
+
+/**
+ * `/api/v1/dub-availability` for up to 24 ids, matching the Flask payload.
+ * Unknown answers are omitted instead of reported as "no dub" so the app
+ * never hides a dub it has not checked.
+ */
+export async function dubAvailability(ids) {
+  const availability = {};
+  const missing = [];
+  for (const id of ids) {
+    const cached = await readDubCache(id);
+    if (cached) availability[String(id)] = cached;
+    else missing.push(id);
+  }
+
+  if (missing.length) {
+    const data = await al(
+      `query($ids:[Int]){Page(perPage:50){media(id_in:$ids,type:ANIME){id title{romaji english native} synonyms}}}`,
+      { ids: missing },
+    );
+    const titlesById = new Map();
+    for (const media of data?.Page?.media || []) {
+      const titles = [media?.title?.english, media?.title?.romaji, media?.title?.native, ...(media?.synonyms || [])]
+        .filter((t) => typeof t === "string" && t.trim());
+      titlesById.set(Number(media?.id), titles);
+    }
+
+    const resolve = async (id) => {
+      try {
+        const titles = titlesById.get(id) || [];
+        if (!titles.length) return [id, null];
+        const slug = await anikotoFindBestSlug(titles);
+        if (!slug) return [id, null];
+        const episodes = await anikotoEpisodes(slug);
+        return [id, dubFlags(episodes)];
+      } catch {
+        return [id, null];
+      }
+    };
+
+    // Four at a time keeps provider pressure equal to the Render worker pool.
+    for (let i = 0; i < missing.length; i += 4) {
+      const batch = await Promise.all(missing.slice(i, i + 4).map(resolve));
+      for (const [id, flags] of batch) {
+        if (!flags || flags.dub === null) continue;
+        await writeDubCache(id, flags);
+        availability[String(id)] = flags;
+      }
+    }
+  }
+
+  return {
+    status: "success",
+    availability,
+    note: "dub/dub_episodes come from the streaming provider's own episode index; a title missing here is unknown, not confirmed undubbed.",
   };
 }
 
@@ -251,7 +369,60 @@ export async function genreAnime(slug, limit = 36) {
  * Router for the app's endpoints. Returns a Response, or null when the path
  * is not part of the mobile surface.
  */
-export async function route(env, request, url, parts) {
+/**
+ * AniList answers this worker's shared egress IP with 403 "manually blocked",
+ * so metadata reads fall back to the Render deployment — the same endpoints,
+ * same payloads, same ids. The mirror is cached at the edge for ten minutes so
+ * a sleeping Render instance is not woken for every visitor.
+ */
+const MIRROR_ORIGIN = "https://camanime.onrender.com";
+const MIRROR_TTL = 600;
+
+async function readMirrorCache(request) {
+  if (typeof caches === "undefined" || !caches.default) return null;
+  try {
+    const hit = await caches.default.match(new Request(request.url));
+    return hit || null;
+  } catch {
+    return null;
+  }
+}
+
+async function mirrorFromRender(request, url) {
+  const cached = await readMirrorCache(request);
+  if (cached) return cached;
+
+  const target = new URL(url.pathname + url.search, MIRROR_ORIGIN);
+  let upstream;
+  try {
+    upstream = await fetch(target, {
+      headers: { accept: "application/json", "user-agent": "CamAnime-Mirror/2.16.0" },
+    });
+  } catch {
+    return null;
+  }
+  if (!upstream.ok) return null;
+
+  const body = await upstream.text();
+  const response = new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": `public, max-age=${MIRROR_TTL}, stale-while-revalidate=3600`,
+      "x-camanime-mirror": "render",
+    },
+  });
+  if (typeof caches !== "undefined" && caches.default) {
+    try {
+      await caches.default.put(new Request(request.url), response.clone());
+    } catch {
+      // Cache is an optimisation only.
+    }
+  }
+  return response;
+}
+
+async function routeLocal(env, request, url, parts) {
   const [p0, p1, p2, p3] = parts;
   if (p0 !== "api" || request.method !== "GET") return null;
 
@@ -294,6 +465,24 @@ export async function route(env, request, url, parts) {
       blocked ? 426 : 200,
       { "cache-control": "no-store" },
     );
+  }
+
+  if (p1 === "v1" && p2 === "dub-availability") {
+    const raw = (url.searchParams.get("ids") || "").replace(/\s/g, "");
+    const ids = [];
+    for (const chunk of raw.split(",")) {
+      if (!chunk) continue;
+      if (!/^\d+$/.test(chunk)) {
+        return json({ error: "ids must be a comma-separated list of anime ids." }, 400);
+      }
+      ids.push(Number(chunk));
+    }
+    if (!ids.length) return json({ error: "Provide at least one anime id." }, 400);
+    if (ids.some((id) => id <= 0)) return json({ error: "Anime ids must be positive." }, 400);
+    if (ids.length > 24) return json({ error: "Ask for at most 24 anime ids per call." }, 400);
+    return json(await dubAvailability([...new Set(ids)]), 200, {
+      "cache-control": "public, max-age=900, stale-while-revalidate=3600",
+    });
   }
 
   if (p1 === "v1" && p2 === "catalog" && p3 === "home") {
@@ -347,4 +536,33 @@ export async function route(env, request, url, parts) {
   }
 
   return null;
+}
+
+/** True for the read-only app endpoints the mirror can reproduce. */
+function mirrorable(parts) {
+  const [p0, p1, p2] = parts;
+  if (p0 !== "api") return false;
+  if (p1 === "anime" || p1 === "episode-sources" || p1 === "trailer") return true;
+  return p1 === "v1" && Boolean(p2) && p2 !== "app";
+}
+
+/**
+ * Router entry point: answer from this worker when it can, and from Render
+ * only when an upstream lookup (AniList) is refused. A local answer is never
+ * replaced by a remote one.
+ */
+export async function route(env, request, url, parts) {
+  let local = null;
+  try {
+    local = await routeLocal(env, request, url, parts);
+  } catch (err) {
+    if (!mirrorable(parts)) throw err;
+    const mirrored = await mirrorFromRender(request, url);
+    if (mirrored) return mirrored;
+    throw err;
+  }
+  if (local || !mirrorable(parts)) return local;
+  // Endpoints this worker does not implement itself (`/api/v1/anime/<id>`,
+  // `/api/v1/anime` list) are served by Render so the app sees one surface.
+  return (await mirrorFromRender(request, url)) || local;
 }

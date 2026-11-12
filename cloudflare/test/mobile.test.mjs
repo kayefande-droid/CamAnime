@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { card, route } from "../src/mobile.js";
+import { card, dubFlags, route } from "../src/mobile.js";
 
 test("card maps AniList media and drops malformed trailer ids", () => {
   const row = card({
@@ -35,4 +35,35 @@ test("non-mobile paths fall through so the existing routes still run", async () 
   const url = new URL("https://cam.example/api/counters");
   const res = await route({}, new Request(url), url, ["api", "counters"]);
   assert.equal(res, null);
+});
+
+test("dub flags come from provider episode rows, never from a guess", () => {
+  const flags = dubFlags([
+    { num: "1", has_sub: true, has_dub: true },
+    { num: "2", has_sub: true, has_dub: true },
+    { num: "3", has_sub: true, has_dub: false },
+  ]);
+  assert.equal(flags.dub, true);
+  assert.deepEqual(flags.dub_episodes, [1, 2]);
+  assert.equal(flags.source, "anikoto");
+});
+
+test("an undubbed title reports sub only, and an empty index stays unknown", () => {
+  const subOnly = dubFlags([{ num: "1", has_sub: true, has_dub: false }]);
+  assert.equal(subOnly.dub, false);
+  assert.deepEqual(subOnly.dub_episodes, []);
+  assert.equal(dubFlags([]).dub, null, "no episode index means unknown, not undubbed");
+});
+
+test("dub availability rejects malformed and oversized id lists", async () => {
+  const call = async (qs) => {
+    const url = new URL(`https://cam.example/api/v1/dub-availability?${qs}`);
+    const res = await route({}, new Request(url), url, ["api", "v1", "dub-availability"]);
+    return [res.status, await res.json()];
+  };
+  assert.equal((await call("ids=abc"))[0], 400);
+  assert.equal((await call("ids="))[0], 400);
+  assert.equal((await call("ids=0"))[0], 400);
+  const many = Array.from({ length: 25 }, (_, i) => i + 1).join(",");
+  assert.equal((await call(`ids=${many}`))[0], 400);
 });
