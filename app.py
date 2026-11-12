@@ -3312,12 +3312,35 @@ def apply_security_headers(resp):
         "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     csp = ("default-src 'self' https: data: blob:; " "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; " "img-src 'self' https: data: blob:; " "media-src 'self' https: blob: data:; " "frame-src 'self' https:; " "connect-src 'self' https: blob:; " "object-src 'none'; " "base-uri 'self'; " "form-action 'self'; " "frame-ancestors 'self';")
     resp.headers.setdefault("Content-Security-Policy", csp)
+    if resp.mimetype == "text/html" and not resp.direct_passthrough:
+        try:
+            resp.set_data(_relay_anilist_images(resp.get_data(as_text=True)))
+        except Exception:
+            logger.debug("image relay rewrite skipped", exc_info=True)
     # Private pages must never be cached by a shared proxy or restored from a
     # stale cache after logout. Public pages keep caching for fast navigation.
     if resp.mimetype == "text/html" and any(
             (request.path or "").startswith(p) for p in _AUTHENTICATED_PATHS):
         resp.headers["Cache-Control"] = "private, no-store"
     return resp
+
+
+_ANILIST_IMG_RE = re.compile(r'https://s4\.anilist\.co/[^"\'\s<>()]+')
+
+
+def _relay_anilist_images(body: str) -> str:
+    """Serve AniList artwork through /api/img.
+
+    AniList refuses some networks outright (Cloudflare's egress among them), and
+    a blocked image leaves the hero and every poster on the brand fallback.
+    Relaying through this host keeps the artwork identical everywhere, and the
+    relayed URLs stay absolute so social cards still resolve.
+    """
+    if "s4.anilist.co/" not in body:
+        return body
+    base = request.host_url.rstrip("/")
+    return _ANILIST_IMG_RE.sub(
+        lambda m: f"{base}/api/img?u={quote(m.group(0), safe='')}", body)
 
 
 def _bearer_token():
