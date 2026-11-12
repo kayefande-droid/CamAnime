@@ -695,16 +695,6 @@ class AnimeHeavenProvider(StreamingProvider):
                     "isMp4": True,
                     "referer": f"{self.base_url}/",
                 })
-            if not sources and raw_urls:
-                # Never trade a working player for a clean list.
-                sources = [{
-                    "url": raw_urls[0],
-                    "quality": "Source MP4",
-                    "label": "Direct MP4 (Primary CDN)",
-                    "isM3u8": False,
-                    "isMp4": True,
-                    "referer": f"{self.base_url}/",
-                }]
 
             result = {
                 "sources": sources,

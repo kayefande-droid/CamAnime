@@ -490,9 +490,10 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
     return !host.startsWith("ct.") && !host.startsWith("ck.");
   });
   const sizes = await Promise.all(urls.map((u) => mediaTotalSize(u)));
-  const real = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
-  // If every file looks like a stub, keep the first rather than an empty player.
-  const kept = real.length ? real : urls.slice(0, 1);
+  // A stub must never be offered as the only mp4: the real HLS servers are
+  // listed alongside it, and a 3-second clip reads as a broken player. The
+  // mirror host names rotate (ct, ck, cy...), so only the measured size counts.
+  const kept = urls.filter((_, i) => sizes[i] == null || sizes[i] >= 2 * 1024 * 1024);
   const sources = kept.map((url, idx) => {
     const host = safeHost(url);
     return {
