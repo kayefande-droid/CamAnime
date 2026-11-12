@@ -1029,6 +1029,44 @@ export async function episodeBundle({
   const downloads = [];
   let heavenEpKey = null;
 
+  const addHeavenSources = (list) => {
+    list.forEach((src, idx) => {
+      const referer = src.referer || `${HEAVEN_BASE}/`;
+      servers.push({
+        id: `heaven-mp4-${idx + 1}`,
+        name: `AnimeHeaven ${idx === 0 ? "Primary" : `Mirror ${idx + 1}`}`,
+        provider: "animeheaven",
+        audio: "sub",
+        playback_mode: "mp4",
+        stream_url: proxy("/api/proxy/video", { url: src.url, ref: referer }),
+        raw_url: src.url,
+        download_url: proxy("/api/download/video", {
+          url: src.url,
+          title: `${list[0] || "Anime"} - Ep ${episode}`,
+          ref: referer,
+        }),
+        quality: "Source MP4",
+        subtitles: [],
+        badge: "DIRECT MP4",
+        unverified: Boolean(src.unverified),
+      });
+      if (idx === 0) {
+        downloads.push({
+          label: `Episode ${episode} Direct MP4 (AnimeHeaven High-Speed)`,
+          quality: "Source MP4",
+          audio: "SUB",
+          url: proxy("/api/download/video", {
+            url: src.url,
+            title: `${list[0] || "Anime"} - Ep ${episode}`,
+            ref: referer,
+          }),
+          direct: true,
+          provider: "AnimeHeaven",
+        });
+      }
+    });
+  };
+
   if (heavenId) {
     const info = await heavenAnimeInfo(heavenId);
     const target = info?.episodes?.find((e) => Math.round(e.num) === episode);
@@ -1050,41 +1088,15 @@ export async function episodeBundle({
       const ordered = [...resolved.sources].sort(
         (a, b) => Number(!carriesKey(a)) - Number(!carriesKey(b))
       );
-      ordered.forEach((src, idx) => {
-        const referer = src.referer || `${HEAVEN_BASE}/`;
-        servers.push({
-          id: `heaven-mp4-${idx + 1}`,
-          name: `AnimeHeaven ${idx === 0 ? "Primary" : `Mirror ${idx + 1}`}`,
-          provider: "animeheaven",
-          audio: "sub",
-          playback_mode: "mp4",
-          stream_url: proxy("/api/proxy/video", { url: src.url, ref: referer }),
-          raw_url: src.url,
-          download_url: proxy("/api/download/video", {
-            url: src.url,
-            title: `${list[0] || "Anime"} - Ep ${episode}`,
-            ref: referer,
-          }),
-          quality: "Source MP4",
-          subtitles: [],
-          badge: "DIRECT MP4",
-        });
-        if (idx === 0) {
-          downloads.push({
-            label: `Episode ${episode} Direct MP4 (AnimeHeaven High-Speed)`,
-            quality: "Source MP4",
-            audio: "SUB",
-            url: proxy("/api/download/video", {
-              url: src.url,
-              title: `${list[0] || "Anime"} - Ep ${episode}`,
-              ref: referer,
-            }),
-            direct: true,
-            provider: "AnimeHeaven",
-          });
-        }
-      });
+      addHeavenSources(ordered);
     }
+  }
+
+  // The gate may be unreachable from the edge and no Heaven title matched, so
+  // the provider would vanish entirely. The origin bundle keeps it listed.
+  if (!servers.some((srv) => srv.provider === "animeheaven") && anilistId) {
+    const mirrored = await heavenSourcesFromRender(anilistId, episode);
+    if (mirrored.length) addHeavenSources(mirrored);
   }
 
   if (anikotoSlug) {
