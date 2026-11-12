@@ -715,6 +715,31 @@ def bump_counter(key: str, n: int = 1) -> None:
         conn.execute("UPDATE counters SET value = value + ? WHERE key = ?", (int(n or 1), key))
 
 
+def anime_stats(anime_id) -> Dict:
+    """Real watch/download totals for one title, shared by every visitor.
+
+    Counted from the events table that /api/track and
+    /api/public/stream/download already write, so the number under a poster is
+    what users actually did — never an estimate, and it survives redeploys now
+    that the table lives in D1.
+    """
+    aid = str(anime_id or "").strip()
+    empty = {"watches": 0, "streams": 0, "downloads": 0, "total": 0}
+    if not aid:
+        return empty
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT kind, COUNT(*) AS n FROM events WHERE anime_id = ? GROUP BY kind",
+            (aid,),
+        ).fetchall()
+    counts = {str(r["kind"]): int(r["n"] or 0) for r in rows}
+    watches = counts.get("play", 0)
+    streams = counts.get("stream", 0)
+    downloads = counts.get("download", 0)
+    return {"watches": watches, "streams": streams, "downloads": downloads,
+            "total": watches + streams + downloads}
+
+
 def get_counters() -> Dict:
     with _db() as conn:
         return {r["key"]: r["value"] for r in conn.execute("SELECT * FROM counters")}

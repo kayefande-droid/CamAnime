@@ -20,14 +20,16 @@ CamAnime pairs a fast Flask catalogue with a Flutter app that feels like a first
 | 📥 **Offline that stays offline** | Partial-play while downloading, resume-safe queue, recovered library after an index failure, and updates that **never touch your downloads, watchlist or history**. |
 | 🔄 **Updates in-app** | The app checks the website for a newer build on launch and on resume, downloads the APK in the background, verifies its SHA-256, and hands it to Android’s installer. One confirmation, no browser hunt — the app replaces itself and restarts. |
 | 🎬 **Trailers everywhere** | Official YouTube trailers on the website and in the app whenever AniList supplies one. |
+| 👀 **Counters everyone shares** | Watches and downloads under a title come from the real events table (Cloudflare D1), so the website, the app and both hosts show the same number — no per-device estimate and no padding. |
+| 🩺 **Diagnostics you can trust** | The app reports the OS notification permission, the last update check with its outcome, and the signed-in account role, read fresh from the device each time. |
 | 🔐 **Server-side authority** | Roles (`owner` / `developer` / `support`) are enforced by the backend, never by hidden UI. Old builds are refused by both Render and the Cloudflare edge. |
 
 ## 🧱 Stack
 
-- **Backend** — Flask, SQLite, Jinja templates, gunicorn (`app.py`)
+- **Backend** — Flask, Jinja templates, gunicorn (`app.py`); SQLite locally, Cloudflare D1 in production
 - **Website** — responsive dark-first UI, AniList catalogue, HLS/mp4 player, downloads
 - **Android** — Flutter 3, Material 3, `video_player`, native bridges for downloads, PiP, brightness and the in-app updater
-- **Edge** — Cloudflare Worker front door (`cloudflare/`) with a hard minimum-build gate
+- **Edge** — Cloudflare Worker front door (`cloudflare/`) with a hard minimum-build gate, dub-availability lookup, and a D1 payload cache that keeps the catalogue browsable while the origin sleeps
 - **Quality pipeline** — provider-published MP4/HLS renditions only; HLS renditions are read from the master playlist
 
 ## 🚀 Quick start
@@ -45,7 +47,8 @@ flutter build apk --release --dart-define=CAMANIME_API=https://your-host
 
 ## 🔌 API surface
 
-- `GET /api/v1/catalog/home` · `/api/v1/anime/<id>` · `/api/v1/anime?q=` — AniList-backed catalogue
+- `GET /api/v1/catalog/home` · `/api/v1/anime/<id>` · `/api/v1/anime?q=` — AniList-backed catalogue with the source's current rank
+- `GET /api/v1/anime/<id>/stats` · `GET /api/v1/dub-availability?ids=` — shared watch/download totals and provider dub flags
 - `GET /api/public/anime/<id>?ep=<n>&audio=sub|dub` — playable bundle for the apps
 - `POST /api/auth/register|login` — PBKDF2 passwords, Bearer sessions
 - `GET /api/version` — release policy consumed by the update checker
@@ -57,7 +60,7 @@ Deployment uses **Render** for the Flask origin and **Cloudflare Workers** for t
 
 Owner-only runbooks, release-signing procedures, provider notes and incident steps live in `docs/private/` and are intentionally **git-ignored**. Do not commit signing keys, `.env` files, service-account JSON, or admin credentials — `.gitignore` already blocks the usual suspects.
 
-Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_DB` (optional SQLite path), `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
+Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
 
 ### Pushing a live app update to installed devices
 

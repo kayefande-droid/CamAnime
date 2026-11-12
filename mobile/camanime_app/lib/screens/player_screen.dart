@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../core/activity.dart';
 import '../core/cam_ui.dart';
 import '../core/mini_player.dart';
 import '../core/models.dart';
@@ -80,6 +81,9 @@ class PlayerScreen extends StatefulWidget {
 
 class _PlayerScreenState extends State<PlayerScreen>
     with WidgetsBindingObserver {
+  /// Guards the shared watch counter against retry/quality loops.
+  bool _countedPlay = false;
+
   Timer? _hideTimer;
   int? _dragMs;
   VideoPlayerController? _video;
@@ -458,6 +462,13 @@ class _PlayerScreenState extends State<PlayerScreen>
         await video.setPlaybackSpeed(_speed);
         await video.setVolume(_volume);
         await video.play();
+        if (!_local && !_countedPlay) {
+          // One real watch for this episode; retries and quality switches on
+          // the same load must not inflate the shared counter.
+          _countedPlay = true;
+          unawaited(ActivityCounters.play(
+              widget.animeId ?? '', (widget.episode ?? 0).toString()));
+        }
         unawaited(_rememberServer(i));
         _scheduleHide();
         return;

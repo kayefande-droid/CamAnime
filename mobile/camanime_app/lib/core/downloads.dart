@@ -9,6 +9,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
+
+import 'activity.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -1150,6 +1152,9 @@ class DownloadManager extends ChangeNotifier {
     // Write the completed record before announcing it, so a restart right after
     // "completed" cannot lose the queue entry for an episode already on disk.
     await _persist();
+    // A finished download is counted once, for everyone to see.
+    unawaited(ActivityCounters.download(
+        task.animeId > 0 ? task.animeId.toString() : '', '${task.episode}'));
     // Heads-up alert the moment the episode is watchable offline.
     unawaited(AppNotifications.downloadComplete(
       animeTitle: task.animeTitle,

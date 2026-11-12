@@ -3476,7 +3476,7 @@ RELEASE_DL = "https://github.com/kayefande-droid/CamAnime/releases/download"
 # Cloudflare deployment (worker `camanjme`) also hosts the APK at /get/android.
 CLOUDFLARE_SITE = os.environ.get("CAMANIME_CLOUDFLARE_URL",
                                    "https://camanjme.camanime.workers.dev").rstrip("/")
-APP_VERSION = "2.17.0"  # keep aligned with mobile/camanime_app/pubspec.yaml
+APP_VERSION = "2.17.1"  # keep aligned with mobile/camanime_app/pubspec.yaml
 APP_VERSION_CODE = 29
 # The release tag tracks the app version, so a new build can never point
 # /get/android at an older asset (the old default was a stale v1.2.0).
@@ -4067,8 +4067,22 @@ def api_v1_anime_detail(anime_id: int):
     anime = _anime_metadata(anime_id)
     if anime is None:
         return _catalog_error("Anime not found.", 404)
+    # Shared counters: every visitor sees the same real totals, refreshed often
+    # enough that a new watch shows up while the page is open.
+    anime["stats"] = platform.anime_stats(anime_id)
     response = jsonify({"status": "success", "anime": anime})
-    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=1800"
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    return response
+
+
+@app.route("/api/v1/anime/<int:anime_id>/stats")
+def api_v1_anime_stats(anime_id: int):
+    """Live watch/download totals for one title, cheap enough to poll."""
+    if anime_id <= 0:
+        return _catalog_error("Anime ID must be positive.", 400)
+    response = jsonify({"status": "success", "anime_id": anime_id,
+                        "stats": platform.anime_stats(anime_id)})
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=60"
     return response
 
 

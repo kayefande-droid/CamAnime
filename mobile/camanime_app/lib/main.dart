@@ -3896,6 +3896,12 @@ class _DetailScreenState extends State<DetailScreen> {
                           const SizedBox(height: 14),
                           _Synopsis(text: info['description'].toString()),
                         ],
+                        // Shared, persistent counts: what everyone has actually
+                        // watched and downloaded, not this device's history.
+                        if (info['stats'] is Map) ...[
+                          const SizedBox(height: 12),
+                          _WatchStats(stats: info['stats'] as Map),
+                        ],
                         const SizedBox(height: 16),
                         _ActionRow(
                           watchLabel: watchLabel,
@@ -5387,6 +5393,51 @@ class _FactPill extends StatelessWidget {
                 fontWeight: FontWeight.w700)),
       );
 }
+
+/// Watches and downloads recorded for this title by every user.
+///
+/// Values come from the server's event table (shared, persisted), so they are
+/// identical on the website, the app and both hosts — and a title nobody has
+/// played honestly shows nothing instead of a padded number.
+class _WatchStats extends StatelessWidget {
+  final Map stats;
+  const _WatchStats({required this.stats});
+
+  static String _count(dynamic raw) {
+    final n = int.tryParse('${raw ?? 0}') ?? 0;
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final watches = int.tryParse('${stats['watches'] ?? 0}') ?? 0;
+    final downloads = int.tryParse('${stats['downloads'] ?? 0}') ?? 0;
+    if (watches == 0 && downloads == 0) return const SizedBox.shrink();
+    Widget chip(IconData icon, String value, String label) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: CamColors.accent),
+            const SizedBox(width: 5),
+            Text('$value $label',
+                style: const TextStyle(
+                    color: CamColors.inkDim,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600)),
+          ],
+        );
+    return Wrap(
+      spacing: 16,
+      runSpacing: 6,
+      children: [
+        chip(Icons.play_circle_outline_rounded, _count(watches), 'watches'),
+        chip(Icons.download_outlined, _count(downloads), 'downloads'),
+      ],
+    );
+  }
+}
+
 
 class _GenreRow extends StatelessWidget {
   final List<String> genres;
