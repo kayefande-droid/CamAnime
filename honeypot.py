@@ -67,10 +67,10 @@ def _db_path() -> str:
     return os.path.join(folder, "intrusions.db")
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(_db_path(), timeout=15)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _connect():
+    import d1db
+
+    return d1db.connection(_db_path())
 
 
 def ensure() -> None:

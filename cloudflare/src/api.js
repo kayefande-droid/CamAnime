@@ -54,7 +54,9 @@ export async function getComments(env, request, animeId, ep) {
 
 /* The published sticker set. Comments are rendered as markup by the community
  * widget, so anything outside this list must never reach the database. */
-export const STICKERS = ["🍥", "⚔️", "🐉", "👺", "🌸", "🔥", "🍜", "⛩️", "👾", "💫", "🎴", "🍡"];
+export const STICKERS = ["🍥", "⚔️", "🐉", "👺", "🌸", "🔥", "🍜", "⛩️", "👾", "💫", "🎴", "🍡",
+             "😀", "😂", "🥹", "😍", "😎", "🤩", "😭", "😤", "😡", "🤔",
+             "👍", "👏", "🙏", "💪", "❤️", "💔", "✨", "🎉", "🙌", "👀"];
 
 export function safeSticker(value) {
   const v = String(value || "").trim();

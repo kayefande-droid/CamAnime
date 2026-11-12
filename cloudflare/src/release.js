@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.16.0";
-export const LATEST_BUILD = 29;
+export const LATEST_VERSION = "2.17.0";
+export const LATEST_BUILD = 30;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -21,13 +21,15 @@ export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
 export const APK_SHA256 =
-  "d38b2157acb84da98f645dfe0c24f3284c89f319ec41fdcafd7c954e1dbf0002";
+  "b22c3b9a5ff44dbeaef78fe78ce68758fc8b73ef2a6272b4b64ed8d4e398a9f7";
 
 /** Download filename shown to users, so saved APKs are never ambiguous. */
 export const APK_FILENAME = `CamAnime-${LATEST_VERSION}-build${LATEST_BUILD}.apk`;
 
 export const RELEASE_NOTES =
-  "Build 29: rankings and trending numbers come from the metadata source, "
+  "Build 30: an in-app diagnostics screen reports the real notification "
+  "permission, the last update check and the signed-in account role. "
+  "Rankings and trending numbers come from the metadata source, "
   "DUB badges from the provider episode index, aired-only episode lists, "
   "background notifications delivered while the app is closed, a fast "
   "update check, admin account recognition, shared comment threads, and "

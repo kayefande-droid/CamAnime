@@ -34,6 +34,27 @@ class AppNotifications {
 
   static bool get enabled => _enabled;
 
+  /// Real OS permission state for the diagnostics screen.
+  ///
+  /// Returns `permission` as granted/denied (or unknown off Android) plus the
+  /// notification manager's own `enabled` flag, which also turns false when the
+  /// user blocks the channel in system settings.
+  static Future<Map<String, dynamic>> status() async {
+    final result = <String, dynamic>{
+      'supported': Platform.isAndroid,
+      'permission': 'unknown',
+      'enabled': _enabled,
+    };
+    if (!Platform.isAndroid) return result;
+    try {
+      final native = await _channel.invokeMapMethod<String, dynamic>('status');
+      if (native != null) result.addAll(native);
+    } catch (_) {
+      // Host unavailable: keep the conservative defaults above.
+    }
+    return result;
+  }
+
   static Future<void> setEnabled(bool value) async {
     _enabled = value;
     final prefs = await SharedPreferences.getInstance();

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/ad_notifications.dart';
 import '../core/app_notifications.dart';
+import '../core/app_updater.dart';
 import '../core/cam_ui.dart';
 import '../core/downloads.dart';
 import '../core/models.dart';
@@ -632,6 +633,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     MaterialPageRoute(
                         builder: (_) => const NotificationBellScreen())),
               ),
+              _tile(
+                icon: Icons.monitor_heart_outlined,
+                title: 'Diagnostics',
+                subtitle: 'Notification permission, update check, account role',
+                trailing: const Icon(Icons.chevron_right_rounded,
+                    color: CamColors.inkDim),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => DiagnosticsScreen(
+                            onCheckUpdate: widget.onCheckUpdate))),
+              ),
             ]),
           ],
         ),
@@ -1023,4 +1036,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (ok == true) await _manager.clearCompleted();
   }
+}
+
+/// Honest state report: what the OS actually allows, when the app last looked
+/// for a build, and which role the signed-in account holds.
+///
+/// Every value here is read from the device (notification manager, saved check
+/// result, stored session) — nothing is inferred or cached from an older run.
+class DiagnosticsScreen extends StatefulWidget {
+  final VoidCallback onCheckUpdate;
+
+  const DiagnosticsScreen({super.key, required this.onCheckUpdate});
+
+  @override
+  State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
+}
+
+class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
+  bool _loading = true;
+  bool _checking = false;
+  String _installed = '';
+  String _permission = 'unknown';
+  bool _notificationsEnabled = false;
+  String _email = '';
+  String _role = '';
+  int _checkedAt = 0;
+  String _lastResult = '';
+  String _lastSeen = '';
+
+  static const _staffRoles = {'owner', 'developer', 'support', 'admin'};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final status = await AppNotifications.status();
+    final installed = await AppUpdater.installedVersion();
+    if (!mounted) return;
+    setState(() {
+      _installed = installed;
+      _permission = (status['permission'] ?? 'unknown').toString();
+      _notificationsEnabled = status['enabled'] == true;
+      _email = (prefs.getString('user_email') ?? '').trim();
+      _role = (prefs.getString('user_role') ?? '').trim().toLowerCase();
+      _checkedAt = prefs.getInt('update_checked_at') ?? 0;
+      _lastResult = (prefs.getString('update_last_result') ?? '').trim();
+      _lastSeen = (prefs.getString('update_last_seen') ?? '').trim();
+      _loading = false;
+    });
+  }
+
+  Future<void> _checkNow() async {
+    setState(() => _checking = true);
+    try {
+      widget.onCheckUpdate();
+      // Give the check a moment to finish and persist before re-reading.
+      await Future<void>.delayed(const Duration(seconds: 4));
+    } finally {
+      if (mounted) {
+        setState(() => _checking = false);
+        await _load();
+      }
+    }
+  }
+
+  String _ago(int stamp) {
+    if (stamp <= 0) return 'never checked';
+    final diff = DateTime.now().difference(
+        DateTime.fromMillisecondsSinceEpoch(stamp));
+    if (diff.inSeconds < 60) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+    if (diff.inHours < 24) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
+  }
+
+  String get _updateValue {
+    if (_checkedAt <= 0) return 'Never checked';
+    final when = _ago(_checkedAt);
+    switch (_lastResult) {
+      case 'up_to_date':
+        return 'Up to date · $when';
+      case 'update_available':
+        return 'Update ${_lastSeen.isEmpty ? '' : '$_lastSeen '}found · $when'
+            .replaceAll('  ', ' ');
+      case 'failed':
+        return 'Check failed · $when';
+      default:
+        return when;
+    }
+  }
+
+  String get _roleValue {
+    if (_email.isEmpty) return 'Signed out';
+    if (_staffRoles.contains(_role)) {
+      return 'Admin · ${_role.isEmpty ? 'owner' : _role}';
+    }
+    return 'Viewer · ${_role.isEmpty ? 'user' : _role}';
+  }
+
+  Widget _row(String label, String value, {Color? tone}) => Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(children: [
+          Expanded(
+            child: Text(label,
+                style: const TextStyle(
+                    color: CamColors.inkDim,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: tone ?? Colors.white)),
+          ),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final permission = switch (_permission) {
+      'granted' => _notificationsEnabled ? 'Allowed' : 'Blocked in settings',
+      'denied' => 'Not allowed',
+      _ => 'Unknown on this device',
+    };
+    final permissionTone = _permission == 'granted' && _notificationsEnabled
+        ? const Color(0xFF4ADE80)
+        : CamColors.danger;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Diagnostics'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                _group('Notifications', [
+                  _row('Permission', permission, tone: permissionTone),
+                  _row('In-app alerts',
+                      AppNotifications.enabled ? 'On' : 'Off'),
+                ]),
+                _group('Updates', [
+                  _row('Installed build', _installed.isEmpty ? 'unknown' : _installed),
+                  _row('Last check', _updateValue),
+                  _row('Server', apiHost),
+                ]),
+                _group('Account', [
+                  _row('Signed in as', _email.isEmpty ? 'nobody' : _email),
+                  _row('Role', _roleValue),
+                ]),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: CamColors.accent,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size.fromHeight(46)),
+                  onPressed: _checking ? null : _checkNow,
+                  icon: _checking
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.system_update_rounded),
+                  label: Text(_checking ? 'Checking…' : 'Check for updates now'),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Values are read from this device each time the screen opens. '
+                  'A blocked notification permission means no alert can appear, '
+                  'even while the app is open.',
+                  style: TextStyle(color: CamColors.inkDim, fontSize: 11),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _group(String title, List<Widget> children) => Padding(
+        padding: const EdgeInsets.only(top: 18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              title.toUpperCase(),
+              style: const TextStyle(
+                  color: CamColors.inkDim,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.3),
+            ),
+          ),
+          CamCard(
+            padding: EdgeInsets.zero,
+            child: Column(children: children),
+          ),
+        ]),
+      );
 }

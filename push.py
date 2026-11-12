@@ -51,10 +51,8 @@ _service_cache: Dict[str, object] = {}
 _token_cache: Dict[str, object] = {"value": "", "expires": 0.0}
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(platform.DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _connect():
+    return platform.db()
 
 
 _CAMPAIGN_SCHEMA = """

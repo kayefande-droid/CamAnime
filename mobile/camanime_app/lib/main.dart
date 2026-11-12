@@ -342,9 +342,32 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
   /// heads-up notification (via the existing announcement channel) so the user sees
   /// the update even when the download dialog is behind another app, and shows an
   /// in-app update-available notice for manual checks.
+  /// Records the attempt and outcome for the diagnostics screen.
+  ///
+  /// A failed check is written as `failed` rather than left stale, so the app
+  /// never claims it checked for updates when it could not reach the site.
+  Future<void> _recordUpdateCheck(String installed, UpdateInfo? info,
+      {bool failed = false}) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt('update_checked_at', DateTime.now().millisecondsSinceEpoch);
+      await p.setString('update_last_installed', installed);
+      await p.setString('update_last_result',
+          failed ? 'failed' : (info == null ? 'up_to_date' : 'update_available'));
+      await p.setString('update_last_seen', info?.version ?? installed);
+    } catch (_) {}
+  }
+
   Future<void> _checkUpdate({bool manual = false}) async {
     final installed = await AppUpdater.installedVersion();
-    final info = await AppUpdater.check(current: installed);
+    UpdateInfo? info;
+    try {
+      info = await AppUpdater.check(current: installed);
+      await _recordUpdateCheck(installed, info);
+    } catch (e) {
+      await _recordUpdateCheck(installed, null, failed: true);
+      rethrow;
+    }
     if (!mounted) return;
     if (info == null) {
       if (manual) {
@@ -353,16 +376,17 @@ class _CamAnimeAppState extends State<CamAnimeApp> with WidgetsBindingObserver {
       }
       return;
     }
+    final found = info;
     // Alert the user that an update is happening / available.
     if (mounted) {
-      unawaited(AppNotifications.updateInProgress(info.version));
+      unawaited(AppNotifications.updateInProgress(found.version));
     }
     if (manual) {
       if (mounted) {
-        setState(() => updateAvailable = info.version);
+        setState(() => updateAvailable = found.version);
       }
     }
-    await _installUpdate(info);
+    await _installUpdate(found);
   }
 
   /// Downloads the new APK with a live progress sheet, then opens the system

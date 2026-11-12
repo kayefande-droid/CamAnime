@@ -15,6 +15,8 @@ import sqlite3
 import time
 from typing import Dict, List, Optional
 
+import d1db
+
 from werkzeug.security import check_password_hash, generate_password_hash
 
 DB_PATH = os.environ.get("CAMANIME_DB", "camanime.db")
@@ -70,20 +72,35 @@ CLASSICS_SCHEDULE = [
     ]},
 ]
 
-CAM_STICKERS = ["🍥", "⚔️", "🐉", "👺", "🌸", "🔥", "🍜", "⛩️", "👾", "💫", "🎴", "🍡"]
+# Anime set first, then everyday emoji: commenters can post a plain
+# reaction without the site inventing a sticker font.
+CAM_STICKERS = ["🍥", "⚔️", "🐉", "👺", "🌸", "🔥", "🍜", "⛩️", "👾", "💫", "🎴", "🍡",
+             "😀", "😂", "🥹", "😍", "😎", "🤩", "😭", "😤", "😡", "🤔",
+             "👍", "👏", "🙏", "💪", "❤️", "💔", "✨", "🎉", "🙌", "👀"]
 
 
 # ─── low-level DB ────────────────────────────────────────────────────────────
 
-def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+def _db():
+    """Hosted D1 when configured, otherwise the local SQLite file."""
+    return d1db.connection(DB_PATH)
+
+
+def db():
+    """Public connection factory shared by the other platform modules."""
+    return _db()
+
+
+_READY_FOR = None
 
 
 def _init() -> None:
+    global _READY_FOR
+    # Memoised per storage target: a test (or an operator) may point the app at
+    # a different database, and that one still needs the schema created.
+    target = d1db.target(DB_PATH)
+    if _READY_FOR == target:
+        return
     with _db() as conn:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
@@ -167,7 +184,7 @@ def _init() -> None:
         # duplicate-column error on older installs — the column is harmless either way.
         try:
             conn.execute("ALTER TABLE announcements ADD COLUMN action TEXT NOT NULL DEFAULT ''")
-        except sqlite3.OperationalError as _e:
+        except Exception as _e:
             if "duplicate column" not in str(_e).lower():
                 raise
         anime_cache_columns = {row["name"] for row in conn.execute("PRAGMA table_info(anime_cache)")}
@@ -182,6 +199,7 @@ def _init() -> None:
         # downloads that never happened. Reset it once so the public counter
         # starts from zero and then only counts real /get/* transfers.
         conn.execute("UPDATE counters SET value = 0 WHERE key = 'app_downloads' AND value = 12840")
+    _READY_FOR = target
 
 
 def _migrate_legacy_once() -> None:

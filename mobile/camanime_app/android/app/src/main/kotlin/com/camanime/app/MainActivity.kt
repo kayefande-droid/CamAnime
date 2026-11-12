@@ -107,6 +107,20 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "disable" -> result.success(true)
+                    // Diagnostics screen: report the real OS state instead of
+                    // guessing from the in-app switch.
+                    "status" -> {
+                        val granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                            PackageManager.PERMISSION_GRANTED
+                        val enabled = androidx.core.app.NotificationManagerCompat
+                            .from(this).areNotificationsEnabled()
+                        result.success(mapOf(
+                            "supported" to true,
+                            "permission" to if (granted) "granted" else "denied",
+                            "enabled" to enabled
+                        ))
+                    }
                     "announcement" -> {
                         Notifications.announcement(
                             this,

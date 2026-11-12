@@ -388,20 +388,78 @@ async function readMirrorCache(request) {
   }
 }
 
-async function mirrorFromRender(request, url) {
-  const cached = await readMirrorCache(request);
-  if (cached) return cached;
+/** Payloads survive a sleeping Render instance for a day in D1. */
+const D1_TTL_SECONDS = 24 * 60 * 60;
 
-  const target = new URL(url.pathname + url.search, MIRROR_ORIGIN);
-  let upstream;
+/**
+ * D1 is the long-lived layer behind the edge cache: the Render free instance
+ * sleeps when idle, and a cold start can take longer than a visitor waits. A
+ * stored payload keeps the site browsable and is replaced on the next
+ * successful fetch.
+ */
+async function readD1Mirror(env, key) {
+  if (!env?.DB) return null;
   try {
-    upstream = await fetch(target, {
-      headers: { accept: "application/json", "user-agent": "CamAnime-Mirror/2.16.0" },
-    });
+    const row = await env.DB.prepare(
+      "SELECT body, t FROM edge_cache WHERE key = ?1 AND t > ?2",
+    )
+      .bind(key, Math.floor(Date.now() / 1000) - D1_TTL_SECONDS)
+      .first();
+    return row?.body ? JSON.parse(row.body) : null;
   } catch {
     return null;
   }
-  if (!upstream.ok) return null;
+}
+
+async function writeD1Mirror(env, key, payload) {
+  if (!env?.DB) return;
+  try {
+    await env.DB.prepare(
+      "INSERT INTO edge_cache(key, body, t) VALUES (?1, ?2, ?3) " +
+        "ON CONFLICT(key) DO UPDATE SET body = excluded.body, t = excluded.t",
+    )
+      .bind(key, payload, Math.floor(Date.now() / 1000))
+      .run();
+    // Opportunistic pruning keeps the table small without a cron job.
+    if (Math.random() < 0.02) {
+      await env.DB.prepare("DELETE FROM edge_cache WHERE t < ?1")
+        .bind(Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60)
+        .run();
+    }
+  } catch {
+    // A cache write must never fail the request.
+  }
+}
+
+async function mirrorFromRender(env, request, url) {
+  const key = url.pathname + url.search;
+  const cached = await readMirrorCache(request);
+  if (cached) return cached;
+
+  const target = new URL(key, MIRROR_ORIGIN);
+  let upstream;
+  try {
+    upstream = await fetch(target, {
+      headers: { accept: "application/json", "user-agent": "CamAnime-Mirror/2.17.0" },
+      signal: AbortSignal.timeout(9000),
+    });
+  } catch {
+    upstream = null;
+  }
+
+  if (!upstream || !upstream.ok) {
+    // Render is asleep or failing: serve the last good payload from D1.
+    const stored = await readD1Mirror(env, key);
+    if (!stored) return null;
+    return new Response(JSON.stringify(stored), {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "public, max-age=120, stale-while-revalidate=3600",
+        "x-camanime-mirror": "d1-stale",
+      },
+    });
+  }
 
   const body = await upstream.text();
   const response = new Response(body, {
@@ -418,6 +476,12 @@ async function mirrorFromRender(request, url) {
     } catch {
       // Cache is an optimisation only.
     }
+  }
+  try {
+    JSON.parse(body);
+    await writeD1Mirror(env, key, body);
+  } catch {
+    // Never store a non-JSON body (an HTML error page) as catalogue data.
   }
   return response;
 }
@@ -557,12 +621,12 @@ export async function route(env, request, url, parts) {
     local = await routeLocal(env, request, url, parts);
   } catch (err) {
     if (!mirrorable(parts)) throw err;
-    const mirrored = await mirrorFromRender(request, url);
+    const mirrored = await mirrorFromRender(env, request, url);
     if (mirrored) return mirrored;
     throw err;
   }
   if (local || !mirrorable(parts)) return local;
   // Endpoints this worker does not implement itself (`/api/v1/anime/<id>`,
   // `/api/v1/anime` list) are served by Render so the app sees one surface.
-  return (await mirrorFromRender(request, url)) || local;
+  return (await mirrorFromRender(env, request, url)) || local;
 }

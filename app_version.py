@@ -23,15 +23,16 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.16.0",
-    "latest_version_code": 29,
+    "latest_version": "2.17.0",
+    "latest_version_code": 30,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 29: source-owned rankings and trending, DUB badges from the "
-        "provider episode index, aired-only episode lists, background "
+        "Build 30: a diagnostics screen that reports the real notification "
+        "permission, the last update check and the account role, plus "
+        "source-owned rankings and trending, DUB badges from the "
         "notifications that work with the app closed, a fast update check, "
         "admin account recognition, shared comment threads and the Cloudflare "
         "mirror brought onto the same design."
@@ -111,11 +112,8 @@ CREATE INDEX IF NOT EXISTS idx_audit_t ON admin_audit(t);
 """
 
 
-def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(platform.DB_PATH, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+def _connect():
+    return platform.db()
 
 
 def ensure_schema() -> None:

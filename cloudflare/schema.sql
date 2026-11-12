@@ -182,3 +182,9 @@ CREATE TABLE IF NOT EXISTS admin_audit (
   detail TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_audit_t ON admin_audit(t);
+CREATE TABLE IF NOT EXISTS edge_cache (
+  key TEXT PRIMARY KEY,
+  body TEXT NOT NULL,
+  t INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_edge_cache_t ON edge_cache(t);
