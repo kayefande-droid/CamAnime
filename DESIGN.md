@@ -1,68 +1,79 @@
-# Design — one token set, one component style, both hosts
+# CamAnime design system
 
-The brand predates this work (Sora display, Outfit body, dark surfaces). This
-stage did not invent a new identity: it recorded the system that actually ships,
-lifted the last literals into tokens, and named the components both hosts share.
+The look is ink-and-amber: a dark navy page, one amber accent, and manga print
+cues — halftone screens, hard-edged poster frames, sticker-cut chips and a
+slanted section rule. Everything below lives in the project's own CSS; there is
+no component library and no new framework.
 
-## Tokens
+## Tokens (declared once in `:root`)
 
-Declared once. `base.css` owns the palette, type scale, spacing and elevation;
-`redesign.css` adds the handful of surfaces its own layer needs. No rule after
-those blocks carries a literal colour.
+`static/css/base.css` — page, type, shape:
 
-| Group | Token | Value |
+| Token | Value | Used for |
 | --- | --- | --- |
-| Type | `--ca-font-display` | Sora, Outfit, system-ui |
-| Type | `--ca-font-body` | Outfit, system-ui |
-| Type | `--ca-font-mono` | ui-monospace stack |
-| Layout | `--ca-page` | 1440px |
-| Layout | `--ca-gutter` | `clamp(1rem, 3vw, 2rem)` |
-| Radius | `--ca-radius-card` | 18px |
-| Radius | `--ca-radius-control` | 999px (pills) |
-| Radius | `--ca-radius-panel` | 22px (header, panels) |
-| Elevation | `--ca-shadow-card` | `0 10px 28px rgba(0,0,0,.34)` |
-| Elevation | `--ca-shadow-lift` | accent-tinted lift |
-| Elevation | `--ca-ring` | 3px accent focus ring |
-| Surface | `--ca-ink-900` | `#0e111a` |
-| Surface | `--ca-scrim`, `--ca-scrim-strong` | black veils over artwork |
-| Surface | `--ca-sheen`, `--ca-hair-soft`, `--ca-hair`, `--ca-hair-mid`, `--ca-hair-strong`, `--ca-wash` | white 1.2% → 10% hairlines |
-| Accent | `--accent`, `--accent-rgb` | brand amber, overridable per surface |
-| Motion | timings and easings | single-sourced in `static/css/motion.css`; components reference those properties, never raw milliseconds |
+| `--ca-font-display` | Bricolage Grotesque → Plus Jakarta Sans → system | headings, hero titles, logo lockups |
+| `--ca-font-body` | Plus Jakarta Sans → system | body copy, controls |
+| `--ca-font-mono` | ui-monospace → Menlo → Consolas | ratings, counts, API keys, timestamps |
+| `--ca-page` | `1440px` | widest content column; wider screens get gutters, not wider text |
+| `--ca-gutter` | `clamp(1rem, 3vw, 2rem)` | page padding at every width |
+| `--ca-radius-card` | `18px` | cards and panels |
+| `--ca-radius-control` | `999px` | pills, chips, search field |
+| `--ca-shadow-card` | soft 28px drop | panels |
+| `--ca-shadow-lift` | amber-tinted lift | hover on interactive cards |
+| `--ca-ring` | 3px amber halo | focus ring on inputs |
+| `--ca-focus-ring-color` | `#12CDE8` | `:focus-visible` outline everywhere |
+| `--ca-header-glass` | translucent navy | sticky header |
+| `--ca-border-subtle` | `rgba(255,255,255,.08)` | hairline dividers and card edges |
+| `--ca-input-bg` / `--ca-canvas-ink` | `#181e2e` / `#07080d` | form fields, deepest surface |
+| `--ca-hover-wash` | `rgba(255,255,255,.06)` | nav hover, row hover |
 
-Type scale is fluid: display sizes use `clamp()` against viewport width, body text
-never drops below 1rem, and the hero title is capped so a long title wraps rather
-than overflows.
+`static/css/redesign.css` — the ink layer:
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--ca-ink-line` | `rgba(255,255,255,.22)` | printed-panel edge on cards |
+| `--ca-ink-shadow` | `rgba(2,3,7,.92)` | hard offset block behind cards and buttons |
+| `--ca-halftone` | `rgba(255,255,255,.07)` | dot screen over hero art |
+| `--ca-speed-line` | `rgba(255,255,255,.05)` | radial action lines in the hero |
+
+Accent, canvas and surface colours come from the live theme block, so all eight
+themes (midnight, sakura, and the rest) recolour the same tokens — the ink layer
+never hard-codes an accent.
+
+`static/css/motion.css` — timing:
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| `--ca-cycle` | `7500ms` | hero dwell time on both hosts |
+| `--ca-fade` | `700ms` | hero crossfade on both hosts |
+
+Both carousels read these at runtime, so the two deployments cannot drift.
 
 ## Components
 
-Shared by Render and the worker because both serve this stylesheet:
+- **Header** (`header-layout.css`) — one shape per breakpoint. Below 900px:
+  logo, watchlist, theme and menu on row one, full-width search on row two, tabs
+  in the drawer. From 900px: logo and actions on row one, tabs on their own row.
+  Every control is at least 44×44px; Escape closes the drawer and returns focus
+  to the menu button.
+- **Hero** — one clipped box per slide, crossfaded on a 7.5s clock. The ink
+  texture (halftone + sunburst) is a single masked layer above the art and below
+  the dots, so copy stays clean on the left.
+- **Poster card** — printed panel: 1px ink edge, hard offset block, tilts on
+  hover and focus, returns to rest under reduced motion and on low-data.
+- **Chips** (`tag`, `ep-badge`, `score-badge`, `dl-tag`, `genre-chip`) — sticker
+  cut corners, monospace figures for ratings and episode counts.
+- **Buttons** — hero and primary/secondary actions are sticker-cut labels with
+  the same offset ink block; focus-visible uses the shared ring token.
+- **Section rule** — a slanted amber bar under section titles plus a rotated
+  square before the title, so rails read as manga chapter breaks.
 
-- **Header** — rounded panel, brand block, search field with inline button, watchlist
-  and settings actions, then a nav row. One row above 900 px, two below.
-- **Hero** — full-bleed stage, kicker, wrapping display title, meta pills, synopsis
-  clamp, up to three actions, slide dots.
-- **Catalogue grid** — poster cards with a 2×2 feature tile at the top of each grid.
-- **Details dossier** — poster beside a tall panel of facts and actions.
-- **Episode rail** — sticky list beside the player above 1100 px, static below.
-- **Player bar** — progress with buffered range, time labels, actions.
-- **Controls** — 44 px targets on phones, hover, `:focus-visible` (instant, 3:1),
-  active and disabled states on every one.
-- **Live-schedule tab** — floater that moves to the phone corner so it never covers
-  hero copy.
+## Rules that hold on every page
 
-## States
-
-Data regions carry loading (skeleton in its own shape), empty (what belongs here and
-the action that fills it), error (what broke and what to do) and full. The admin
-console follows the working-screen rules: top bar, dense rows, tables before cards,
-accent only on the primary action and state.
-
-## Rules this stage keeps
-
-Every colour and font from a token; no invented figures anywhere on the site; no
-eyebrow labels above headings; no middle-dot meta strings; motion on transform and
-opacity only, with a reduced-motion fallback and content visible without JS;
-`overflow-x: clip` with a capped centred container, checked from 360 px up.
-
-Language labels (sub/dub) are deliberately absent until real track data exists —
-that is milestone 6, and guessing there would mislabel Japanese audio as a dub.
+- Colour and type come from the tokens above; no literal hex outside `:root`.
+- Motion is transform/opacity only, with a `prefers-reduced-motion` fallback.
+- Content is visible without JavaScript; the carousel degrades to the first
+  slide.
+- No invented stats, ratings or testimonials: every number comes from the
+  catalogue API or the deployment's own counters.
+- Responsive from 360px up; `overflow-x: clip` on `html` and `body`.
