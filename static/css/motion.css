@@ -11,7 +11,8 @@
   --ca-dur-base: 320ms;
   --ca-dur-slow: 560ms;
   --ca-step: 55ms;          /* stagger between siblings */
-  --ca-cycle: 6000ms;       /* one hero slide, read by the carousel */
+  --ca-cycle: 7500ms;       /* one hero slide, read by BOTH carousels */
+  --ca-fade: 700ms;         /* crossfade between hero posters */
   --ca-rise: 14px;          /* travel distance for a reveal */
 }
 
@@ -32,36 +33,30 @@
   will-change: auto;
 }
 
-/* ── 2. Hero: slow cinematic drift, restarted for each slide ─────────────── */
-@keyframes ca-drift {
-  from { transform: scale(1.01); }
-  to   { transform: scale(1.07); }
-}
-
+/* ── 2. Hero ─────────────────────────────────────────────────────────────
+   The carousel inside the hero is one plain crossfade and nothing else. It
+   used to zoom the poster for the length of the cycle, which snapped back to
+   scale(1) the instant a slide lost .active — that snap is what made the
+   switch look broken on both hosts. Only the very first slide animates itself
+   in, so a rotation never re-runs the copy entrance on top of the fade. */
 @keyframes ca-fade-up {
   from { opacity: 0; transform: translate3d(0, 10px, 0); }
   to   { opacity: 1; transform: none; }
 }
 
-body .hero-slide.active .hero-backdrop {
-  animation: ca-drift var(--ca-cycle) var(--ca-ease-soft) both;
-  transform-origin: 50% 30%;
-}
-
-/* Kicker, title and copy arrive in sequence rather than all at once. */
-body .hero-slide.active .hero-kicker,
-body .hero-slide.active .hero-title,
-body .hero-slide.active .hero-meta-row,
-body .hero-slide.active .hero-desc,
-body .hero-slide.active .hero-ctas {
+body .hero-slide:first-child.active .hero-kicker,
+body .hero-slide:first-child.active .hero-title,
+body .hero-slide:first-child.active .hero-meta-row,
+body .hero-slide:first-child.active .hero-desc,
+body .hero-slide:first-child.active .hero-ctas {
   animation: ca-fade-up var(--ca-dur-slow) var(--ca-ease-out) both;
 }
 
-body .hero-slide.active .hero-kicker   { animation-delay: calc(var(--ca-step) * 1); }
-body .hero-slide.active .hero-title    { animation-delay: calc(var(--ca-step) * 2); }
-body .hero-slide.active .hero-meta-row { animation-delay: calc(var(--ca-step) * 3); }
-body .hero-slide.active .hero-desc     { animation-delay: calc(var(--ca-step) * 4); }
-body .hero-slide.active .hero-ctas     { animation-delay: calc(var(--ca-step) * 5); }
+body .hero-slide:first-child.active .hero-kicker   { animation-delay: calc(var(--ca-step) * 1); }
+body .hero-slide:first-child.active .hero-title    { animation-delay: calc(var(--ca-step) * 2); }
+body .hero-slide:first-child.active .hero-meta-row { animation-delay: calc(var(--ca-step) * 3); }
+body .hero-slide:first-child.active .hero-desc     { animation-delay: calc(var(--ca-step) * 4); }
+body .hero-slide:first-child.active .hero-ctas     { animation-delay: calc(var(--ca-step) * 5); }
 
 /* The active dot's bar slides rather than jumps. */
 body .hero-dot { transition: width var(--ca-dur-base) var(--ca-ease-out), background-color var(--ca-dur-base) var(--ca-ease-soft); }

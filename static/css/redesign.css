@@ -1041,16 +1041,18 @@ body .hero-slide {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity .75s var(--ca-ease, cubic-bezier(.22, .61, .36, 1)),
-              visibility 0s linear .75s;
+  will-change: opacity;
+  backface-visibility: hidden;
+  transition: opacity var(--ca-fade, 700ms) var(--ca-ease-out, cubic-bezier(.22, 1, .36, 1)),
+              visibility 0s linear var(--ca-fade, 700ms);
 }
 body .hero-slide.active {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition: opacity .75s var(--ca-ease, cubic-bezier(.22, .61, .36, 1));
+  transition: opacity var(--ca-fade, 700ms) var(--ca-ease-out, cubic-bezier(.22, 1, .36, 1));
 }
-body .hero-slide .hero-backdrop { transition: transform 1.2s var(--ca-ease, ease), opacity .75s var(--ca-ease, ease); }
+body .hero-slide .hero-backdrop { transition: opacity var(--ca-fade, 700ms) var(--ca-ease-out, cubic-bezier(.22, 1, .36, 1)); }
 @media (prefers-reduced-motion: reduce) {
   body .hero-slide,
   body .hero-slide.active,

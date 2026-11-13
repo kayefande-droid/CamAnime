@@ -43,7 +43,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero7">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero8">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -136,23 +136,31 @@ export function homePage(grids, userName) {
     </section>`;
   // The mirror rotates the same five trending titles the origin does, so the
   // two home pages behave alike instead of the mirror freezing on one poster.
-  const heroItems = (grids.trending || []).slice(0, 5);
+  const trending = grids.trending || [];
+  // Same rule the origin uses, so both home pages rotate the same titles.
+  const withBanner = trending.filter((a) => a.bannerImage);
+  const heroItems = (withBanner.length ? withBanner : trending).slice(0, 6);
   const heroMetaOf = (a) => [
     a?.averageScore ? `<span class="meta-pill gold"><i class="fas fa-star" aria-hidden="true"></i> ${(a.averageScore / 10).toFixed(1)}</span>` : "",
     a?.format ? `<span class="meta-pill">${esc(a.format)}</span>` : "",
     a?.seasonYear ? `<span class="meta-pill">${esc(a.seasonYear)}</span>` : "",
     ...(a?.genres || []).slice(0, 3).map((g) => `<span class="meta-pill">${esc(g)}</span>`),
   ].join("");
+  const heroDesc = (a) => {
+    const raw = String(a?.description || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    if (!raw) return "Trending on AniList right now, with provider listings resolved live on this deployment.";
+    return raw.length > 220 ? raw.slice(0, 217).replace(/\s+\S*$/, "") + "..." : raw;
+  };
   const heroSlides = heroItems.map((a, i) => {
     const title = a.title?.english || a.title?.romaji || "Featured anime";
     const meta = heroMetaOf(a);
     return `<div class="hero-slide${i === 0 ? " active" : ""}" data-slide-index="${i}">
-        <img class="hero-backdrop" src="${esc(a.bannerImage || a.coverImage?.extraLarge || a.coverImage?.large || "")}" alt="${esc(title)}" width="1600" height="900" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" referrerpolicy="no-referrer">
+        <img class="hero-backdrop" src="${esc(a.bannerImage || a.coverImage?.extraLarge || a.coverImage?.large || "")}" alt="${esc(title)}" width="1600" height="900" ${i === 0 ? 'fetchpriority="high"' : 'fetchpriority="auto"'} decoding="async" referrerpolicy="no-referrer">
         <div class="hero-vignette"></div>
         <div class="hero-body">
           ${i === 0 ? `<h1 class="hero-title">${esc(title)}</h1>` : `<div class="hero-title">${esc(title)}</div>`}
           ${meta ? `<div class="hero-meta-row">${meta}</div>` : ""}
-          <p class="hero-desc">${i === 0 && userName ? `Welcome back, ${esc(userName)}. ` : ""}Trending on AniList right now, with provider listings resolved live on this deployment.</p>
+          <p class="hero-desc">${esc(heroDesc(a))}</p>
           <div class="hero-ctas">
             <a class="btn-primary" href="/anime/${a.id}"><i class="fas fa-circle-info" aria-hidden="true"></i> View details</a>
             <a class="btn-secondary" href="/anime/${a.id}"><i class="fas fa-layer-group" aria-hidden="true"></i> Episodes &amp; download</a>
@@ -184,7 +192,7 @@ export function homePage(grids, userName) {
       if (reduce) return;
       var raw = getComputedStyle(document.documentElement).getPropertyValue("--ca-cycle").trim();
       var cycle = raw.indexOf("ms") > -1 ? parseFloat(raw) : raw.indexOf("s") > -1 ? parseFloat(raw) * 1000 : parseFloat(raw);
-      if (!isFinite(cycle) || cycle < 1500) cycle = 6000;
+      if (!isFinite(cycle) || cycle < 1500) cycle = 7500;
       timer = setInterval(function () {
         if (current >= slides.length - 1) { clearInterval(timer); timer = null; return; }
         show(current + 1);
