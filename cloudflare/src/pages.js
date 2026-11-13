@@ -47,6 +47,7 @@ function head(title, desc) {
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js" defer></script>
 <script src="/static/js/release-schedule.js?v=20261111-sched2" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
@@ -225,19 +226,48 @@ export function detailsPage(anime, ratingSummary, user) {
 
 export function watchPage(ctx, user) {
   const { anime, episodes, current, epNum } = ctx;
-  // AniList lists some episodes only as http:// provider pages, which the CSP
-  // frame-src (self + https) refuses. Never hand the stage a URL it will block.
-  const currentUrl = current?.url ? current.url.replace(/^http:\/\//i, "https://") : "";
+  // Play the provider bundle this deployment resolves, the same endpoint the
+  // apps call. AniList's own links are third-party watch pages that refuse to be
+  // framed, so they are only used as a fallback link, never as the player.
+  const providerLink = current?.url ? current.url.replace(/^http:\/\//i, "https://") : "";
   const name = anime.title.english || anime.title.romaji || "Episode";
   const list = (episodes.length ? episodes : Array.from({ length: anime.episodes || 0 }, (_, i) => ({ n: i + 1, title: "Episode " + (i + 1), url: null })));
   const inner = `
     <div class="watch-container">
       <div class="player-column">
         <div class="video-stage" id="videoStage">
-          ${currentUrl
-            ? `<iframe id="embedIframe" src="${esc(currentUrl)}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="width:100%;aspect-ratio:16/9;border:0;border-radius:14px"></iframe>`
-            : `<div class="discovery-empty" style="padding:2rem">No stream listing for this episode through AniList yet.</div>`}
+          <video id="caPlayer" class="ca-player" controls playsinline preload="metadata"
+            poster="${esc(anime.bannerImage || anime.coverImage?.extraLarge || "")}"
+            style="width:100%;aspect-ratio:16/9;background:#000;border-radius:14px"></video>
+          <p class="discovery-empty" id="caPlayerMsg" style="display:none;padding:1rem"></p>
         </div>
+        <script>
+        (async () => {
+          const video = document.getElementById("caPlayer");
+          const msg = document.getElementById("caPlayerMsg");
+          const fail = (text) => { msg.textContent = text; msg.style.display = "block"; };
+          try {
+            const res = await fetch("/api/episode-sources/${anime.id}/${epNum}?audio=sub", { headers: { accept: "application/json" } });
+            const data = await res.json();
+            const active = data.active_server || (data.servers || [])[0];
+            if (!active || !active.stream_url) return fail("No playable source for this episode yet.");
+            const url = active.stream_url.startsWith("http") ? active.stream_url : location.origin + active.stream_url;
+            if (active.playback_mode === "hls" || url.indexOf(".m3u8") !== -1) {
+              if (video.canPlayType("application/vnd.apple.mpegurl")) { video.src = url; return; }
+              if (window.Hls && window.Hls.isSupported()) {
+                const hls = new window.Hls({ maxBufferLength: 30 });
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                return;
+              }
+              return fail("This browser needs the origin player for HLS playback.");
+            }
+            video.src = url;
+          } catch (err) {
+            fail("The provider bundle did not answer. Try again, or open the origin player.");
+          }
+        })();
+        </script>
         <div class="transport-bar">
           <div class="now-playing-info">
             <span class="ep-pill">EPISODE ${epNum}</span>
