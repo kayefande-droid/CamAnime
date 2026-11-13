@@ -30,12 +30,12 @@ a{color:var(--accent, #FFB347)}.tabs{display:flex;gap:.5rem;margin:1rem 0}.tabs 
 <link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/header-layout.css?v=20261113-nav1" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261113-ink1" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261113-skin1" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
 </head>
-<body>
+<body class="page-auth">
 <div class="card">
 <div style="font-family:'Bricolage Grotesque';font-weight:800;font-size:1.3rem">Cam<span style="color:var(--accent, #FFB347)">Anime</span></div>
 <h1>{{ 'Admin sign in' if mode=='admin' else ('Two-step verification' if mfa_required else ('Create account' if mode=='signup' else 'Welcome back')) }}</h1>

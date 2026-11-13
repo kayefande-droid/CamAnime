@@ -43,7 +43,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261113-nav1">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-ink1">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-skin1">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -270,7 +270,7 @@ export function detailsPage(anime, ratingSummary, user) {
             </a>`).join("")}</div>`
         : `<p class="discovery-empty">No per-episode stream data on AniList for this title — main catalogue episodes: ${anime.episodes ?? "?"}.</p>`}
     </section>`;
-  return chrome(name, `Watch ${name} on CamAnime — episodes, ratings, community.`, user?.name, inner, "browse");
+  return chrome(name, `Watch ${name} on CamAnime — episodes, ratings, community.`, user?.name, inner, "browse", { bodyClass: "page-details" });
 }
 
 export function watchPage(ctx, user) {
@@ -364,7 +364,7 @@ export function watchPage(ctx, user) {
       window.caTrack && window.caTrack('play', '${anime.id}', '${epNum}');
     })();
     </script>`;
-  return chrome(`Watch ${name} Episode ${epNum}`, `Watch ${name} Episode ${epNum} on CamAnime.`, user?.name, inner, "browse");
+  return chrome(`Watch ${name} Episode ${epNum}`, `Watch ${name} Episode ${epNum} on CamAnime.`, user?.name, inner, "browse", { bodyClass: "page-watch" });
 }
 
 export function loginPage(name) {
@@ -406,7 +406,7 @@ export function loginPage(name) {
       };
     })();
     </script>`;
-  return chrome("Sign in", "Sign in to CamAnime.", null, inner, "login");
+  return chrome("Sign in", "Sign in to CamAnime.", null, inner, "login", { bodyClass: "page-auth" });
 }
 
 export function errorPage(status, msg) {
@@ -416,7 +416,7 @@ export function errorPage(status, msg) {
       <h1 style="margin:.5rem 0">${esc(msg)}</h1>
       <a class="btn-primary" href="/">Back home</a>
     </div>`;
-  return chrome(String(status), "CamAnime", null, inner);
+  return chrome(String(status), "CamAnime", null, inner, "home", { bodyClass: "page-error" });
 }
 
 /** Real settings page: working theme + layout pickers (previously only described in text). */
@@ -567,7 +567,7 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
     })();
     </script>` : ""}`;
 
-  return chrome("Developer API", "Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day.", user?.name, inner, "dev");
+  return chrome("Developer API", "Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day.", user?.name, inner, "dev", { bodyClass: "page-dev" });
 }
 
 export function settingsPage(user) {

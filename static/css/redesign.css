@@ -514,28 +514,13 @@ body .dev-content { min-width: 0; }
   body .dev-rail { position: static; }
 }
 
-/* ── 12. Header fit on the two prose pages ──────────────────────────────────
-   These pages carry the same capsule header as the catalogue, but the brand
-   mark had no size of its own here and rendered at its intrinsic width, pushing
-   the search field out of the row. Scoped by body class so the pages that
-   already size it keep their own numbers. */
-body.page-apps header .header-inner .site-logo img,
-body.page-dev header .header-inner .site-logo img { width: clamp(138px, 12vw, 176px); height: auto; }
-
-body.page-apps .header-inner,
-body.page-dev .header-inner { flex-wrap: nowrap; }
-
-body.page-apps .header-actions,
-body.page-dev .header-actions { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
-
-body.page-apps .search-form,
-body.page-dev .search-form { flex: 1 1 16rem; min-width: 0; max-width: min(520px, 44vw); flex-wrap: nowrap; }
-
-body.page-apps .search-input,
-body.page-dev .search-input { width: 100%; min-width: 0; }
-
-body.page-apps .search-form > button,
-body.page-dev .search-form > button { flex: 0 0 auto; align-self: stretch; }
+/* ── 12. Prose pages: header sizing moved to header-layout.css ─────────────
+   The app and developer pages used to force their own header numbers here
+   (a small logo, a never-wrapping row), which fought the shared two-row
+   header whenever this sheet loaded last. header-layout.css now owns every
+   shell that has a .brand-group, so these pages match the catalogue instead
+   of carrying a second set of rules.
+   ────────────────────────────────────────────────────────────────────────── */
 
 /* The schedule tab parks at 42% of the viewport, which on these pages lands on
    the headline. It moves to the lower-left corner on every desktop page. */
@@ -1136,4 +1121,146 @@ body .search-btn:active { transform: scale(.98); }
 @media (prefers-reduced-data: reduce) {
   body .hero-backdrop { display: none; }
   body .hero-spotlight { background: var(--bg-elevated, #121722); }
+}
+
+/* ── 22. Page skin: details, player, developers, apps, sign-in, 404 ────────
+   The ink layer above targets the home shell. The other pages carry their own
+   markup, so the same print cues are mapped onto the classes they use: the
+   dossier and its poster, panel cards, episode cards, developer cards, the
+   player boxes and the sign-in card. Same tokens, so a theme change recolours
+   every page at once.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Details: the dossier reads as a printed character sheet. */
+body .dossier-card {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 10px;
+  box-shadow: 9px 10px 0 0 var(--ca-ink-shadow);
+}
+
+body .anime-poster {
+  border: 2px solid var(--ca-ink-line);
+  border-radius: 0;
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 0 100%);
+}
+
+body .badge,
+body .genre-tag {
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+  border-radius: 3px;
+}
+
+body .badge { font-family: var(--ca-font-mono); font-variant-numeric: tabular-nums; }
+
+body .panel-card {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+body .accent-dot { border-radius: 2px; transform: rotate(45deg); }
+
+body .ep-card {
+  border: 1px solid var(--ca-ink-line);
+  box-shadow: 4px 5px 0 0 var(--ca-ink-shadow);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+
+body .ep-card:hover,
+body .ep-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 7px 8px 0 0 var(--ca-ink-shadow);
+  transform: translate(-2px, -2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .ep-card, body .ep-card:hover, body .ep-card:focus-visible { transition: none; transform: none; }
+}
+
+/* Player, apps and developer pages share the panel and card shapes. */
+body .panel-box,
+body .dev-card,
+body .success-card {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+body .dl-platform {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+/* Actions on these pages are pasted labels, like the hero buttons. */
+body .btn-watch,
+body .btn-outline,
+body.page-auth .card .primary,
+body.page-auth .btn-primary,
+body.page-error .card .btn,
+body.page-apps .btn-primary,
+body.page-apps .dl-secondary,
+body.page-dev .btn-primary,
+body.page-done .btn-primary {
+  border-radius: 5px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  box-shadow: 4px 4px 0 0 var(--ca-ink-shadow);
+  transition: transform .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+
+body .btn-watch:hover,
+body .btn-outline:hover,
+body.page-auth .card .primary:hover,
+body.page-auth .btn-primary:hover,
+body.page-error .card .btn:hover,
+body.page-apps .btn-primary:hover,
+body.page-apps .dl-secondary:hover,
+body.page-dev .btn-primary:hover,
+body.page-done .btn-primary:hover {
+  transform: translate(-1px, -2px);
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body .btn-watch, body .btn-outline, body.page-auth .card .primary, body.page-auth .btn-primary, body.page-error .card .btn,
+  body.page-apps .btn-primary, body.page-apps .dl-secondary, body.page-dev .btn-primary, body.page-done .btn-primary { transition: none; }
+  body .btn-watch:hover, body .btn-outline:hover, body.page-auth .card .primary:hover, body.page-auth .btn-primary:hover, body.page-error .card .btn:hover,
+  body.page-apps .btn-primary:hover, body.page-apps .dl-secondary:hover, body.page-dev .btn-primary:hover, body.page-done .btn-primary:hover { transform: none; }
+}
+
+/* Sign-in: one printed card, a mono field set and a hard-edged tab pair. */
+body.page-auth .card,
+body.page-error .card {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 12px;
+  box-shadow: 10px 11px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-auth .card .tabs a {
+  border-radius: 3px;
+  border: 1px solid var(--ca-ink-line);
+}
+
+body.page-auth .card .tabs a.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+body.page-auth .card input {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  background: var(--ca-input-bg);
+  color: var(--text-primary);
+}
+
+body.page-auth .card input:focus-visible {
+  outline: 2px solid var(--ca-focus-ring-color);
+  outline-offset: 1px;
+}
+
+body.page-auth .card .err {
+  border: 1px solid var(--ca-error-line, rgba(255, 94, 98, .55));
+  border-radius: 6px;
+  padding: .6rem .75rem;
 }
