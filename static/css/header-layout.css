@@ -1,20 +1,26 @@
 /* ── Shared header layout ────────────────────────────────────────────────
-   The home shell used to put the logo, every navigation link, the search
-   field and the watchlist button on one fixed line, so the links were
-   squeezed between the logo and the search box and the bar read as a single
-   cramped strip. A 1280px rule made it worse by folding the links into the
-   menu button, so on a large screen the menu was hidden behind a hamburger.
+   Two shapes, one breakpoint at 900px:
 
-   Here the bar becomes two rows on wide screens:
-     row 1 — logo, then search + watchlist pushed to the right
-     row 2 — the navigation links, on their own line above the hero slide
+     >= 900px  row 1 — logo, then search + watchlist + theme pushed right
+               row 2 — the navigation tabs on their own line
+     <  900px  row 1 — logo, then watchlist + theme + menu button
+               row 2 — the search pill, full width
+               tabs, library and account links live in the drawer
+
+   Before this file, a wide rule folded the tabs into the hamburger and an
+   unconditional `.header-actions { flex: 1 1 100% }` pushed the whole action
+   cluster onto a new line, so the theme button ended up alone on a third row
+   on narrow screens. The action cluster is flattened below 900px instead, so
+   each control can be placed on the row it belongs to.
 
    This file is loaded after each page's inline <style>, so it wins without
-   needing !important everywhere. Only shells with a .brand-group (the home
-   header) opt in; the details and player headers keep their own bars.
+   needing !important everywhere. The two-row grid only applies to shells with
+   a .brand-group (the home header); details and player headers keep their own
+   bars and only get the narrow-screen wrapping fallback at the end.
    ──────────────────────────────────────────────────────────────────────── */
 
-@media (min-width: 1024px) {
+/* ── Wide screens: tabs on their own row ──────────────────────────────── */
+@media (min-width: 900px) {
   header .header-inner:has(.brand-group) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -47,6 +53,7 @@
 
   header .header-inner:has(.brand-group) .header-actions {
     grid-area: actions;
+    display: flex;
     width: 100%;
     justify-content: flex-end;
     gap: .75rem;
@@ -59,29 +66,80 @@
     margin-left: auto;
   }
 
-  /* The links are visible again, so no panel or menu button on this shell. */
+  /* The tabs are visible again, so no panel or menu button on this shell. */
   header .header-inner:has(.brand-group) .nav-toggle { display: none !important; }
   header .header-inner:has(.brand-group) + .mobile-nav { display: none !important; }
 }
 
-@media (min-width: 768px) and (max-width: 1023px) {
-  header .header-inner:has(.brand-group) { flex-wrap: wrap; gap: .6rem; }
-  header .header-inner:has(.brand-group) .brand-group { flex: 1 1 auto; min-width: 0; }
-  header .header-inner:has(.brand-group) .header-actions { flex: 1 1 100%; gap: .6rem; }
-  header .header-inner:has(.brand-group) .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
+/* ── Phones and tablets: one control row, search underneath ───────────── */
+@media (max-width: 899px) {
+  header .header-inner:has(.brand-group) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem .55rem;
+  }
+
+  /* Logo holds the left edge; the tabs move into the drawer. */
+  header .header-inner:has(.brand-group) .brand-group {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: .5rem;
+  }
+
+  header .header-inner:has(.brand-group) .brand-group .nav-links { display: none !important; }
+
+  /* Flatten the action cluster so the search pill can take its own row while
+     the watchlist and theme buttons stay up beside the menu button. */
+  header .header-inner:has(.brand-group) .header-actions { display: contents; }
+
+  header .header-inner:has(.brand-group) .btn-watchlist-Trigger,
+  header .header-inner:has(.brand-group) .ca-appearance-toggle {
+    order: 2;
+    flex: 0 0 auto;
+    position: relative;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 12px;
+    justify-content: center;
+    gap: 0;
+    font-size: 1rem;
+  }
+
+  /* Icon-only watchlist: the label would not fit, the count becomes a badge. */
+  header .header-inner:has(.brand-group) .btn-watchlist-Trigger .wl-label { display: none; }
+
+  header .header-inner:has(.brand-group) .btn-watchlist-Trigger .watchlist-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    padding: 0 .3rem;
+    font-size: .66rem;
+    line-height: 16px;
+    text-align: center;
+    border: 1px solid var(--bg-surface);
+  }
+
+  header .header-inner:has(.brand-group) .nav-toggle {
+    order: 3;
+    display: inline-flex;
+  }
+
+  header .header-inner:has(.brand-group) .search-form {
+    order: 4;
+    flex: 1 1 100%;
+    max-width: none;
+    min-width: 0;
+  }
 }
 
-@media (max-width: 767px) {
-  header .header-inner:has(.brand-group) { flex-wrap: wrap; gap: .55rem; }
-  header .header-inner:has(.brand-group) .brand-group { flex: 1 1 auto; min-width: 0; }
-  header .header-inner:has(.brand-group) .header-actions { flex: 1 1 100%; gap: .5rem; }
-  header .header-inner:has(.brand-group) .search-form { flex: 1 1 auto; max-width: none; min-width: 0; }
-  header .header-inner:has(.brand-group) .btn-watchlist-Trigger { flex: 0 0 auto; }
-}
-
-/* Narrow phones: the action row inside the header must wrap instead of pushing
-   its last button past the right edge. Pages without .brand-group (the watch
-   page, for one) never matched the rules above, so this applies to all headers. */
+/* Headers without .brand-group (details, player) keep the older fallback:
+   the action row must wrap instead of pushing its last button off-screen. */
 @media (max-width: 480px) {
   header .header-inner { flex-wrap: wrap; gap: .5rem; }
   header .header-inner > div { flex-wrap: wrap; min-width: 0; }
@@ -191,7 +249,7 @@
             justify-content: space-between;
             padding: 1rem 1.4rem;
             border-bottom: 1px solid var(--border-subtle);}
-/* ─── MOBILE NAV TOGGLE (visible <=900px, panel drops under header) ─── */
+/* ─── MOBILE NAV TOGGLE (visible below 900px, panel drops under header) ─── */
         .nav-toggle {display: none;
             background: var(--bg-surface);
             border: 1px solid var(--border-subtle);
@@ -205,6 +263,7 @@
             font-size: 1rem;
             flex-shrink: 0;}
 .nav-toggle:hover {border-color: var(--accent); color: var(--accent);}
+.nav-toggle:focus-visible {outline: 2px solid var(--ca-focus-ring-color); outline-offset: 2px;}
 .mobile-nav {display: none;
             border-top: 1px solid var(--border-subtle);
             padding: 0.75rem 1rem 1rem;
@@ -216,24 +275,18 @@
             font-weight: 600;
             font-size: 0.95rem;
             padding: 0.7rem 0.9rem;
+            min-height: 44px;
             border-radius: 10px;
             display: flex;
             align-items: center;
             gap: 0.6rem;}
 .mobile-nav a:hover, .mobile-nav a.active {background: rgba(var(--accent-rgb, 255, 179, 71), 0.12); color: var(--accent);}
-header {padding: 0.75rem 1.25rem;}
-.nav-links {display: none;}
-.nav-toggle {display: inline-flex;}
-.header-inner {flex-wrap: wrap; gap: 0.65rem;}
-.brand-group {flex: 1 1 auto; min-width: 0; gap: 0.85rem;}
-.site-logo img {width: clamp(158px, 22vw, 210px); max-height: 48px;}
-.header-actions {flex: 1 1 100%; min-width: 0;}
-.search-form {flex: 1; max-width: none; min-width: 0;}
-header {padding: 0.7rem 0.85rem;}
-.nav-links {display: none;}
-.nav-toggle {display: inline-flex;}
-.header-inner {flex-wrap: wrap; gap: 0.65rem;}
-.brand-group {flex: 1; min-width: 0; gap: 0.65rem;}
-.site-logo img {width: clamp(145px, 43vw, 195px); max-height: 44px;}
-.header-actions {flex: 1 1 100%; min-width: 0;}
-.search-form {flex: 1; max-width: none; min-width: 0;}
+
+/* Narrow-screen shell padding and logo scale, shared by both rows. */
+@media (max-width: 899px) {
+  header {padding: 0.7rem 0.85rem;}
+  header .header-inner:has(.brand-group) .site-logo img {
+    width: clamp(136px, 34vw, 196px);
+    max-height: 44px;
+  }
+}

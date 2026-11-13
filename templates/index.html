@@ -907,7 +907,7 @@
         }
         .anime-card:focus-within .card-hover-actions { opacity: 1; }
     </style>
-    <link href="/static/css/header-layout.css?v=20261111-tokens" rel="stylesheet">
+    <link href="/static/css/header-layout.css?v=20261113-nav1" rel="stylesheet">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to anime catalogue</a>
@@ -952,7 +952,7 @@
                 <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
             </form>
             <button type="button" class="btn-watchlist-Trigger" onclick="toggleWatchlistModal()">
-                <i class="fas fa-bookmark"></i> Watchlist
+                <i class="fas fa-bookmark"></i> <span class="wl-label">Watchlist</span>
                 <span class="watchlist-count" id="watchlistBadge">0</span>
             </button>
         </div>
@@ -964,6 +964,7 @@
         <a href="/scraper" onclick="toggleMobileNav(false)"><i class="fas fa-bolt"></i> AnimeHeaven Scraper & Downloader</a>
         <a href="/download" onclick="toggleMobileNav(false)"><i class="fas fa-mobile-alt"></i> Apps</a>
         <a href="/settings" onclick="toggleMobileNav(false)"><i class="fas fa-cog"></i> Settings</a>
+        <a href="/developers" onclick="toggleMobileNav(false)"><i class="fas fa-code"></i> Developers</a>
     </nav>
 </header>
 
@@ -1576,9 +1577,11 @@
         const btn = document.getElementById('navToggle');
         if (!nav || !btn) return;
         const open = force !== undefined ? force : !nav.classList.contains('open');
+        const wasOpen = nav.classList.contains('open');
         nav.classList.toggle('open', open);
         btn.setAttribute('aria-expanded', open);
         btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        if (wasOpen && !open) btn.focus();
     }
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {

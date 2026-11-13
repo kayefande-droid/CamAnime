@@ -42,7 +42,7 @@ function head(title, desc) {
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
-<link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
+<link rel="stylesheet" href="/static/css/header-layout.css?v=20261113-nav1">
 <link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero8">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
@@ -112,10 +112,12 @@ ${inner}
 function toggleMobileNav(force) {
   var nav = document.getElementById('mobileNav'), btn = document.getElementById('navToggle');
   if (!nav || !btn) return;
-  var open = force !== undefined ? force : !nav.classList.contains('open');
+  var wasOpen = nav.classList.contains('open');
+  var open = force !== undefined ? force : !wasOpen;
   nav.classList.toggle('open', open);
   btn.setAttribute('aria-expanded', String(open));
   btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+  if (wasOpen && !open) btn.focus();
 }
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleMobileNav(false); });
 </script>
