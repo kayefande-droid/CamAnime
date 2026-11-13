@@ -181,7 +181,11 @@
             width: clamp(180px, 17vw, 248px);
             height: auto;
             max-height: 58px;
-            object-fit: contain;}
+            object-fit: contain;
+            /* Reserve the logo's box before the SVG paints: without it the
+               header row collapses to the icon buttons' height if the file
+               is slow, then jumps when it lands. */
+            aspect-ratio: 1200 / 270;}
 .site-logo:focus-visible {outline: 2px solid var(--ca-focus-ring-color); outline-offset: 5px; border-radius: 5px;}
 .nav-links {display: flex;
             align-items: center;

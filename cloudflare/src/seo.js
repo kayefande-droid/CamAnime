@@ -11,10 +11,10 @@ import { homeGrids } from "./catalog.js";
 import { rewriteAniListImages } from "./media.js";
 
 /** Pages that exist for every visitor and return 200 without a session. */
-const PUBLIC_PATHS = ["/", "/browse", "/search", "/download"];
+const PUBLIC_PATHS = ["/", "/browse", "/download", "/developers"];
 
 /** Routes that must never be indexed (private, per-user or credential pages). */
-const PRIVATE_PREFIXES = ["/library", "/settings", "/login", "/register", "/logout", "/developers"];
+const PRIVATE_PREFIXES = ["/library", "/settings", "/login", "/register", "/logout", "/search"];
 
 const SITEMAP_TTL_MS = 30 * 60 * 1000;
 let sitemapCache = { at: 0, origin: "", xml: "" };

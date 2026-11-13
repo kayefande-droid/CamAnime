@@ -44,12 +44,17 @@ test("the homepage canonical keeps its trailing slash", async () => {
   assert.match(await res.text(), /<link rel="canonical" href="https:\/\/camanjme\.camanime\.workers\.dev\/">/);
 });
 
-test("per-user pages are marked noindex", async () => {
-  for (const path of ["/settings", "/library", "/login", "/developers"]) {
+test("per-user pages and search results are marked noindex", async () => {
+  for (const path of ["/settings", "/library", "/login", "/search"]) {
     const res = await withSeo(htmlPage(), new URL(ORIGIN + path));
     const body = await res.text();
     assert.match(body, /<meta name="robots" content="noindex, follow">/, `${path} should be noindex`);
   }
+});
+
+test("the developer page is public like its Render counterpart", async () => {
+  const body = await (await withSeo(htmlPage(), new URL(ORIGIN + "/developers"))).text();
+  assert.match(body, /content="index, follow, max-image-preview:large"/);
 });
 
 test("public pages stay fully indexable and get WebSite JSON-LD on the homepage", async () => {

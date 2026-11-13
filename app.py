@@ -5097,7 +5097,7 @@ def sitemap():
     so omit lastmod.
     """
     base = "https://camanime.onrender.com"
-    entries = ["/", "/scraper", "/download", "/promo"]
+    entries = ["/", "/scraper", "/download", "/promo", "/developers", "/advert"]
     try:
         with platform._db() as conn:
             rows = conn.execute(

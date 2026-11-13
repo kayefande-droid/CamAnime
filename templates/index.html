@@ -9,7 +9,7 @@
     <meta name="keywords" content="CamAnime, camanime, Cam-Anime, camanjme, watch anime online free, watch anime online, free anime streaming, HD anime, English-subbed and English-dubbed anime, anime collection, stream anime online">
     {% if page_type == 'search' or page_type == 'filter' or request.args.get('genre') or request.args.get('format') or request.args.get('status') or request.args.get('year_before') or request.args.get('sort') %}<meta name="robots" content="noindex, follow">{% else %}<meta name="robots" content="index, follow, max-image-preview:large">{% endif %}
     <meta property="og:site_name" content="CamAnime">
-    <meta property="og:url" content="https://camanime.onrender.com/">
+    <meta property="og:url" content="https://camanime.onrender.com{{ request.path }}">
     <meta property="og:type" content="website">
     <meta property="og:title" content="{{ page_title or 'CamAnime – Watch Anime Online Free in HD' }}">
     <meta property="og:description" content="{{ page_description or 'Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.' }}">
@@ -20,7 +20,7 @@
     <meta name="twitter:image" content="https://camanime.onrender.com/static/icon-512.png">
     <meta property="og:image:alt" content="CamAnime — watch anime online free in HD">
     <meta name="twitter:image:alt" content="CamAnime — watch anime online free in HD">
-    <link rel="canonical" href="https://camanime.onrender.com/">
+    <link rel="canonical" href="https://camanime.onrender.com{{ request.path }}">
     <meta name="theme-color" content="#087BFF">
     <meta name="google-site-verification" content="3rRXefg_LYfyIPKcJgeXbLXBLkHx9zKOUlWcX7Fm6Tg" />
     <script type="application/ld+json">
@@ -48,7 +48,7 @@
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261113-skin1" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261114-skin2" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -907,7 +907,7 @@
         }
         .anime-card:focus-within .card-hover-actions { opacity: 1; }
     </style>
-    <link href="/static/css/header-layout.css?v=20261113-nav1" rel="stylesheet">
+    <link href="/static/css/header-layout.css?v=20261114-nav2" rel="stylesheet">
 </head>
 <body>
 <a class="skip-link" href="#main-content">Skip to anime catalogue</a>
@@ -1882,5 +1882,6 @@
   document.addEventListener('click', function (e) { if (!form.contains(e.target)) closeSuggestions(); });
 })();
 </script>
+<script src="/static/js/site-nav.js?v=20261114-nav1" defer></script>
 </body>
 </html>

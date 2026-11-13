@@ -1264,3 +1264,133 @@ body.page-auth .card .err {
   border-radius: 6px;
   padding: .6rem .75rem;
 }
+
+/* ── 23. Settings, release schedule and promo kit ──────────────────────────
+   These three shells carry their own inline styles and were the last pages
+   without the print cues. Only the surfaces change: panel edges, corner cuts,
+   mono figures, the ink offset. Sizing and spacing stay with the inline rules
+   so nothing reflows. Same tokens as §22, so a theme change recolours them too.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/* Settings: every block is a printed panel; the theme chips are cut labels. */
+body.page-settings .set-card {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-settings .theme-pick,
+body.page-settings .seg button,
+body.page-settings .row-toggle,
+body.page-settings .name-row input,
+body.page-settings .login-fields input {
+  border-radius: 3px;
+  border-color: var(--ca-ink-line);
+}
+
+body.page-settings .theme-pick {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+}
+
+body.page-settings .theme-pick.active {
+  box-shadow: 3px 3px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-settings .theme-dot { border-radius: 2px; transform: rotate(45deg); }
+
+body.page-settings .btn {
+  border-radius: 2px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+
+body.page-settings .btn-save,
+body.page-settings .btn-ghost,
+body.page-settings .btn-danger {
+  box-shadow: 4px 4px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-settings .btn:active { box-shadow: 1px 1px 0 0 var(--ca-ink-shadow); }
+
+body.page-settings .storage-line,
+body.page-settings .row-toggle .hint { font-family: var(--ca-font-mono); }
+
+/* Release schedule: each row is a ticket with an amber spine and mono figures. */
+body.page-schedule .release-ticker {
+  border: 1px solid var(--ca-ink-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-schedule .cd-chip {
+  border-radius: 3px;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+
+body.page-schedule .cd-chip b { font-variant-numeric: tabular-nums; }
+
+body.page-schedule .release-state {
+  font-family: var(--ca-font-mono);
+  font-size: .72rem;
+  letter-spacing: .02em;
+}
+
+body.page-schedule .release-provider {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: .35rem .8rem;
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 0 var(--ca-ink-shadow);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+body.page-schedule .schedule-empty {
+  border: 1px dashed var(--ca-ink-line);
+  border-radius: 6px;
+  padding: 1rem 1.1rem;
+  color: var(--text-secondary);
+}
+
+/* Promo kit: the slides and the caption block read as pasted print cards. */
+body.page-promo .slide {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 8px 9px 0 0 var(--ca-ink-shadow);
+}
+
+body.page-promo .slide::before { height: 5px; }
+
+body.page-promo .tag { font-family: var(--ca-font-mono); }
+
+body.page-promo .tags {
+  border: 1px solid var(--ca-ink-line);
+  border-radius: 6px;
+  box-shadow: 6px 7px 0 0 var(--ca-ink-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.page-settings .theme-pick,
+  body.page-settings .btn,
+  body.page-schedule .release-provider { transition: none; }
+}
+
+/* The reachable schedule surface is the home page's side drawer: /schedule
+   redirects to /?schedule=open, so the tickets there get the same treatment
+   as the standalone template above. */
+body.schedule-drawer-open .live-schedule-list .release-ticker {
+  border: 1px solid var(--ca-ink-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  box-shadow: 4px 5px 0 0 var(--ca-ink-shadow);
+}
+
+body.schedule-drawer-open .live-schedule-list .cd-chip {
+  border-radius: 3px;
+  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+}
+
+body.schedule-drawer-open .live-schedule-list .cd-chip b { font-variant-numeric: tabular-nums; }

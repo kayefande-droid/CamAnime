@@ -42,8 +42,8 @@ function head(title, desc) {
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
-<link rel="stylesheet" href="/static/css/header-layout.css?v=20261113-nav1">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-skin1">
+<link rel="stylesheet" href="/static/css/header-layout.css?v=20261114-nav2">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261114-skin2">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -82,11 +82,11 @@ export function chrome(title, desc, userName, inner, active = "home", opts = {})
     </div>
   </div>
   <nav class="mobile-nav" id="mobileNav" aria-label="Menu">
-    <a href="/"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
-    <a href="/library"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
-    <a href="/download"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
-    <a href="/settings"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
-    <a href="/developers"><i class="fas fa-code" aria-hidden="true"></i> Developers API</a>
+    <a href="/" class="${active === "home" ? "active" : ""}"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+    <a href="/library" class="${active === "library" ? "active" : ""}"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
+    <a href="/download" class="${active === "download" ? "active" : ""}"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
+    <a href="/settings" class="${active === "settings" ? "active" : ""}"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
+    <a href="/developers" class="${active === "dev" ? "active" : ""}"><i class="fas fa-code" aria-hidden="true"></i> Developers API</a>
     ${userName ? `<a href="/settings">Account (${esc(userName)})</a>` : `<a href="/login">Sign in</a>`}
   </nav>
 </header>
@@ -120,6 +120,24 @@ function toggleMobileNav(force) {
   if (wasOpen && !open) btn.focus();
 }
 document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleMobileNav(false); });
+// Tapping the page behind the menu closes it, as does growing past the
+// breakpoint where the tab row takes over.
+document.addEventListener('click', function (e) {
+  var nav = document.getElementById('mobileNav');
+  if (!nav || !nav.classList.contains('open')) return;
+  if (nav.contains(e.target)) return;
+  var btn = document.getElementById('navToggle');
+  if (btn && btn.contains(e.target)) return;
+  toggleMobileNav(false);
+});
+var wideQuery = window.matchMedia('(min-width: 900px)');
+function closeWhenWide(query) {
+  if (!query.matches) return;
+  var nav = document.getElementById('mobileNav');
+  if (nav && nav.classList.contains('open')) toggleMobileNav(false);
+}
+if (wideQuery.addEventListener) wideQuery.addEventListener('change', closeWhenWide);
+else if (wideQuery.addListener) wideQuery.addListener(closeWhenWide);
 </script>
 </body></html>`;
 }
