@@ -826,16 +826,22 @@ body .schedule-empty .schedule-retry:focus-visible { outline: 2px solid var(--ca
    a slanted section rule. Every motion is transform/opacity only and drops out
    under reduced motion or the low-data profile. */
 
+/* One texture layer over the art, not two competing ones: the halftone screen
+   and the poster sunburst share the same right-hand mask, so the copy on the
+   left stays clean. It sits above the slides (z-index 1) and below the dots. */
 body .hero-spotlight::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  background-image: radial-gradient(var(--ca-halftone) 1px, transparent 1.6px);
-  background-size: 14px 14px;
-  -webkit-mask-image: linear-gradient(100deg, transparent 52%, black 92%);
-  mask-image: linear-gradient(100deg, transparent 52%, black 92%);
+  background-image:
+    repeating-conic-gradient(from 0deg at 82% 26%,
+      rgba(255, 255, 255, .07) 0deg 1deg, transparent 1deg 4deg),
+    radial-gradient(var(--ca-halftone) 1px, transparent 1.6px);
+  background-size: auto, 14px 14px;
+  -webkit-mask-image: linear-gradient(100deg, transparent 45%, black 95%);
+  mask-image: linear-gradient(100deg, transparent 45%, black 95%);
   opacity: .85;
 }
 
@@ -952,20 +958,10 @@ body::before {
 
 body .hero-spotlight { position: relative; isolation: isolate; }
 
-body .hero-spotlight::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: repeating-conic-gradient(from 0deg at 82% 26%,
-    rgba(255, 255, 255, .085) 0deg 1deg, transparent 1deg 4deg);
-  -webkit-mask-image: radial-gradient(circle at 82% 26%, #000 0 30%, transparent 60%);
-  mask-image: radial-gradient(circle at 82% 26%, #000 0 30%, transparent 60%);
-  opacity: .55;
-}
-
 body .hero-spotlight > * { z-index: 1; }
+
+/* The halftone layer is painted above the slides, so the dots keep clear of it. */
+body .hero-spotlight > .hero-dots { z-index: 3; }
 
 body .section-title::before {
   width: .42em;
@@ -975,12 +971,7 @@ body .section-title::before {
   background: linear-gradient(135deg, var(--accent, #FFB347), var(--accent-crimson, #FF5E62));
 }
 
-body .anime-card { transition: transform .22s ease, box-shadow .22s ease; }
-
-body .anime-card:hover {
-  transform: translateY(-4px) rotate(-.35deg);
-  box-shadow: 5px 6px 0 rgba(var(--accent-rgb, 255, 179, 71), .2);
-}
+body .anime-card { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
 
 body .anime-card:hover .anime-poster-ink,
 body .anime-card:hover .poster { border-color: rgba(var(--accent-rgb, 255, 179, 71), .55); }

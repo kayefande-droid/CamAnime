@@ -43,7 +43,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261113-nav1">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero8">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-ink1">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
