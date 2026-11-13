@@ -1015,6 +1015,25 @@ body .hero-slide {
   display: flex;
   align-items: flex-end;
   z-index: 1;
+  /* One slow crossfade, no dip: the outgoing poster fades under the incoming
+     one, so the stage never flashes its background between slides. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .75s var(--ca-ease, cubic-bezier(.22, .61, .36, 1)),
+              visibility 0s linear .75s;
+}
+body .hero-slide.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity .75s var(--ca-ease, cubic-bezier(.22, .61, .36, 1));
+}
+body .hero-slide .hero-backdrop { transition: transform 1.2s var(--ca-ease, ease), opacity .75s var(--ca-ease, ease); }
+@media (prefers-reduced-motion: reduce) {
+  body .hero-slide,
+  body .hero-slide.active,
+  body .hero-slide .hero-backdrop { transition: none; }
 }
 body .hero-backdrop {
   position: absolute;

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% if page_type == 'home' and hero_slides and (hero_slides[0].banner or hero_slides[0].image) %}<link rel="preload" as="image" href="{{ hero_slides[0].banner or hero_slides[0].image }}" fetchpriority="high">{% endif %}
     <title>{{ page_title or 'CamAnime – Watch Anime Online Free in HD' }}</title>
     <meta name="description" content="{{ page_description or 'Discover CamAnime, stream your favourite anime online, explore English-subbed and English-dubbed episodes, and enjoy your anime collection.' }}">
     <meta name="keywords" content="CamAnime, camanime, Cam-Anime, camanjme, watch anime online free, watch anime online, free anime streaming, HD anime, English-subbed and English-dubbed anime, anime collection, stream anime online">
@@ -47,7 +48,7 @@
     <script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 <link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
 <link href="/static/css/sync.css?v=20261112-ink" rel="stylesheet">
-<link href="/static/css/redesign.css?v=20261113-hero4" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261113-hero5" rel="stylesheet">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
     <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
