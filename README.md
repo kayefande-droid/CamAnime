@@ -54,6 +54,38 @@ flutter build apk --release --dart-define=CAMANIME_API=https://your-host
 - `GET /api/version` — release policy consumed by the update checker
 - `/api/admin/*` — role-guarded operations (owner, developer, support)
 
+## 🚢 Ship status (13 November 2026)
+
+Live on both hosts, over HTTPS:
+
+- Origin: <https://camanime.onrender.com> — Flask + Jinja, auto-deploys from `main` (~2.5 min).
+- Mirror: <https://camanjme.camanime.workers.dev> — Cloudflare Worker (D1 cache, R2 assets), deploy with `cd cloudflare && npx wrangler deploy`.
+- Both serve the same `/static` tree, so one stylesheet change reaches both; the pin is `redesign.css?v=20261113-hero5`.
+
+Smoke-tested after the last deploy: `/`, `/anime/21`, `/watch/21/1`, `/download`,
+`/robots.txt`, `/sitemap.xml` and the 404 page return 200/404 on both hosts with
+HSTS, CSP, nosniff, frame and referrer headers. The mirror's watch page plays the
+provider bundle itself (MP4 direct, HLS through hls.js). The hero rotation
+crossfades in 750ms; reduced motion keeps a hard cut.
+
+How to roll back: `git revert <sha> && git push` for the origin (Render rebuilds
+automatically), and `cd cloudflare && npx wrangler rollback` for the mirror.
+Secrets live in the Render dashboard (`CAMANIME_*`, `CAMANIME_D1_TOKEN`,
+`SECRET_KEY`) and in `cloudflare/.cf-deploy.env` plus the Worker's own bindings;
+none are committed.
+
+Still open, recorded in `TEST-REPORT.md`:
+
+- `node scripts/lint-css.mjs` fails on legacy literal colours in `base.css` and
+  `redesign.css`; tokenising them is its own change.
+- The mirror sitemap lists catalogue URLs the origin does not; pick a single
+  source of truth before submitting either to search engines.
+- The origin's details page renders every episode of a 1000+ episode series
+  server-side (LCP 7.9s on ONE PIECE); paginate the episode rail with
+  `/api/v1/anime/<id>/episodes`.
+- Error tracking and uptime monitors are not wired to a paid service; the
+  Worker's `wrangler tail` and Render logs are the current observability.
+
 ## 🛡️ Operations & privacy
 
 Deployment uses **Render** for the Flask origin and **Cloudflare Workers** for the edge; both deploy from `main`. The application needs no store listing and no third-party OAuth.
