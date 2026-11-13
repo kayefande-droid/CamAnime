@@ -175,7 +175,28 @@ body .hero-ctas .btn-primary,
 body .hero-ctas .btn-secondary { min-height: 48px; padding-inline: 1.5rem; }
 
 /* Dots ride the bottom-right corner as a capsule, not a centred row. */
-body .hero-dots { left: auto; right: clamp(1rem, 4vw, 3rem); bottom: clamp(1rem, 3vw, 2rem); }
+body .hero-dots {
+  position: absolute;
+  display: flex;
+  gap: .5rem;
+  left: auto;
+  right: clamp(1rem, 4vw, 3rem);
+  bottom: clamp(1rem, 3vw, 2rem);
+  z-index: 3;
+}
+body .hero-dot {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ca-ink-line);
+  cursor: pointer;
+  transition: width var(--ca-dur, 220ms) var(--ca-ease, ease),
+              background-color var(--ca-dur, 220ms) var(--ca-ease, ease);
+}
+body .hero-dot.active { width: 28px; background: var(--accent); }
+body .hero-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ── 3. Catalogue: magazine grid with one feature tile ────────────────────── */
 body .anime-grid {

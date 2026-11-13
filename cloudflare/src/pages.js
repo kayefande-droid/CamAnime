@@ -43,7 +43,7 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261111-tokens">
-<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero5">
+<link rel="stylesheet" href="/static/css/redesign.css?v=20261113-hero7">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
@@ -134,31 +134,70 @@ export function homePage(grids, userName) {
       </div>
       <div class="anime-grid">${items.map(card).join("")}</div>
     </section>`;
-  const hero = (grids.trending || [])[0];
-  const rating = hero?.averageScore ? (hero.averageScore / 10).toFixed(1) : "";
-  const heroMeta = [
-    rating ? `<span class="meta-pill gold"><i class="fas fa-star" aria-hidden="true"></i> ${rating}</span>` : "",
-    hero?.format ? `<span class="meta-pill">${esc(hero.format)}</span>` : "",
-    hero?.seasonYear ? `<span class="meta-pill">${esc(hero.seasonYear)}</span>` : "",
-    ...(hero?.genres || []).slice(0, 3).map((g) => `<span class="meta-pill">${esc(g)}</span>`),
+  // The mirror rotates the same five trending titles the origin does, so the
+  // two home pages behave alike instead of the mirror freezing on one poster.
+  const heroItems = (grids.trending || []).slice(0, 5);
+  const heroMetaOf = (a) => [
+    a?.averageScore ? `<span class="meta-pill gold"><i class="fas fa-star" aria-hidden="true"></i> ${(a.averageScore / 10).toFixed(1)}</span>` : "",
+    a?.format ? `<span class="meta-pill">${esc(a.format)}</span>` : "",
+    a?.seasonYear ? `<span class="meta-pill">${esc(a.seasonYear)}</span>` : "",
+    ...(a?.genres || []).slice(0, 3).map((g) => `<span class="meta-pill">${esc(g)}</span>`),
   ].join("");
-  const inner = `
-    ${hero ? `
-    <section class="hero-spotlight" id="heroCarousel">
-      <div class="hero-slide active">
-        <img class="hero-backdrop" src="${esc(hero.bannerImage || hero.coverImage?.extraLarge || hero.coverImage?.large || "")}" alt="${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}" width="1600" height="900" fetchpriority="high" decoding="async" referrerpolicy="no-referrer">
+  const heroSlides = heroItems.map((a, i) => {
+    const title = a.title?.english || a.title?.romaji || "Featured anime";
+    const meta = heroMetaOf(a);
+    return `<div class="hero-slide${i === 0 ? " active" : ""}" data-slide-index="${i}">
+        <img class="hero-backdrop" src="${esc(a.bannerImage || a.coverImage?.extraLarge || a.coverImage?.large || "")}" alt="${esc(title)}" width="1600" height="900" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async" referrerpolicy="no-referrer">
         <div class="hero-vignette"></div>
         <div class="hero-body">
-          <h1 class="hero-title">${esc(hero.title?.english || hero.title?.romaji || "Featured anime")}</h1>
-          ${heroMeta ? `<div class="hero-meta-row">${heroMeta}</div>` : ""}
-          <p class="hero-desc">${userName ? `Welcome back, ${esc(userName)}. ` : ""}Trending on AniList right now, with provider listings resolved live on this deployment.</p>
+          ${i === 0 ? `<h1 class="hero-title">${esc(title)}</h1>` : `<div class="hero-title">${esc(title)}</div>`}
+          ${meta ? `<div class="hero-meta-row">${meta}</div>` : ""}
+          <p class="hero-desc">${i === 0 && userName ? `Welcome back, ${esc(userName)}. ` : ""}Trending on AniList right now, with provider listings resolved live on this deployment.</p>
           <div class="hero-ctas">
-            <a class="btn-primary" href="/anime/${hero.id}"><i class="fas fa-circle-info" aria-hidden="true"></i> View details</a>
-            <a class="btn-secondary" href="/anime/${hero.id}"><i class="fas fa-layer-group" aria-hidden="true"></i> Episodes &amp; download</a>
+            <a class="btn-primary" href="/anime/${a.id}"><i class="fas fa-circle-info" aria-hidden="true"></i> View details</a>
+            <a class="btn-secondary" href="/anime/${a.id}"><i class="fas fa-layer-group" aria-hidden="true"></i> Episodes &amp; download</a>
           </div>
         </div>
-      </div>
-    </section>` : ""}
+      </div>`;
+  }).join("");
+  const heroDots = heroItems.map((a, i) =>
+    `<button type="button" class="hero-dot${i === 0 ? " active" : ""}" data-slide="${i}" aria-label="Slide ${i + 1}"></button>`).join("");
+  const heroScript = heroItems.length > 1 ? `<script>
+    (function () {
+      var stage = document.getElementById("heroCarousel");
+      if (!stage) return;
+      var slides = stage.querySelectorAll(".hero-slide");
+      var dots = stage.querySelectorAll(".hero-dot");
+      var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      var current = 0, timer = null;
+      function show(idx) {
+        current = idx;
+        slides.forEach(function (s, i) { s.classList.toggle("active", i === idx); });
+        dots.forEach(function (d, i) { d.classList.toggle("active", i === idx); });
+      }
+      dots.forEach(function (d) {
+        d.addEventListener("click", function () {
+          if (timer) { clearInterval(timer); timer = null; }
+          show(Number(d.dataset.slide) || 0);
+        });
+      });
+      if (reduce) return;
+      var raw = getComputedStyle(document.documentElement).getPropertyValue("--ca-cycle").trim();
+      var cycle = raw.indexOf("ms") > -1 ? parseFloat(raw) : raw.indexOf("s") > -1 ? parseFloat(raw) * 1000 : parseFloat(raw);
+      if (!isFinite(cycle) || cycle < 1500) cycle = 6000;
+      timer = setInterval(function () {
+        if (current >= slides.length - 1) { clearInterval(timer); timer = null; return; }
+        show(current + 1);
+      }, cycle);
+    })();
+  </script>` : "";
+  const inner = `
+    ${heroItems.length ? `
+    <section class="hero-spotlight" id="heroCarousel">
+      ${heroSlides}
+      ${heroItems.length > 1 ? `<div class="hero-dots">${heroDots}</div>` : ""}
+    </section>
+    ${heroScript}` : ""}
     <section class="dev-ad" aria-labelledby="devAdTitle">
       <span class="dev-eyebrow">Developer API · Free</span>
       <h2 id="devAdTitle">One free anime streaming API, ready to embed.</h2>
