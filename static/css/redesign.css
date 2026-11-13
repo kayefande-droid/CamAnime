@@ -1037,15 +1037,23 @@ body .hero-desc { max-width: 62ch; }
 
 /* Narrow screens: full-width copy, shorter description, no clipping. */
 @media (max-width: 860px) {
-  body .hero-spotlight { min-height: clamp(400px, 92vw, 560px); }
-  body .hero-body { padding: 1.25rem 1.1rem 2rem; }
-  body .hero-title { font-size: clamp(1.6rem, 6.4vw, 2.2rem); }
+  /* Tall enough for the title, three lines of copy and both actions: the
+     stage is fixed-height because the slides are stacked absolutely, so a
+     short stage would clip the second button instead of scrolling. */
+  body .hero-spotlight { min-height: clamp(460px, 116vw, 620px); }
+  body .hero-body { padding: 1.25rem 1.1rem 1.6rem; max-width: none; }
+  body .hero-title { font-size: clamp(1.6rem, 6.4vw, 2.2rem); margin-block: .3rem .6rem; }
+  body .hero-ctas { margin-top: .9rem; }
   body .hero-desc {
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+}
+@media (max-width: 480px) {
+  body .hero-spotlight { min-height: clamp(480px, 126vw, 640px); }
+  body .hero-desc { -webkit-line-clamp: 2; }
 }
 
 /* Ultrawide: more cards per row rather than fatter cards. */
