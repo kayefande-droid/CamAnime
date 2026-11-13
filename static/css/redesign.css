@@ -944,7 +944,7 @@ body .hero-spotlight::after {
   opacity: .55;
 }
 
-body .hero-spotlight > * { position: relative; z-index: 1; }
+body .hero-spotlight > * { z-index: 1; }
 
 body .section-title::before {
   width: .42em;
@@ -999,12 +999,38 @@ body header .site-logo img {
   object-fit: contain;
 }
 
-/* Hero: one box. Every slide stays absolutely stacked on the stage so the
-   carousel never reflows; the backdrop fills the stage and the copy sits on
-   top of it at every width. */
-body .hero-spotlight { overflow: hidden; }
-body .hero-slide { width: 100%; }
-body .hero-backdrop { object-fit: cover; object-position: center 22%; }
+/* Hero: one box, one geometry on both hosts. Slides stay absolutely stacked
+   on the stage so the carousel never reflows, the backdrop fills the stage,
+   the vignette darkens the copy side, and the copy sits on top. */
+body .hero-spotlight {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--bg-elevated);
+}
+body .hero-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  z-index: 1;
+}
+body .hero-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  z-index: 0;
+}
+body .hero-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
 body .hero-body { position: relative; z-index: 2; min-width: 0; }
 body .hero-title { text-wrap: balance; }
 body .hero-desc { max-width: 62ch; }
