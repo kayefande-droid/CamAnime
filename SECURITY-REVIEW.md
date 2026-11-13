@@ -1,7 +1,53 @@
 # CamAnime — security review
 
-Date: 11 November 2026 · Scope: the Flask app on Render, the Cloudflare mirror in
+Date: 11 November 2026, re-reviewed 14 November 2026 · Scope: the Flask app on Render, the Cloudflare mirror in
 `cloudflare/`, the shared `static/` tree, and the Android client's API surface.
+
+## Re-review, 14 November 2026
+
+The 11 November review still holds — no finding below was reopened. This pass
+re-ran the scanners against the tree as it stands after the SEO and page-skin
+work, and re-checked the live hosts.
+
+| Tool | Command | Result |
+| --- | --- | --- |
+| gitleaks 8.30.1 (history) | `gitleaks git -v` | 263 commits, 211 hits: 208 `generic-api-key` and 2 `curl-auth-header` are the same placeholder/`.venv`/lockfile noise as before (`ca_live_your_key_here`, package metadata, build caches); the one `gcp-api-key` is the public Firebase config key (L3). No new secret in history. |
+| gitleaks 8.30.1 (working tree) | `gitleaks dir .` | 428 hits, all inside vendored or ephemeral paths (`.venv`, `node_modules`, `.scan` reports) plus the local-only `cloudflare/.cf-deploy.env`, `cloudflare/.cf-audit.env`, `.e2e/`, `.shorebird.env`. Every one of those files is untracked and git-ignored (`git ls-files` = 0, `git check-ignore` = yes), and `git log -S"cfat_"` shows the Cloudflare tokens were never committed. |
+| pip-audit | `pip-audit -r requirements.txt` | **No known vulnerabilities found** (Flask 3.1.3, Werkzeug 3.1.9, requests 2.33.0, gunicorn 23.0.0). |
+| npm audit | `npm audit --omit=dev` at the root and in `cloudflare/` | 0 vulnerabilities in both. |
+| bandit | `bandit -r` over the 11 server modules | 0 high. 5 medium, all triaged: 3× B608 placeholder-list interpolation with bound values (`camanime_platform.py:300`, `:801`, `push.py:243`), 1× B104 `app.run(host="0.0.0.0")` guarded by `__main__` for the local dev server, 1× B310 `urlopen` in `d1db.py` whose URL comes from `D1_API` plus the configured account/database id, never from a request. |
+| semgrep | `semgrep scan --config auto` | **Could not run**: the install again timed out on this Windows host (240 s) and no `semgrep` binary lands. Covered by bandit plus the manual read of the code added since the last review. |
+| osv-scanner / OWASP ZAP | — | **Could not run**: the osv-scanner release asset would not download from this machine and there is no Docker for the ZAP baseline. Covered by pip-audit + npm audit and the hand-run abuse cases below. |
+
+What changed since the last review, and why it is safe:
+
+- **New head tags and JSON-LD.** Every page now emits a canonical, OG/Twitter
+  card and structured data. Canonicals are built from `request.path` or
+  `url.origin` and pass through Jinja autoescape (`__CA_CANONICAL__` is filled
+  by `xmlEscape` on the Worker); JSON-LD is emitted with `| tojson` on the
+  origin and `JSON.stringify(...).replace(/</g, "\\u003c")` on the mirror, so a
+  title containing `</script>` cannot break out of the block.
+- **Search results echo the query.** `q` now appears in the page title and meta
+  description on both hosts. Verified escaped: a request for `";alert(1);//`
+  renders `&#34;;alert(1);//` (origin) and `&quot;;alert(1);//` (mirror). The
+  firewall refuses a query containing `<script` with a 404 before any view runs.
+- **`static/js/site-nav.js`** (new) touches only `classList`, `setAttribute` and
+  `focus`; no `innerHTML`, no `eval`, no data from the URL. It loads from
+  `'self'`, which the CSP already allows.
+
+Live checks on 14 November:
+
+- Both hosts return the full header set (CSP, HSTS, `nosniff`, `X-Frame-Options`,
+  Referrer, Permissions, COOP/CORP). The mirror returns all six.
+- SSRF guards: `/api/proxy/hls` answers 400 for `http://10.0.0.5/…` and
+  `http://169.254.169.254/…` on both hosts, 404 for `file:///etc/passwd`.
+- `/search` is `noindex` and absent from both sitemaps; `/developers` is
+  indexable on both.
+
+No critical or high finding is open. The medium and low items from 11 November
+keep the status recorded below.
+
+---
 
 Both hosts serve the same pages from one static tree, so anything found on one
 was checked on the other. Every critical and high finding below is fixed and
@@ -33,6 +79,7 @@ verified; the medium and low items that remain are listed with the reason.
 | M4 | **CSP allows inline scripts** (`script-src 'unsafe-inline'`). | Medium | `app.py`, `cloudflare/src/index.js` | Inline scripts cannot be removed without rewriting every template and the mirror's SSR output. The risk is bounded because no template uses `|safe`, user text is escaped, and H1 removed the only markup injection path. | Open, accepted |
 | L1 | CORS `Access-Control-Allow-Origin: *` on proxy, subtitle and download responses. | Low | `app.py` | Intentional: the player fetches from the app origin and the mirror. No `Allow-Credentials`, so no session or cookie data is exposed. | Accepted |
 | L2 | Rate limiting keys on the first `X-Forwarded-For` value. | Low | `app.py` `_client_ip` | Render and Cloudflare overwrite the header with the real client address, so a client cannot rotate the key through their own header. | Accepted |
+| L4 | **The Windows virtualenv was committed.** 2,374 of the repo's 2,776 tracked files were `.venv/`, so every clone carried a prebuilt interpreter and thousands of site-packages files. No secret was in it (gitleaks read the whole tree: package metadata strings only), but it is the one place a future `pip install` could quietly commit a token, and it inflated the Render checkout. | Low | `.venv/` | Removed from the index (`git rm -r --cached .venv`) and added to `.gitignore`; the files stay on local disk and Render builds from `pip install -r requirements.txt`, so nothing deploys differently. | Fixed — 14 Nov 2026 |
 | L3 | `mobile/camanime_app/android/app/google-services.json` is tracked and contains a Firebase API key; local `*.env` files with deploy tokens sit untracked-but-ignored. | Low | repo root, `mobile/` | A Firebase key in an Android app config is public by design and is protected by the package-name/SHA-1 restriction in the console, not by secrecy. The env files are git-ignored and untracked (`git check-ignore` confirmed). | Accepted — restrict the key to the app's package and signing SHA-1 |
 
 ## What was checked and held
