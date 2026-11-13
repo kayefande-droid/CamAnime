@@ -225,14 +225,17 @@ export function detailsPage(anime, ratingSummary, user) {
 
 export function watchPage(ctx, user) {
   const { anime, episodes, current, epNum } = ctx;
+  // AniList lists some episodes only as http:// provider pages, which the CSP
+  // frame-src (self + https) refuses. Never hand the stage a URL it will block.
+  const currentUrl = current?.url ? current.url.replace(/^http:\/\//i, "https://") : "";
   const name = anime.title.english || anime.title.romaji || "Episode";
   const list = (episodes.length ? episodes : Array.from({ length: anime.episodes || 0 }, (_, i) => ({ n: i + 1, title: "Episode " + (i + 1), url: null })));
   const inner = `
     <div class="watch-container">
       <div class="player-column">
         <div class="video-stage" id="videoStage">
-          ${current?.url
-            ? `<iframe id="embedIframe" src="${esc(current.url)}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="width:100%;aspect-ratio:16/9;border:0;border-radius:14px"></iframe>`
+          ${currentUrl
+            ? `<iframe id="embedIframe" src="${esc(currentUrl)}" allowfullscreen allow="autoplay; encrypted-media; picture-in-picture" style="width:100%;aspect-ratio:16/9;border:0;border-radius:14px"></iframe>`
             : `<div class="discovery-empty" style="padding:2rem">No stream listing for this episode through AniList yet.</div>`}
         </div>
         <div class="transport-bar">
