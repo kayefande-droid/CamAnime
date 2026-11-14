@@ -119,9 +119,27 @@ export function scoreTitle(query, candidate) {
     .map((p) => p.trim())
     .filter(Boolean);
   if (parts.length > 1) {
-    return Math.max(...parts.map((p) => scoreTitleSingle(query, p)));
+    const primary = scoreTitleSingle(query, parts[0]);
+    const alias = Math.max(...parts.slice(1).map((p) => scoreTitleSingle(query, p)));
+    // A trailing alias is the franchise abbreviation ("..., jjk"), so it
+    // matches every entry of that franchise. It may lift a score, never set
+    // it: uncapped, the second season and the movie both scored 100 for a
+    // search of the first season and one of them got picked.
+    return Math.max(primary, Math.min(alias, primary + 15));
   }
   return scoreTitleSingle(query, candidate);
+}
+
+/**
+ * True when the candidate is the query plus extra words ("... 2nd Season"),
+ * a plausible but provisional hit: keep searching for an exact page.
+ */
+export function isProvisionalMatch(query, candidate) {
+  const first = String(candidate || "").split(",")[0];
+  const needle = normalizeTitle(query);
+  const hay = normalizeTitle(first);
+  if (!needle || !hay || hay === needle) return false;
+  return hay.startsWith(needle) && hay.length > needle.length;
 }
 
 export function generateTitleVariants(titles) {
@@ -315,18 +333,46 @@ export async function heavenSearch(query) {
   return rows;
 }
 
-export async function heavenFindBestId(titles) {
+/**
+ * Full titles first, then prefix variants only if nothing matched. A provider
+ * publishes a show under one of its whole titles, so "Even", "Seitokai ni"
+ * cannot improve on the full strings and cost a request each.
+ */
+function matchCandidates(titles) {
+  const full = (titles || []).filter((t) => t && t.trim().length > 3);
+  const deduped = [...new Set(full.map((t) => t.trim()))];
+  return deduped.length ? deduped : generateTitleVariants(titles || []);
+}
+
+/**
+ * Search a provider for the anime's page.
+ *
+ * Some shows are listed under an alias our title list does not carry (a
+ * MAL-only English name). The provider's own search still ranks that page
+ * first for each of our titles, so when two different queries agree on the
+ * same top hit, that page is the one the provider publishes for this anime
+ * even though no string score clears the bar. One query alone is not enough
+ * to guess; the episode lookup later drops pages that lack the episode.
+ */
+async function searchWithConsensus(titles, search, idKey, minScore) {
   const list = (titles || []).filter(Boolean);
   if (!list.length) return null;
-  const variants = generateTitleVariants(list);
+  const candidates = matchCandidates(list);
   const all = new Map();
-  for (const variant of variants) {
-    const res = await heavenSearch(variant);
-    for (const item of res) all.set(item.id, item);
-    const confident = res.some((item) =>
-      Math.max(...list.map((t) => scoreTitle(t, item.title))) >= 85
+  const topHits = new Map();
+  for (const variant of candidates.slice(0, 6)) {
+    const res = await search(variant);
+    for (const item of res) all.set(item[idKey], item);
+    if (res.length) {
+      const top = res[0][idKey];
+      topHits.set(top, (topHits.get(top) || 0) + 1);
+    }
+    const confident = res.some(
+      (item) =>
+        scoreTitle(variant, item.title) >= 85 && !isProvisionalMatch(variant, item.title)
     );
     if (confident) break;
+    if (Math.max(0, ...topHits.values()) >= 2) break;
   }
   if (!all.size) return null;
   let best = { score: -1, item: null };
@@ -334,7 +380,20 @@ export async function heavenFindBestId(titles) {
     const score = Math.max(0, ...list.map((t) => scoreTitle(t, item.title)));
     if (score > best.score) best = { score, item };
   }
-  return best.score >= 55 ? best.item.id : null;
+  if (best.score >= minScore) return best.item[idKey];
+  let consensus = null;
+  let votes = 0;
+  for (const [id, count] of topHits) {
+    if (count > votes && all.has(id)) {
+      consensus = id;
+      votes = count;
+    }
+  }
+  return votes >= 2 ? consensus : null;
+}
+
+export async function heavenFindBestId(titles) {
+  return searchWithConsensus(titles, heavenSearch, "id", 55);
 }
 
 export function parseHeavenEpisodes(html) {
@@ -651,24 +710,7 @@ export async function anikotoSearch(query) {
 }
 
 export async function anikotoFindBestSlug(titles) {
-  const list = (titles || []).filter(Boolean);
-  if (!list.length) return null;
-  const all = new Map();
-  for (const variant of generateTitleVariants(list)) {
-    const res = await anikotoSearch(variant);
-    for (const item of res) all.set(item.slug, item);
-    const confident = res.some((item) =>
-      Math.max(...list.map((t) => scoreTitle(t, item.title))) >= 85
-    );
-    if (confident) break;
-  }
-  if (!all.size) return null;
-  let best = { score: -1, item: null };
-  for (const item of all.values()) {
-    const score = Math.max(0, ...list.map((t) => scoreTitle(t, item.title)));
-    if (score > best.score) best = { score, item };
-  }
-  return best.score >= 50 ? best.item.slug : null;
+  return searchWithConsensus(titles, anikotoSearch, "slug", 50);
 }
 
 export function parseAnikotoEpisodes(html) {

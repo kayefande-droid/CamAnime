@@ -148,10 +148,30 @@ def score_title(query: str, candidate: str) -> int:
     # Check if candidate contains comma-separated aliases (AnimeHeaven often formats "Jujutsu Kaisen 2nd Season, jjk")
     parts = [p.strip() for p in candidate.split(",") if p.strip()]
     if len(parts) > 1:
-        sub_scores = [score_title_single(query, p) for p in parts]
-        return max(sub_scores)
+        primary = score_title_single(query, parts[0])
+        alias = max(score_title_single(query, p) for p in parts[1:])
+        # A trailing alias is the franchise abbreviation ("..., jjk"), so it
+        # matches every entry of that franchise. It may lift a score, never set
+        # it: without the cap the second season and the movie scored 100 for a
+        # search of the first season and one of them got picked.
+        return max(primary, min(alias, primary + 15))
 
     return score_title_single(query, candidate)
+
+
+def is_provisional_match(query: str, candidate: str) -> bool:
+    """True when the candidate is the query plus extra words.
+
+    "Jujutsu Kaisen 2nd Season" for a search of "Jujutsu Kaisen" is a plausible
+    but provisional hit: an exact page may still appear under another spelling,
+    so the caller keeps searching instead of stopping here.
+    """
+    first = (candidate or "").split(",")[0]
+    needle = normalize_title(query)
+    hay = normalize_title(first)
+    if not needle or not hay or hay == needle:
+        return False
+    return hay.startswith(needle) and len(hay) > len(needle)
 
 
 def score_title_single(query: str, candidate: str) -> int:
@@ -454,9 +474,11 @@ class AnimeHeavenProvider(StreamingProvider):
             res = self.search(variant)
             for item in res:
                 all_results[item["id"]] = item
-            # Early stop if high-confidence match
+            # Early stop only on a confident match that is not merely this
+            # variant with extra words (a season/spin-off page).
             if any(
-                max(score_title(t, item["title"]) for t in titles if t) >= 85
+                score_title(variant, item["title"]) >= 85
+                and not is_provisional_match(variant, item["title"])
                 for item in res
             ):
                 break
@@ -967,7 +989,8 @@ class AnikotoProvider(StreamingProvider):
                 top_slug = res[0]["slug"]
                 top_hits[top_slug] = top_hits.get(top_slug, 0) + 1
             if any(
-                max(score_title(t, item["title"]) for t in titles if t) >= 85
+                score_title(variant, item["title"]) >= 85
+                and not is_provisional_match(variant, item["title"])
                 for item in res
             ):
                 break
