@@ -37,6 +37,22 @@ export const HEAVEN_BASE = "https://animeheaven.me";
 export const ANIKOTO_BASE = "https://anikoto.net";
 export const KIWI_BASE = "https://mapper.nekostream.site";
 
+/** Every provider an episode bundle must be able to offer.
+ *
+ * The owner's rule (AGENTS.md): a provider is never dropped because it is slow
+ * or because a scrape failed on one host. Missing names are a regression, so
+ * the bundle guard in the tests fails when one goes away.
+ */
+export const EXPECTED_PROVIDERS = ["animeheaven", "anikoto", "vidlink", "vidsrc"];
+
+/** Provider names absent from a bundle's server list. */
+export function missingProviders(bundle) {
+  const present = new Set(
+    ((bundle && bundle.servers) || []).map((s) => String((s && s.provider) || "").toLowerCase()),
+  );
+  return EXPECTED_PROVIDERS.filter((name) => !present.has(name));
+}
+
 const TYPE_INDICATOR_WORDS = new Set([
   "ova", "ona", "special", "specials", "movie", "film",
   "recap", "picture", "pv", "season", "part", "cour", "saga",
@@ -1106,11 +1122,23 @@ export async function episodeBundle({
     if (ep) {
       const list_ = await anikotoServers(anikotoSlug, episode, ep.data_ids);
       const resolvedPerAudio = { sub: 0, dub: 0 };
-      for (const srv of list_) {
+      // Same shape as the origin bundle: three servers per audio variant.
+      // Capping at two here and resolving them one at a time is why the mirror
+      // used to list fewer servers and fewer downloads than the origin.
+      const candidates = [];
+      for (const audioKey of ["sub", "dub"]) {
+        candidates.push(
+          ...list_.filter((s) => (s.type || "sub") === audioKey).slice(0, 3),
+        );
+      }
+      const resolvedStreams = await Promise.all(
+        candidates.map((srv) => resolveAnikotoServer(srv).catch(() => null)),
+      );
+      for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex += 1) {
+        const srv = candidates[candidateIndex];
+        const stream = resolvedStreams[candidateIndex];
         const audio = srv.type;
         if (!(audio in resolvedPerAudio)) continue;
-        if (resolvedPerAudio[audio] >= 2) continue;
-        const stream = await resolveAnikotoServer(srv);
         if (!stream) continue;
         resolvedPerAudio[audio] += 1;
         const subs = (stream.subtitles || []).map((s) => ({

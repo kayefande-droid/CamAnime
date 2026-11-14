@@ -249,7 +249,7 @@ export async function search(q, limit = 36) {
 
 export async function animeDetails(id) {
   const data = await al(
-    `query($id:Int){Media(id:$id,type:ANIME){idMal ${CARD_FIELDS}
+    `query($id:Int){Media(id:$id,type:ANIME){idMal ${CARD_FIELDS} synonyms
       streamingEpisodes { title thumbnail url site }
       nextAiringEpisode { episode airingAt }
       relations { edges { relationType node { id type title{romaji english} coverImage{large} format episodes } } }
@@ -273,6 +273,9 @@ export async function animeDetails(id) {
     ...base,
     mal_id: m.idMal ?? null,
     title_romaji: base.romaji,
+    // Alternate names the providers publish their copy under; the episode
+    // sources lookup matches Anikoto by any of them.
+    synonyms: (m.synonyms || []).filter(Boolean),
     seasons,
     next_airing: m.nextAiringEpisode || null,
     streaming_metadata: (m.streamingEpisodes || []).map((se, i) => ({
@@ -296,7 +299,12 @@ export async function episodeSources(id, ep, audio = "sub") {
   if (!anime) return null;
 
   const n = Math.max(1, ep | 0);
-  const titles = [anime.title, anime.romaji, anime.native].filter(Boolean);
+  const titles = [
+    anime.title,
+    anime.romaji,
+    anime.native,
+    ...(anime.synonyms || []),
+  ].filter(Boolean);
   const bundle = await episodeBundle({
     anilistId: Number(id) || 0,
     epNum: n,

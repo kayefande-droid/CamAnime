@@ -11,6 +11,8 @@ import {
   parseAnikotoServers,
   parseMegaplayScript,
   decryptMegaplayEnc,
+  EXPECTED_PROVIDERS,
+  missingProviders,
 } from "../src/providers.js";
 
 test("title scoring keeps the Python thresholds", () => {
@@ -102,4 +104,36 @@ test("AES-CBC enc payload decrypts to the HLS url", async () => {
   const url = await decryptMegaplayEnc(b64url, [keyBytes], [iv]);
   assert.equal(url, "https://cdn.example/master.m3u8");
   assert.equal(await decryptMegaplayEnc(b64url, [keyBytes], [new Uint8Array(16)]), null);
+});
+
+/** The owner's rule: a provider is never dropped from a bundle. These fixtures
+ *  mirror a real episode bundle, so deleting a provider from the builder fails
+ *  here instead of quietly vanishing from the player. */
+const completeBundle = () => ({
+  servers: [
+    { id: "heaven-mp4-1", provider: "animeheaven" },
+    { id: "anikoto-sub-hd-1-1", provider: "anikoto" },
+    { id: "anikoto-dub-hd-1-1", provider: "anikoto" },
+    { id: "embed-vidlink-sub", provider: "vidlink" },
+    { id: "embed-vidsrc-sub", provider: "vidsrc" },
+  ],
+  downloads: [{ label: "Episode 1 Direct MP4 (AnimeHeaven High-Speed)" }],
+});
+
+test("a complete bundle lists every expected provider", () => {
+  assert.deepEqual(missingProviders(completeBundle()), []);
+  assert.deepEqual(EXPECTED_PROVIDERS, ["animeheaven", "anikoto", "vidlink", "vidsrc"]);
+});
+
+test("losing a provider or its only mirror is a regression", () => {
+  for (const provider of EXPECTED_PROVIDERS) {
+    const bundle = completeBundle();
+    bundle.servers = bundle.servers.filter((s) => s.provider !== provider);
+    assert.deepEqual(missingProviders(bundle), [provider], `${provider} must not disappear`);
+  }
+  const heavenOnlyStub = completeBundle();
+  heavenOnlyStub.servers = heavenOnlyStub.servers.map((s) =>
+    s.provider === "animeheaven" ? { ...s, url: undefined } : s,
+  );
+  assert.deepEqual(missingProviders(heavenOnlyStub), [], "the provider still counts while listed");
 });

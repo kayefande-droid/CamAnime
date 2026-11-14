@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from threading import Lock, Thread
 from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urljoin, urlparse, urlsplit
 
 import requests
@@ -517,6 +517,10 @@ MEDIA_FRAGMENT = """
   id
   idMal
   title { romaji english native }
+  # AniList's synonyms are the alternate names the providers actually publish
+  # (e.g. Anikoto lists a show under its English alias), so provider matching
+  # gets them too instead of missing the title entirely.
+  synonyms
   description(asHtml: false)
   coverImage { large extraLarge color }
   bannerImage
@@ -1083,7 +1087,7 @@ def _media_titles(media: Dict) -> List[str]:
         value = (title.get(key) or "").strip()
         if value and value not in out:
             out.append(value)
-    for syn in (media.get("_synonyms") or []):
+    for syn in (media.get("_synonyms") or []) + (media.get("synonyms") or []):
         value = (syn or "").strip()
         if value and value not in out:
             out.append(value)

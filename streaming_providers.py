@@ -50,6 +50,21 @@ DEFAULT_UA = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
+# Providers an episode bundle must be able to offer. The owner's rule
+# (AGENTS.md) is that one is never dropped because it is slow or because a
+# scrape failed on a given host: the guard test fails instead.
+EXPECTED_STREAM_PROVIDERS = ("animeheaven", "anikoto", "vidlink", "vidsrc")
+
+
+def missing_stream_providers(bundle: Optional[Dict]) -> List[str]:
+    """Names of the expected providers absent from a bundle's server list."""
+    present = {
+        str((server or {}).get("provider") or "").lower()
+        for server in ((bundle or {}).get("servers") or [])
+    }
+    return [name for name in EXPECTED_STREAM_PROVIDERS if name not in present]
+
+
 def _new_session() -> requests.Session:
     """Pooled session that retries transient provider failures.
 
@@ -274,12 +289,30 @@ class AnimeHeavenProvider(StreamingProvider):
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
     )
 
+    # Smallest gap between two requests. Searching a title walks several
+    # spelling variants, and the player, download button and auto-next all hit
+    # the bundle at once, so a burst arrives in a few hundred milliseconds. A
+    # burst is exactly what the gate uses to recognise a crawler, and a blocked
+    # IP loses the provider for every visitor, so requests are paced like a
+    # person clicking through the site.
+    MIN_REQUEST_GAP = max(0.0, float(os.environ.get("CAMANIME_HEAVEN_MIN_GAP", "0.25")))
+
     def __init__(self, timeout: int = 12):
         super().__init__(timeout)
         self.base_url = "https://animeheaven.me"
         self.session = _new_session()
         self._warmed_at = 0.0
+        self._pace_lock = threading.Lock()
+        self._next_request_at = 0.0
         self.session.headers.update(self._stealth_headers())
+
+    def _throttle(self) -> None:
+        """Hold the caller until this provider's next allowed request slot."""
+        with self._pace_lock:
+            wait = self._next_request_at - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            self._next_request_at = time.time() + self.MIN_REQUEST_GAP + random.random() * 0.15
 
     def _stealth_headers(self, referer: str = "", ajax: bool = False) -> Dict[str, str]:
         """A believable browser request instead of one fixed scraper identity.
@@ -336,6 +369,7 @@ class AnimeHeavenProvider(StreamingProvider):
             if cookies:
                 headers["Cookie"] = cookies
             try:
+                self._throttle()
                 resp = self.session.get(url, headers=headers, timeout=self.timeout)
                 if resp.status_code in (403, 429, 503) and attempt == 0:
                     time.sleep(0.6 + random.random() * 0.9)
@@ -365,9 +399,12 @@ class AnimeHeavenProvider(StreamingProvider):
             return cached
 
         try:
+            self._warm_session()
+            self._throttle()
             resp = self.session.get(
                 f"{self.base_url}/fastsearch.php",
                 params={"xhr": 1, "s": q},
+                headers=self._stealth_headers(ajax=True),
                 timeout=self.timeout,
             )
             resp.raise_for_status()
@@ -905,17 +942,36 @@ class AnikotoProvider(StreamingProvider):
             return []
 
     def find_best_slug(self, titles: List[str]) -> Optional[str]:
-        variants = generate_title_variants(titles)
+        # Full titles first: an alias only ever matches on its whole string, so
+        # prefix variants ("Even", "Seitokai ni") are useless until every real
+        # title has been tried, and they are cheap to skip.
+        full_titles = [t.strip() for t in titles if (t or "").strip() and len(t.strip()) > 3]
+        variants = list(dict.fromkeys(full_titles)) or generate_title_variants(titles)
         all_results: Dict[str, Dict] = {}
+        # Anikoto lists some shows under an alias our title list does not carry
+        # (e.g. a MAL-only English title). Its search still ranks that page
+        # first, so when several distinct queries agree on the same top hit the
+        # page is the one the provider publishes for this anime, even though no
+        # string score is high enough to prove it. Two independent queries
+        # agreeing is the evidence; a single query is not enough to guess.
+        top_hits: Dict[str, int] = {}
 
-        for variant in variants:
+        # Consensus is accepted as soon as two queries agree, so a missed title
+        # costs two searches. Six is the hard cap so a bad title list cannot
+        # turn one bundle into a search storm.
+        for variant in variants[:6]:
             res = self.search(variant)
             for item in res:
                 all_results[item["slug"]] = item
+            if res:
+                top_slug = res[0]["slug"]
+                top_hits[top_slug] = top_hits.get(top_slug, 0) + 1
             if any(
                 max(score_title(t, item["title"]) for t in titles if t) >= 85
                 for item in res
             ):
+                break
+            if top_hits and max(top_hits.values()) >= 2:
                 break
 
         if not all_results:
@@ -929,7 +985,15 @@ class AnikotoProvider(StreamingProvider):
         scored.sort(key=lambda x: x[0], reverse=True)
         best_score, best_item = scored[0]
         if best_score < 50:
-            return None
+            consensus_slug, votes = max(top_hits.items(), key=lambda kv: kv[1])
+            if votes < 2 or consensus_slug not in all_results:
+                return None
+            best_item = all_results[consensus_slug]
+            logger.info(
+                f"[Anikoto] matched '{best_item['title']}' by search consensus "
+                f"(slug={consensus_slug}, votes={votes}, score={best_score})"
+            )
+            return consensus_slug
         logger.info(
             f"[Anikoto] matched '{best_item['title']}' (slug={best_item['slug']}, score={best_score})"
         )
@@ -1350,6 +1414,7 @@ class StreamingManager:
         self._mapping_cache_max = 128
         self._mapping_cache_ttl = 900
         self._mapping_cache_lock = threading.RLock()
+        self._jikan_cache: Dict[str, Tuple[float, List[str]]] = {}
         self.bundle_cache_ttl = _BUNDLE_CACHE_TTL
 
     def clear_caches(self) -> None:
@@ -1362,6 +1427,42 @@ class StreamingManager:
         for provider in self.providers.values():
             with provider._cache_lock:
                 provider.cache.clear()
+
+    def _jikan_titles(self, mal_id: Optional[int]) -> List[str]:
+        """English/Japanese titles MyAnimeList holds for an id.
+
+        Used only when a provider did not match anything: Anikoto sometimes
+        lists a show under a title AniList does not carry (its own English
+        alias), and MAL usually has that alias. The lookup is cached for six
+        hours, so a retry costs nothing after the first miss.
+        """
+        if not mal_id:
+            return []
+        cache_key = f"jikan_titles_{mal_id}"
+        hit = self._jikan_cache.get(cache_key)
+        if hit and time.time() - hit[0] < 6 * 3600:
+            return hit[1]
+        titles: List[str] = []
+        try:
+            resp = requests.get(
+                f"https://api.jikan.moe/v4/anime/{int(mal_id)}",
+                timeout=6,
+            )
+            if resp.ok:
+                data = resp.json().get("data") or {}
+                for key in ("title_english", "title", "title_japanese"):
+                    value = (data.get(key) or "").strip()
+                    if value:
+                        titles.append(value)
+                for value in data.get("title_synonyms") or []:
+                    value = (value or "").strip()
+                    if value:
+                        titles.append(value)
+        except Exception:
+            logger.debug("[mapping] Jikan title fallback failed", exc_info=True)
+        titles = list(dict.fromkeys(titles))
+        self._jikan_cache[cache_key] = (time.time(), titles)
+        return titles
 
     def resolve_anime_mapping(
         self,
@@ -1391,6 +1492,18 @@ class StreamingManager:
                     self.animeheaven.find_best_id, clean_titles
                 ).result()
             anikoto_slug = ak_future.result()
+
+        # One provider may publish the show under an alias AniList does not
+        # list. When nothing matched, ask MAL for its titles and retry once;
+        # this is the miss path only, so a normal bundle pays no extra latency.
+        if not anikoto_slug and mal_id:
+            extra_titles = [t for t in self._jikan_titles(mal_id) if t not in clean_titles]
+            if extra_titles:
+                anikoto_slug = self.anikoto.find_best_slug(clean_titles + extra_titles)
+        if not heaven_id and mal_id:
+            extra_titles = [t for t in self._jikan_titles(mal_id) if t not in clean_titles]
+            if extra_titles:
+                heaven_id = self.animeheaven.find_best_id(clean_titles + extra_titles)
 
         mapping = {
             "anilist_id": anilist_id,
@@ -1442,50 +1555,68 @@ class StreamingManager:
         heaven_info = None
 
         # 1. AnimeHeaven Direct MP4 Stream & Direct Download
-        if heaven_id:
-            heaven_info = self.animeheaven.get_anime_info(heaven_id)
-            if heaven_info and heaven_info.get("episodes"):
-                eps = heaven_info["episodes"]
-                target_ep = next(
-                    (e for e in eps if int(round(float(e["num"]))) == int(ep_num)),
-                    None,
-                )
-                if target_ep:
-                    heaven_ep_key = target_ep["key"]
-                    st = self.animeheaven.get_streaming_sources(heaven_ep_key, referer_site_id=heaven_id)
-                    for idx, src in enumerate(st.get("sources", [])):
-                        _ref = src.get('referer', 'https://animeheaven.me/')
-                        proxy_url = f"/api/proxy/video?url={quote(src['url'], safe='')}&ref={quote(_ref, safe='')}"
-                        dl_url = f"/api/download/video?url={quote(src['url'], safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num}', safe='')}&ref={quote(_ref, safe='')}"
-                        servers.append({
-                            "id": f"heaven-mp4-{idx+1}",
-                            "name": f"AnimeHeaven {('Primary' if idx == 0 else f'Mirror {idx+1}')}",
-                            "provider": "animeheaven",
-                            "audio": "sub",
-                            "playback_mode": "mp4",
-                            "stream_url": proxy_url,
-                            "raw_url": src["url"],
-                            "download_url": dl_url,
-                            # The provider does not publish a pixel height for
-                            # this file, so none is claimed here.
-                            "quality": "Source MP4",
-                            "height": 0,
-                            "subtitles": [],
-                            "badge": "DIRECT MP4",
-                        })
-                        if idx == 0:
-                            downloads.append({
-                                "label": f"Episode {ep_num} Direct MP4 (AnimeHeaven High-Speed)",
-                                "quality": "Source MP4",
-                                "height": 0,
-                                "audio": "SUB",
-                                "url": dl_url,
-                                "direct": True,
-                                "provider": "AnimeHeaven",
-                            })
+        def _heaven_branch() -> Tuple[List[Dict], List[Dict], Optional[str]]:
+            """AnimeHeaven: details page, gate and mp4 mirrors.
+
+            Returns rather than mutating the shared lists so it can run beside
+            the Anikoto branch below: the two providers are independent, and
+            running them one after the other made the first play wait for both
+            scrapes in series.
+            """
+            _servers: List[Dict] = []
+            _downloads: List[Dict] = []
+            _ep_key = None
+            if not heaven_id:
+                return _servers, _downloads, _ep_key
+            info = self.animeheaven.get_anime_info(heaven_id)
+            if not (info and info.get("episodes")):
+                return _servers, _downloads, _ep_key
+            target = next(
+                (e for e in info["episodes"] if int(round(float(e["num"]))) == int(ep_num)),
+                None,
+            )
+            if not target:
+                return _servers, _downloads, _ep_key
+            _ep_key = target["key"]
+            st = self.animeheaven.get_streaming_sources(_ep_key, referer_site_id=heaven_id)
+            for idx, src in enumerate(st.get("sources", [])):
+                _ref = src.get('referer', 'https://animeheaven.me/')
+                proxy_url = f"/api/proxy/video?url={quote(src['url'], safe='')}&ref={quote(_ref, safe='')}"
+                dl_url = f"/api/download/video?url={quote(src['url'], safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num}', safe='')}&ref={quote(_ref, safe='')}"
+                _servers.append({
+                    "id": f"heaven-mp4-{idx+1}",
+                    "name": f"AnimeHeaven {('Primary' if idx == 0 else f'Mirror {idx+1}')}",
+                    "provider": "animeheaven",
+                    "audio": "sub",
+                    "playback_mode": "mp4",
+                    "stream_url": proxy_url,
+                    "raw_url": src["url"],
+                    "download_url": dl_url,
+                    # The provider does not publish a pixel height for
+                    # this file, so none is claimed here.
+                    "quality": "Source MP4",
+                    "height": 0,
+                    "subtitles": [],
+                    "badge": "DIRECT MP4",
+                })
+                if idx == 0:
+                    _downloads.append({
+                        "label": f"Episode {ep_num} Direct MP4 (AnimeHeaven High-Speed)",
+                        "quality": "Source MP4",
+                        "height": 0,
+                        "audio": "SUB",
+                        "url": dl_url,
+                        "direct": True,
+                        "provider": "AnimeHeaven",
+                    })
+            return _servers, _downloads, _ep_key
 
         # 2. Anikoto / MegaPlay 1080p HLS (SUB & DUB) + Subtitles + Kiwi Downloads
-        if anikoto_slug:
+        def _anikoto_branch() -> Tuple[List[Dict], List[Dict]]:
+            _servers: List[Dict] = []
+            _downloads: List[Dict] = []
+            if not anikoto_slug:
+                return _servers, _downloads
             ak_eps = self.anikoto.get_episodes(anikoto_slug)
             ak_ep = next(
                 (e for e in ak_eps if int(round(float(e["num"]))) == int(ep_num)),
@@ -1510,7 +1641,27 @@ class StreamingManager:
                     _resolved_streams = list(
                         _pool.map(self.anikoto.resolve_server_stream, _candidates)
                     )
-                for srv, stream_data in zip(_candidates, _resolved_streams):
+                    # Fetch the HLS variant ladders at the same time: each
+                    # playlist probe is a second round trip, and doing them in
+                    # the loop below added a second or two per server on top of
+                    # the resolution itself.
+                    _ladder_targets = [
+                        (idx, sd)
+                        for idx, sd in enumerate(_resolved_streams)
+                        if sd and sd.get("m3u8")
+                    ]
+                    _ladders = list(
+                        _pool.map(
+                            lambda pair: self.anikoto.hls_heights(
+                                pair[1]["m3u8"], pair[1].get("referer", "")
+                            ),
+                            _ladder_targets,
+                        )
+                    )
+                _heights_by_index = {
+                    pair[0]: heights for pair, heights in zip(_ladder_targets, _ladders)
+                }
+                for _idx, (srv, stream_data) in enumerate(zip(_candidates, _resolved_streams)):
                     audio = srv.get("type", "sub")
                     if audio in resolved_per_audio:
                         if stream_data:
@@ -1526,7 +1677,7 @@ class StreamingManager:
                                 for s in (stream_data.get("subtitles") or [])
                             ]
                             if m3u8:
-                                heights = self.anikoto.hls_heights(m3u8, ref)
+                                heights = _heights_by_index.get(_idx) or []
                                 quality_label = (f"{heights[0]}p HLS" if heights
                                                  else "HLS source")
                                 badge = (f"{heights[0]}p {audio.upper()}" if heights
@@ -1536,7 +1687,7 @@ class StreamingManager:
                                 # playlist cannot be played offline, so the app must
                                 # receive a real media download.
                                 hls_dl = f"/api/download/hls?url={quote(m3u8, safe='')}&title={quote((titles[0] if titles else 'Anime') + f' - Ep {ep_num} {audio.upper()}', safe='')}&ref={quote(ref, safe='')}"
-                                servers.append({
+                                _servers.append({
                                     "id": f"anikoto-{audio}-{srv['name'].lower()}-{resolved_per_audio[audio]}",
                                     "name": f"CamStream {srv['name']} ({audio.upper()})",
                                     "provider": "anikoto",
@@ -1554,7 +1705,7 @@ class StreamingManager:
                                     "outro": stream_data.get("outro"),
                                     "badge": badge,
                                 })
-                                downloads.append({
+                                _downloads.append({
                                     "label": f"Episode {ep_num} {audio.upper()} Stream File (same as playing)",
                                     "quality": quality_label,
                                     "height": heights[0] if heights else 0,
@@ -1564,7 +1715,7 @@ class StreamingManager:
                                     "provider": f"CamStream {srv['name']}",
                                 })
                             elif stream_data.get("embed_url"):
-                                servers.append({
+                                _servers.append({
                                     "id": f"anikoto-embed-{audio}-{srv['name'].lower()}",
                                     "name": f"{srv['name']} Embed ({audio.upper()})",
                                     "provider": "anikoto",
@@ -1583,7 +1734,7 @@ class StreamingManager:
                     kiwi_dls = self.anikoto.get_kiwi_downloads(eff_mal, ep_num, eff_ts)
                     for audio_key, q_map in kiwi_dls.items():
                         for q_label, dl_link in q_map.items():
-                            downloads.append({
+                            _downloads.append({
                                 "label": f"Episode {ep_num} ({audio_key.upper()} · {q_label})",
                                 "quality": q_label,
                                 "height": media_height(q_label),
@@ -1592,6 +1743,20 @@ class StreamingManager:
                                 "direct": False,
                                 "provider": "AnimePahe / Kiwi Mirror",
                             })
+            return _servers, _downloads
+
+        # Both providers are independent scrapes, and each one takes seconds:
+        # run them together so a first play waits for the slower provider
+        # instead of the sum of both.
+        with ThreadPoolExecutor(max_workers=2) as _branch_pool:
+            _heaven_future = _branch_pool.submit(_heaven_branch)
+            _anikoto_future = _branch_pool.submit(_anikoto_branch)
+            _heaven_servers, _heaven_downloads, heaven_ep_key = _heaven_future.result()
+            _anikoto_servers, _anikoto_downloads = _anikoto_future.result()
+        servers.extend(_heaven_servers)
+        servers.extend(_anikoto_servers)
+        downloads.extend(_heaven_downloads)
+        downloads.extend(_anikoto_downloads)
 
         # A dubbed server is offered only when the provider lists that episode's
         # audio variant and resolves a real stream or provider player for it.
