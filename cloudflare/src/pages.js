@@ -40,7 +40,7 @@ function head(title, desc) {
      templates use for card badges and nav items. -->
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/base.css?v=20261112-ink">
+<link rel="stylesheet" href="/static/css/base.css?v=20261116-ep">
 <link rel="stylesheet" href="/static/css/sync.css?v=20261112-ink">
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261114-nav2">
 <link rel="stylesheet" href="/static/css/redesign.css?v=20261114-skin2">
@@ -263,7 +263,63 @@ export function searchGrid(q, items, userName) {
   return chrome(`Search ${q}`, `Search results for ${q} on CamAnime.`, userName, inner, "browse");
 }
 
-export function detailsPage(anime, ratingSummary, user) {
+/** Episode cards rendered per page on a rail. AniList titles can run past a
+ * thousand episodes, so the mirror paginates exactly like the Render origin. */
+const EPISODE_PAGE_SIZE = 48;
+
+/** Slice a rail to the `?eps=` page, clamped to the real range. */
+function episodePage(items, requested, focus) {
+  const total = items.length;
+  const pages = Math.max(1, Math.ceil(total / EPISODE_PAGE_SIZE));
+  let page = Number.parseInt(requested || "", 10);
+  if (!Number.isFinite(page) || page < 1) {
+    const at = focus == null ? -1 : items.findIndex((entry) => entry.n === focus);
+    page = at >= 0 ? Math.floor(at / EPISODE_PAGE_SIZE) + 1 : 1;
+  }
+  page = Math.min(Math.max(page, 1), pages);
+  const start = (page - 1) * EPISODE_PAGE_SIZE;
+  return {
+    total,
+    page,
+    pages,
+    start: total ? start + 1 : 0,
+    end: Math.min(start + EPISODE_PAGE_SIZE, total),
+    slice: items.slice(start, start + EPISODE_PAGE_SIZE),
+  };
+}
+
+/** Prev/numbers/next pager for a paginated rail. */
+function episodePager(pager, basePath, params) {
+  if (pager.pages <= 1) return "";
+  const href = (page) => {
+    const search = new URLSearchParams(params);
+    search.set("eps", String(page));
+    return esc(`${basePath}?${search.toString()}`);
+  };
+  const wanted = new Set([1, pager.pages]);
+  for (let n = Math.max(1, pager.page - 2); n <= Math.min(pager.pages, pager.page + 2); n += 1) {
+    wanted.add(n);
+  }
+  const numbers = [];
+  let previous = 0;
+  for (const n of [...wanted].sort((a, b) => a - b)) {
+    if (previous && n - previous > 1) numbers.push(`<span class="ep-pager-gap" aria-hidden="true">…</span>`);
+    numbers.push(
+      n === pager.page
+        ? `<span class="ep-pager-btn current" aria-current="page">${n}</span>`
+        : `<a class="ep-pager-btn" href="${href(n)}" aria-label="Episode page ${n}">${n}</a>`,
+    );
+    previous = n;
+  }
+  const prev = pager.page > 1 ? `<a class="ep-pager-btn" rel="prev" href="${href(pager.page - 1)}">Prev</a>` : "";
+  const next = pager.page < pager.pages ? `<a class="ep-pager-btn" rel="next" href="${href(pager.page + 1)}">Next</a>` : "";
+  return `<nav class="ep-pager" aria-label="Episode pages">
+      <span class="ep-pager-range">Episodes ${pager.start}–${pager.end} of ${pager.total}</span>
+      <div class="ep-pager-links">${prev}${numbers.join("")}${next}</div>
+    </nav>`;
+}
+
+export function detailsPage(anime, ratingSummary, user, eps) {
   const name = anime.title.english || anime.title.romaji;
   const inner = `
     <section class="anime-hero" style="display:flex;gap:1.5rem;flex-wrap:wrap">
@@ -281,25 +337,34 @@ export function detailsPage(anime, ratingSummary, user) {
     </section>
     <section><h2 class="section-title">Synopsis</h2><p class="ca-sub">${esc(String(anime.description || "").replace(/<[^>]*>/g, ""))}</p></section>
     <section><h2 class="section-title">Episodes</h2>
-      ${(anime.streamingEpisodes || []).length
-        ? `<div class="mini-grid">${anime.streamingEpisodes.map((se, i) => `
-            <a class="anime-card" href="/watch/${anime.id}/${i + 1}">
-              <span class="card-poster-wrap"><img src="${esc(se.thumbnail || anime.coverImage?.large || "")}" alt="Episode ${i + 1}" loading="lazy"></span>
-              <span class="card-title">${esc(se.title || "Episode " + (i + 1))}</span><span class="card-format">EP ${i + 1}</span>
-            </a>`).join("")}</div>`
-        : `<p class="discovery-empty">No per-episode stream data on AniList for this title — main catalogue episodes: ${anime.episodes ?? "?"}.</p>`}
+      ${(() => {
+        const entries = (anime.streamingEpisodes || []).map((se, i) => ({ n: i + 1, se }));
+        if (!entries.length) {
+          return `<p class="discovery-empty">No per-episode stream data on AniList for this title — main catalogue episodes: ${anime.episodes ?? "?"}.</p>`;
+        }
+        const pager = episodePage(entries, eps, null);
+        const cards = pager.slice.map(({ n, se }) => `
+            <a class="anime-card" href="/watch/${anime.id}/${n}">
+              <span class="card-poster-wrap"><img src="${esc(se.thumbnail || anime.coverImage?.large || "")}" alt="Episode ${n}" loading="lazy"></span>
+              <span class="card-title">${esc(se.title || "Episode " + n)}</span><span class="card-format">EP ${n}</span>
+            </a>`).join("");
+        return `<div class="mini-grid">${cards}</div>${episodePager(pager, `/anime/${anime.id}`, {})}`;
+      })()}
     </section>`;
   return chrome(name, `Watch ${name} on CamAnime — episodes, ratings, community.`, user?.name, inner, "browse", { bodyClass: "page-details" });
 }
 
 export function watchPage(ctx, user) {
-  const { anime, episodes, current, epNum } = ctx;
+  const { anime, episodes, current, epNum, eps } = ctx;
   // Play the provider bundle this deployment resolves, the same endpoint the
   // apps call. AniList's own links are third-party watch pages that refuse to be
   // framed, so they are only used as a fallback link, never as the player.
   const providerLink = current?.url ? current.url.replace(/^http:\/\//i, "https://") : "";
   const name = anime.title.english || anime.title.romaji || "Episode";
   const list = (episodes.length ? episodes : Array.from({ length: anime.episodes || 0 }, (_, i) => ({ n: i + 1, title: "Episode " + (i + 1), url: null })));
+  // Default to the page holding the episode being watched, so the rail opens
+  // around it instead of at episode 1 on a 1000-episode title.
+  const pager = episodePage(list, eps, epNum);
   const inner = `
     <div class="watch-container">
       <div class="player-column">
@@ -356,8 +421,9 @@ export function watchPage(ctx, user) {
         </div>
       </div>
       <aside class="episodes-rail">
-        <h2 class="section-title">Episodes</h2>
-        <div class="ep-grid">${list.map((e) => `<a class="ep-chip ${e.n === epNum ? "current" : ""}" href="/watch/${anime.id}/${e.n}">${e.n}</a>`).join("")}</div>
+        <h2 class="section-title">Episodes${pager.pages > 1 ? ` <span class="ep-pager-count">page ${pager.page} of ${pager.pages}</span>` : ""}</h2>
+        <div class="ep-grid">${pager.slice.map((e) => `<a class="ep-chip ${e.n === epNum ? "current" : ""}" href="/watch/${anime.id}/${e.n}">${e.n}</a>`).join("")}</div>
+        ${episodePager(pager, `/watch/${anime.id}/${epNum}`, {})}
       </aside>
     </div>
     <section id="ca-community" data-anime="${anime.id}" data-ep="${epNum}" class="ca-community">

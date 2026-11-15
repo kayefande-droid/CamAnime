@@ -23,6 +23,10 @@
     <meta name="twitter:image" content="{{ social_image }}">
     <meta name="twitter:image:alt" content="{{ anime.title }} anime poster">
     <link rel="canonical" href="https://camanime.onrender.com/anime/{{ anime.id }}">
+    {% if ep_pages > 1 %}
+    {% if ep_page > 1 %}<link rel="prev" href="https://camanime.onrender.com/anime/{{ anime.id }}?eps={{ ep_page - 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
+    {% if ep_page < ep_pages %}<link rel="next" href="https://camanime.onrender.com/anime/{{ anime.id }}?eps={{ ep_page + 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
+    {% endif %}
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"TVSeries","url":"https://camanime.onrender.com/anime/{{ anime.id }}","name":{{ anime.title | tojson }},"image":{{ social_image | tojson }},"description":{{ anime.description | tojson }}{% if anime.total_episodes is not none %},"numberOfEpisodes":{{ anime.total_episodes }}{% endif %}{% if anime.tags %},"genre":{{ anime.tags | tojson }}{% endif %}{% if anime.studio %},"productionCompany":{"@type":"Organization","name":{{ anime.studio | tojson }}}{% endif %}}
     </script>
@@ -667,13 +671,15 @@
                 <div class="panel-title">
                     <span class="accent-dot"></span>
                     Released episodes ({{ anime.episodes | length }})
+                    {% if ep_pages > 1 %}<span class="ep-pager-count">page {{ ep_page }} of {{ ep_pages }}</span>{% endif %}
                 </div>
                 <div class="ep-controls">
-                    <label class="sr-only" for="epSearchInput">Filter episodes by number or title</label>
+                    <label class="sr-only" for="epSearchInput">Jump to an episode number, or filter this page by title</label>
                     <input type="search" id="epSearchInput" class="ep-filter-input" placeholder="Jump to episode #..." aria-controls="epGrid" oninput="filterEpisodes(this.value)">
-                    <button type="button" class="nav-pill" id="reverseEpisodesButton" aria-pressed="false" onclick="reverseEpisodes()">
-                        <i class="fas fa-sort"></i> Reverse Order
-                    </button>
+                    <a class="nav-pill" id="reverseEpisodesButton"
+                       href="{{ url_for('details', anime_id=anime.id, eps=ep_page, order=None if ep_order == 'desc' else 'desc') }}">
+                        <i class="fas fa-sort"></i> {{ 'Chronological Order' if ep_order == 'desc' else 'Reverse Order' }}
+                    </a>
                 </div>
             </div>
 
@@ -681,7 +687,7 @@
             <div class="ep-grid" id="epGrid">
                 {% if not anime.episodes %}<p class="schedule-empty">No released episodes are confirmed yet. This will update when an episode airs or a provider lists it.</p>{% endif %}
                 <p class="ep-no-match" id="epNoMatch" role="status" hidden></p>
-                {% for ep in anime.episodes %}
+                {% for ep in ep_slice %}
                 <a href="/watch/{{ anime.id }}/{{ ep.num }}" class="ep-card" data-ep="{{ ep.num }}">
                     <div class="ep-card-top">
                         <span class="ep-num">EP {{ ep.num }}</span>
@@ -691,6 +697,29 @@
                 </a>
                 {% endfor %}
             </div>
+
+            {% if ep_pages > 1 %}
+            <nav class="ep-pager" aria-label="Episode pages">
+                <span class="ep-pager-range">Episodes {{ ep_start }}–{{ ep_end }} of {{ ep_total }}</span>
+                <div class="ep-pager-links">
+                    {% if ep_page > 1 %}
+                    <a class="ep-pager-btn" rel="prev" href="{{ url_for('details', anime_id=anime.id, eps=ep_page - 1, order='desc' if ep_order == 'desc' else None) }}" aria-label="Previous page of episodes">Prev</a>
+                    {% endif %}
+                    {% for link in ep_page_links %}
+                        {% if link is none %}
+                        <span class="ep-pager-gap" aria-hidden="true">…</span>
+                        {% elif link == ep_page %}
+                        <span class="ep-pager-btn current" aria-current="page">{{ link }}</span>
+                        {% else %}
+                        <a class="ep-pager-btn" href="{{ url_for('details', anime_id=anime.id, eps=link, order='desc' if ep_order == 'desc' else None) }}" aria-label="Episode page {{ link }}">{{ link }}</a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if ep_page < ep_pages %}
+                    <a class="ep-pager-btn" rel="next" href="{{ url_for('details', anime_id=anime.id, eps=ep_page + 1, order='desc' if ep_order == 'desc' else None) }}" aria-label="Next page of episodes">Next</a>
+                    {% endif %}
+                </div>
+            </nav>
+            {% endif %}
         </div>
 
         <!-- ─── YOUTUBE OFFICIAL TRAILER PREVIEW & DIRECT SEASON DOWNLOADER ─── -->
@@ -800,6 +829,10 @@
         image: {{ anime.image | tojson }},
         ep: 1
     };
+    // Only one page of episode cards is rendered, so the filter needs the full
+    // ordered number list to point at the page holding an off-screen episode.
+    const EP_NUMBERS = {{ ep_numbers | tojson }};
+    const EP_PAGE_SIZE = {{ ep_page_size }};
 
     function filterEpisodes(q) {
         const clean = q.trim().toLowerCase();
@@ -814,21 +847,30 @@
             if (matches) visible += 1;
         });
         const empty = document.getElementById('epNoMatch');
-        if (empty) {
-            empty.hidden = visible > 0 || !clean;
-            empty.textContent = visible ? '' : `No episode matches “${q.trim()}”.`;
+        if (!empty) return;
+        empty.replaceChildren();
+        empty.hidden = visible > 0 || !clean;
+        if (empty.hidden) return;
+        // Only one page of cards is in the DOM, so a real episode number that
+        // is not on this page gets a link to the page that holds it.
+        const wanted = /^\d+$/.test(clean) ? Number(clean) : -1;
+        const index = wanted === -1 ? -1 : EP_NUMBERS.indexOf(wanted);
+        if (index === -1) {
+            empty.textContent = `No episode matches “${q.trim()}”.`;
+            return;
         }
+        const target = Math.floor(index / EP_PAGE_SIZE) + 1;
+        empty.append(`EP ${wanted} is on page ${target}. `);
+        const link = document.createElement('a');
+        link.href = episodePageUrl(target);
+        link.textContent = `Go to page ${target}`;
+        empty.appendChild(link);
     }
 
-    let episodesReversed = false;
-    function reverseEpisodes() {
-        const grid = document.getElementById('epGrid');
-        if (!grid) return;
-        const cards = Array.from(grid.querySelectorAll('.ep-card'));
-        cards.reverse().forEach(card => grid.appendChild(card));
-        episodesReversed = !episodesReversed;
-        const button = document.getElementById('reverseEpisodesButton');
-        if (button) button.setAttribute('aria-pressed', String(episodesReversed));
+    function episodePageUrl(page) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('eps', String(page));
+        return url.pathname + url.search;
     }
 
     async function loadSeasonDownloads(siteId) {

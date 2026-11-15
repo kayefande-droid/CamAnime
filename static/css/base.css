@@ -511,6 +511,52 @@ section > .section-title:first-child { margin-top: .2rem; }
 
 .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: .4rem; }
 
+/* Episode pagination: the long rails render one page at a time, so the pager
+   is the only way further episodes are reachable. */
+.ep-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  flex-wrap: wrap;
+  margin-top: .9rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, .08));
+}
+
+.ep-pager.compact { font-size: .78rem; }
+
+.ep-pager-range { color: var(--text-secondary); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.ep-pager-count { margin-left: .5rem; color: var(--text-secondary); font-family: var(--ca-font-mono); font-size: .7rem; font-weight: 500; }
+.ep-pager-links { display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
+
+.ep-pager-btn {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0 .5rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, .08));
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-family: var(--ca-font-mono);
+  font-size: .8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.ep-pager-btn:hover { color: var(--text); border-color: rgba(var(--accent-rgb, 255, 179, 71), .5); }
+
+.ep-pager-btn.current {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ep-pager-gap { color: var(--text-muted); padding: 0 .15rem; }
+
 .ep-chip {
   display: grid;
   place-items: center;

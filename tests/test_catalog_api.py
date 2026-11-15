@@ -891,3 +891,83 @@ def test_dub_availability_rejects_bad_ids(api):
     assert client.get("/api/v1/dub-availability?ids=abc").status_code == 400
     assert client.get("/api/v1/dub-availability?ids=-3").status_code == 400
     assert client.get("/api/v1/dub-availability?ids=" + ",".join(["1"] * 25)).status_code == 400
+
+
+def _provider_episode_list(count):
+    return [{"num": n, "key": f"episode-{n}"} for n in range(1, count + 1)]
+
+
+def _paged_details(api, client, path, count=120):
+    raw = anime()
+    raw.update({"status": "FINISHED", "episodes": count, "nextAiringEpisode": None})
+    with patch.object(api, "fetch_anilist", return_value={"Media": raw}), \
+         patch.object(api.streaming_manager, "resolve_anime_mapping",
+                      return_value={"heaven_id": "matched"}), \
+         patch.object(api.streaming_manager.animeheaven, "get_anime_info",
+                      return_value={"episodes": _provider_episode_list(count)}), \
+         patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
+        return client.get(path)
+
+
+def test_details_renders_one_page_of_a_long_episode_list(api):
+    client = api.app.test_client()
+    first = _paged_details(api, client, "/anime/123")
+    second = _paged_details(api, client, "/anime/123?eps=2")
+    beyond = _paged_details(api, client, "/anime/123?eps=999")
+
+    first_html = first.get_data(as_text=True)
+    assert first.status_code == 200
+    assert 'data-ep="48"' in first_html
+    assert 'data-ep="49"' not in first_html
+    assert "Episodes 1–48 of 120" in first_html
+    assert 'href="/anime/123?eps=2"' in first_html
+    assert '<link rel="next" href="https://camanime.onrender.com/anime/123?eps=2">' in first_html
+
+    second_html = second.get_data(as_text=True)
+    assert 'data-ep="49"' in second_html and 'data-ep="96"' in second_html
+    assert 'data-ep="97"' not in second_html
+    assert 'rel="prev"' in second_html and "?eps=3" in second_html
+
+    # A hand-typed page past the end shows the last full page, not an empty grid.
+    beyond_html = beyond.get_data(as_text=True)
+    assert 'data-ep="120"' in beyond_html
+    assert "Episodes 97–120 of 120" in beyond_html
+    assert 'href="/anime/123?eps=4"' not in beyond_html
+
+
+def test_details_reverse_order_pages_the_list_newest_first(api):
+    html = _paged_details(api, api.app.test_client(), "/anime/123?order=desc").get_data(as_text=True)
+    assert 'data-ep="120"' in html and 'data-ep="73"' in html
+    assert 'data-ep="72"' not in html
+    # The pager keeps the chosen order on every page.
+    assert "?eps=2&amp;order=desc" in html
+
+
+def test_watch_rail_opens_on_the_page_holding_the_current_episode(api):
+    client = api.app.test_client()
+    raw = anime()
+    raw.update({"status": "FINISHED", "episodes": 120, "nextAiringEpisode": None})
+    episodes = [{"num": n, "data_ids": f"data-{n}"} for n in range(1, 121)]
+    server = {"name": "Sub", "type": "sub", "link_id": "sub-id", "slug": "matched", "ep_num": 100}
+    with patch.object(api, "fetch_anilist", return_value={"Media": raw}), \
+         patch.object(api.streaming_manager, "resolve_anime_mapping",
+                      return_value={"anikoto_slug": "matched"}), \
+         patch.object(api.streaming_manager.animeheaven, "get_anime_info", return_value=None), \
+         patch.object(api.streaming_manager.anikoto, "get_episodes", return_value=episodes), \
+         patch.object(api.streaming_manager.anikoto, "get_servers", return_value=[server]), \
+         patch.object(api.streaming_manager.anikoto, "resolve_server_stream",
+                      return_value={"m3u8": "https://media.example/sub.m3u8", "subtitles": []}), \
+         patch.object(api.streaming_manager.youtube, "get_trailer_id", return_value=None):
+        default = client.get("/watch/123/100")
+        first = client.get("/watch/123/100?eps=1")
+
+    default_html = default.get_data(as_text=True)
+    assert default.status_code == 200
+    assert 'data-ep="97"' in default_html and 'data-ep="120"' in default_html
+    assert 'data-ep="96"' not in default_html
+    assert "Episodes 97–120 of 120" in default_html
+    assert 'aria-current="page">3 / 3' in default_html
+
+    first_html = first.get_data(as_text=True)
+    assert 'data-ep="1"' in first_html and 'data-ep="48"' in first_html
+    assert 'data-ep="49"' not in first_html

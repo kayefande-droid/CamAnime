@@ -665,7 +665,7 @@
             <input type="text" class="ep-search-box" placeholder="Filter episode number..." oninput="filterRailEpisodes(this.value)">
             <div class="ep-rail-list" id="epRailList">
                 {% if not anime.episodes %}<p class="schedule-empty">No released episodes are confirmed.</p>{% endif %}
-                {% for ep in anime.episodes %}
+                {% for ep in ep_slice %}
                 <a href="/watch/{{ anime.id }}/{{ ep.num }}?audio={{ preferred_audio }}"
                    class="ep-rail-item {{ 'current' if ep.num == ep_num else '' }}"
                    data-ep="{{ ep.num }}">
@@ -673,6 +673,20 @@
                 </a>
                 {% endfor %}
             </div>
+            {% if ep_pages > 1 %}
+            <nav class="ep-pager compact" aria-label="Episode pages">
+                <span class="ep-pager-range">Episodes {{ ep_start }}–{{ ep_end }} of {{ ep_total }}</span>
+                <div class="ep-pager-links">
+                    {% if ep_page > 1 %}
+                    <a class="ep-pager-btn" rel="prev" href="{{ url_for('watch', anime_id=anime.id, ep_num=ep_num, audio=preferred_audio, eps=ep_page - 1) }}" aria-label="Previous page of episodes">Prev</a>
+                    {% endif %}
+                    <span class="ep-pager-btn current" aria-current="page">{{ ep_page }} / {{ ep_pages }}</span>
+                    {% if ep_page < ep_pages %}
+                    <a class="ep-pager-btn" rel="next" href="{{ url_for('watch', anime_id=anime.id, ep_num=ep_num, audio=preferred_audio, eps=ep_page + 1) }}" aria-label="Next page of episodes">Next</a>
+                    {% endif %}
+                </div>
+            </nav>
+            {% endif %}
         </aside>
     </div>
 

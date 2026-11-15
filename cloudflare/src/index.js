@@ -532,11 +532,14 @@ async function pageRoutes(request, env, ctx, path) {
     const anime = await details(p1);
     if (!anime) throw new Error("anime not found");
     const summary = await (await api.ratingSummary(env, request, p1)).json();
-    return pageCachePut(request, html(detailsPage(anime, summary, user)), ctx);
+    const eps = url.searchParams.get("eps") || "";
+    return pageCachePut(request, html(detailsPage(anime, summary, user, eps)), ctx);
   }
 
   if (p0 === "watch" && p1 && p2) {
     const ctxAnime = await watchContext(p1, p2);
+    // The episode rail is paginated server-side; the page comes from the query.
+    ctxAnime.eps = url.searchParams.get("eps") || "";
     return html(watchPage(ctxAnime, user));
   }
 

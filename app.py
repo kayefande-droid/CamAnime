@@ -2074,6 +2074,59 @@ def search():
     )
 
 
+# Anime can run past a thousand episodes (One Piece), so the details and watch
+# pages render one page of episode links and expose the rest through a
+# crawlable `?eps=` parameter instead of shipping every card in the first
+# response.
+EPISODE_PAGE_SIZE = 48
+
+
+def _episode_page_links(page: int, pages: int) -> list:
+    """Page numbers for the pager, with None marking a skipped range."""
+    wanted = {1, pages}
+    wanted.update(range(max(1, page - 2), min(pages, page + 2) + 1))
+    links: list = []
+    previous = 0
+    for number in sorted(wanted):
+        if previous and number - previous > 1:
+            links.append(None)
+        links.append(number)
+        previous = number
+    return links
+
+
+def _episode_page(episodes: list, focus: Optional[int] = None) -> Dict:
+    """Slice an episode list to the page requested by `?eps=`.
+
+    Without an explicit page the watch rail opens on the page holding the
+    episode being watched. A stale or hand-typed number is clamped to the real
+    range, so a bad value shows a full page instead of an empty grid.
+    """
+    items = list(episodes)
+    numbers = [entry.get("num") for entry in items]
+    total = len(items)
+    pages = max(1, -(-total // EPISODE_PAGE_SIZE))
+    try:
+        page = int(request.args.get("eps", ""))
+    except (TypeError, ValueError):
+        page = 0
+    if page < 1 and focus is not None and focus in numbers:
+        page = numbers.index(focus) // EPISODE_PAGE_SIZE + 1
+    page = min(max(page or 1, 1), pages)
+    start = (page - 1) * EPISODE_PAGE_SIZE
+    return {
+        "ep_slice": items[start:start + EPISODE_PAGE_SIZE],
+        "ep_page": page,
+        "ep_pages": pages,
+        "ep_page_size": EPISODE_PAGE_SIZE,
+        "ep_total": total,
+        "ep_start": start + 1 if total else 0,
+        "ep_end": min(start + EPISODE_PAGE_SIZE, total),
+        "ep_page_links": _episode_page_links(page, pages),
+        "ep_numbers": numbers,
+    }
+
+
 def _details_provider_fallback(anime_id: int):
     """Last-resort details page: server cache + live provider listings only."""
     card = _fallback_card(anime_id)
@@ -2095,7 +2148,11 @@ def _details_provider_fallback(anime_id: int):
                      "heaven_key": None, "provider_listed": True,
                      "availability_label": "Provider episode listing found · playback not verified",
                      "added": ""} for i in confirmed_numbers]
-    return render_template("details.html", anime={
+    ep_order = "desc" if request.args.get("order") == "desc" else "asc"
+    ep_page = _episode_page(
+        list(reversed(episode_list)) if ep_order == "desc" else episode_list
+    )
+    return render_template("details.html", ep_order=ep_order, anime={
         **card, "tags": [], "episodes": episode_list, "relations": [],
         "recommendations": [], "characters": [],
         "heaven_id": mapping.get("heaven_id"),
@@ -2103,7 +2160,7 @@ def _details_provider_fallback(anime_id: int):
         "heaven_info": heaven_info,
         "anilist_unavailable": True,
         "total_episodes": None,
-    })
+    }, **ep_page)
 
 
 def _anilist_said_missing(query: str, variables: Optional[Dict] = None) -> bool:
@@ -2259,7 +2316,15 @@ def details(anime_id: int):
         "heaven_info": heaven_info,
     }
 
-    return render_template("details.html", anime=anime_payload)
+    # Newest-first listing is a server-side view of the same list, so the pager
+    # keeps its meaning instead of reversing only the cards on screen.
+    ep_order = "desc" if request.args.get("order") == "desc" else "asc"
+    ep_page = _episode_page(
+        list(reversed(episode_list)) if ep_order == "desc" else episode_list
+    )
+
+    return render_template("details.html", anime=anime_payload,
+                           ep_order=ep_order, **ep_page)
 
 
 @app.route("/watch/<int:anime_id>/<int:ep_num>")
@@ -2425,6 +2490,8 @@ def watch(anime_id: int, ep_num: int):
         preferred_audio=preferred_audio,
         prev_ep={"id": previous_number, "num": previous_number} if previous_number else None,
         next_ep={"id": next_number, "num": next_number} if next_number else None,
+        # The rail opens on the page that holds the episode being watched.
+        **_episode_page(episodes, focus=ep_num),
     )
 
 
