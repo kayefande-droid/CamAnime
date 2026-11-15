@@ -588,6 +588,55 @@ async function heavenSourcesFromRender(animeId, episode) {
   }
 }
 
+/** Rewrite an origin proxy link so it is served by this worker, not Render. */
+function localProxyPath(u) {
+  const s = String(u || "");
+  return s.startsWith("https://camanime.onrender.com/api/")
+    ? s.slice("https://camanime.onrender.com".length)
+    : s;
+}
+
+/**
+ * The origin's full episode bundle, used only as a safety net.
+ *
+ * AnimeHeaven's gate and some CDNs refuse Cloudflare egress, and new or
+ * ongoing titles are exactly the ones with no cached fallback. Render runs the
+ * same extractors from a network they do not block, so when this edge resolved
+ * no playable file the origin's servers are adopted here — with their proxy
+ * links rewritten to this worker, so playback and downloads still run on
+ * Cloudflare rather than sending the visitor to Render.
+ */
+async function renderMirrorBundle(animeId, episode, audioPref) {
+  if (!animeId) return { servers: [], downloads: [] };
+  try {
+    const res = await fetch(
+      `https://camanime.onrender.com/api/episode-sources/${animeId}/${episode}?audio=${audioPref}`,
+      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) return { servers: [], downloads: [] };
+    const data = await res.json();
+    const servers = (data.servers || [])
+      .filter((s) => s && s.stream_url)
+      .map((s) => ({
+        ...s,
+        stream_url: localProxyPath(s.stream_url),
+        download_url: localProxyPath(s.download_url),
+        subtitles: (s.subtitles || []).map((sub) => ({
+          ...sub,
+          url: localProxyPath(sub.url),
+        })),
+        mirrored_from: "render",
+        fallback: true,
+      }));
+    const downloads = (data.downloads || [])
+      .filter((d) => d && d.url)
+      .map((d) => ({ ...d, url: localProxyPath(d.url) }));
+    return { servers, downloads };
+  } catch {
+    return { servers: [], downloads: [] };
+  }
+}
+
 export async function heavenStreamSources(episodeKey, refererSiteId) {
   const key = `heaven_stream_${episodeKey}`;
   const hit = cacheGet(key);
@@ -1099,6 +1148,16 @@ export async function episodeBundle({
     anikotoFindBestSlug(list),
   ]);
 
+  // Both provider branches only need the ids above. Their first lookups start
+  // together so the player waits for the slower provider instead of for the
+  // sum of both, which is what made servers appear a beat late.
+  const heavenInfoPromise = heavenId
+    ? heavenAnimeInfo(heavenId).catch(() => null)
+    : Promise.resolve(null);
+  const anikotoEpisodesPromise = anikotoSlug
+    ? anikotoEpisodes(anikotoSlug).catch(() => [])
+    : Promise.resolve([]);
+
   const servers = [];
   const downloads = [];
   let heavenEpKey = null;
@@ -1142,7 +1201,7 @@ export async function episodeBundle({
   };
 
   if (heavenId) {
-    const info = await heavenAnimeInfo(heavenId);
+    const info = await heavenInfoPromise;
     const target = info?.episodes?.find((e) => Math.round(e.num) === episode);
     if (target) heavenEpKey = target.key;
     let resolved = { sources: [] };
@@ -1174,9 +1233,15 @@ export async function episodeBundle({
   }
 
   if (anikotoSlug) {
-    const eps = await anikotoEpisodes(anikotoSlug);
+    const eps = await anikotoEpisodesPromise;
     const ep = eps.find((e) => Math.round(e.num) === episode);
     if (ep) {
+      // Kiwi downloads only need the episode row, so they resolve while the
+      // servers do instead of adding another round trip at the end.
+      const effMal = ep.data_mal || (malId ? String(malId) : "");
+      const kiwiPromise = effMal && ep.data_timestamp
+        ? kiwiDownloads(effMal, episode, ep.data_timestamp).catch(() => ({}))
+        : Promise.resolve({});
       const list_ = await anikotoServers(anikotoSlug, episode, ep.data_ids);
       const resolvedPerAudio = { sub: 0, dub: 0 };
       // Same shape as the origin bundle: three servers per audio variant.
@@ -1251,9 +1316,8 @@ export async function episodeBundle({
         }
       }
 
-      const effMal = ep.data_mal || (malId ? String(malId) : "");
       if (effMal && ep.data_timestamp) {
-        const kiwi = await kiwiDownloads(effMal, episode, ep.data_timestamp);
+        const kiwi = await kiwiPromise;
         for (const [audioKey, qualityMap] of Object.entries(kiwi)) {
           for (const [quality, link] of Object.entries(qualityMap)) {
             downloads.push({
@@ -1270,6 +1334,21 @@ export async function episodeBundle({
     }
   }
 
+  // Safety net for ongoing and new-season titles, which are the ones a blocked
+  // scrape leaves empty: adopt the origin bundle rather than show a dead
+  // player. A local server always wins; this only fills an empty slot.
+  if (!servers.some((s) => s.playback_mode === "mp4" || s.playback_mode === "hls")) {
+    const mirrored = await renderMirrorBundle(anilistId, episode, audioPref);
+    const seen = new Set(servers.map((s) => String(s.id || s.raw_url || s.stream_url)));
+    for (const s of mirrored.servers) {
+      const key = String(s.id || s.raw_url || s.stream_url);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      servers.push(s);
+    }
+    if (!downloads.length) downloads.push(...mirrored.downloads);
+  }
+
   const audioAvailability = {
     sub: servers.some((s) => s.audio === "sub"),
     dub: servers.some((s) => s.audio === "dub"),
@@ -1277,7 +1356,9 @@ export async function episodeBundle({
 
   const reserved = Number(anilistId) >= 900_000_000;
   const malEmbedId = malId || (reserved ? null : anilistId);
-  if (malEmbedId) {
+  // A mirrored origin bundle can already carry these embeds; the guard keeps
+  // one button per provider instead of listing the same server twice.
+  if (malEmbedId && !servers.some((s) => s.provider === "vidlink")) {
     servers.push({
       id: "embed-vidlink-sub",
       name: "VidLink Ultra (SUB)",
@@ -1291,7 +1372,7 @@ export async function episodeBundle({
       fallback: true,
     });
   }
-  if (!reserved) {
+  if (!reserved && !servers.some((s) => s.provider === "vidsrc")) {
     servers.push({
       id: "embed-vidsrc-sub",
       name: "VidSrc Pro (SUB)",

@@ -590,7 +590,11 @@ async function routeLocal(env, request, url, parts) {
       (url.searchParams.get("audio") || "sub").toLowerCase() === "dub" ? "dub" : "sub"
     );
     if (!bundle) return json({ error: "Anime not found" }, 404);
-    return json(bundle);
+    // Server lists change slowly; letting the edge answer repeats makes the
+    // player open on a warm copy instead of waiting for a fresh scrape.
+    return json(bundle, 200, {
+      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+    });
   }
 
   if (p1 === "trailer") {

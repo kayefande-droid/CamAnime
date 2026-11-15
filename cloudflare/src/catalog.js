@@ -47,6 +47,16 @@ export async function search(q) {
   return data.data.Page.media;
 }
 
+/** TV or movie browse rail for the header filters Render exposes. */
+export async function byFormat(format) {
+  const fmt = String(format || "").toUpperCase() === "MOVIE" ? "MOVIE" : "TV";
+  const data = await alQuery(
+    `query($f:MediaFormat){Page(perPage:42){media(type:ANIME,format:$f,isAdult:false,sort:POPULARITY_DESC){${CARD_FIELDS}}}}`,
+    { f: fmt }
+  );
+  return data.data.Page.media;
+}
+
 export async function details(id) {
   const data = await alQuery(
     `query($id:Int){Media(id:$id,type:ANIME){${CARD_FIELDS}

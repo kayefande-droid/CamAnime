@@ -45,6 +45,9 @@ function head(title, desc) {
 <link rel="stylesheet" href="/static/css/header-layout.css?v=20261114-nav2">
 <link rel="stylesheet" href="/static/css/redesign.css?v=20261114-skin2">
 <link href="/static/css/motion.css?v=20261111-motion3" rel="stylesheet">
+<!-- The Render templates load this on every page; the mirror loads the same
+     file so the two hosts cannot drift in home-page styling. -->
+<link rel="stylesheet" href="/static/css/home.css?v=20261116-home">
 <script src="/static/js/site.js?v=20261111-scroll" defer></script>
 <script src="/static/js/motion.js?v=20261111-motion3" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.17/hls.min.js" defer></script>
@@ -66,7 +69,9 @@ export function chrome(title, desc, userName, inner, active = "home", opts = {})
       <a class="site-logo" href="/" aria-label="CamAnime — Watch, discover, enjoy"><img src="/static/brand/camanime-logo.svg" alt="CamAnime — Watch • Discover • Enjoy"></a>
       <nav class="nav-links">
         <a class="nav-link ${active === "home" ? "active" : ""}" href="/"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
-        <a class="nav-link ${active === "library" ? "active" : ""}" href="/library"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
+        <a class="nav-link" href="/?format=TV"><i class="fas fa-tv" aria-hidden="true"></i> TV Series</a>
+        <a class="nav-link" href="/?format=MOVIE"><i class="fas fa-film" aria-hidden="true"></i> Movies</a>
+        <a class="nav-link scraper-pill" href="/scraper"><span class="live-dot" aria-hidden="true"></span> AnimeHeaven Scraper &amp; Downloader</a>
         <a class="nav-link ${active === "download" ? "active" : ""}" href="/download"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
         <a class="nav-link ${active === "settings" ? "active" : ""}" href="/settings"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
         <a class="nav-link ${active === "dev" ? "active" : ""}" href="/developers"><i class="fas fa-code" aria-hidden="true"></i> Developers</a>
@@ -79,10 +84,16 @@ export function chrome(title, desc, userName, inner, active = "home", opts = {})
         <input type="search" name="q" class="search-input" aria-label="Search anime catalogue" placeholder="Search anime, seasons, movies..." required>
         <button type="submit" class="search-btn" aria-label="Submit anime search"><i class="fas fa-search" aria-hidden="true"></i></button>
       </form>
+      <a class="btn-watchlist-Trigger" href="/library" style="text-decoration:none" aria-label="Open your watchlist">
+        <i class="fas fa-bookmark" aria-hidden="true"></i> <span class="wl-label">Watchlist</span>
+      </a>
     </div>
   </div>
   <nav class="mobile-nav" id="mobileNav" aria-label="Menu">
     <a href="/" class="${active === "home" ? "active" : ""}"><i class="fas fa-compass" aria-hidden="true"></i> Discover</a>
+    <a href="/?format=TV"><i class="fas fa-tv" aria-hidden="true"></i> TV Series</a>
+    <a href="/?format=MOVIE"><i class="fas fa-film" aria-hidden="true"></i> Movies</a>
+    <a href="/scraper"><i class="fas fa-bolt" aria-hidden="true"></i> AnimeHeaven Scraper &amp; Downloader</a>
     <a href="/library" class="${active === "library" ? "active" : ""}"><i class="fas fa-bookmark" aria-hidden="true"></i> My Library</a>
     <a href="/download" class="${active === "download" ? "active" : ""}"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Apps</a>
     <a href="/settings" class="${active === "settings" ? "active" : ""}"><i class="fas fa-cog" aria-hidden="true"></i> Settings</a>
@@ -245,7 +256,27 @@ export function homePage(grids, userName) {
     ${section("Airing this season", "Currently airing, highest rated first", grids.airing || [])}
     ${section("Popular movies", "Most followed anime films", grids.movies || [])}
   `;
-  return chrome("Watch anime free", "CamAnime on Cloudflare: trending anime, search, watch pages and the community forum.", userName, inner);
+  return chrome("Watch anime free", "CamAnime on Cloudflare: trending anime, search, watch pages and the community forum.", userName, inner, "home");
+}
+
+/** TV / movie browse view for the filters the Render header exposes. */
+export function browsePage(format, items, userName) {
+  const isMovie = format === "MOVIE";
+  const label = isMovie ? "Anime movies" : "TV series";
+  const inner = `
+    <section class="section-block">
+      <div class="section-head">
+        <div class="section-title-wrap">
+          <span class="section-accent-bar" aria-hidden="true"></span>
+          <h2 class="section-title">${esc(label)}</h2>
+          <span class="section-subtitle">${isMovie ? "Most followed films" : "Most popular series"} on AniList</span>
+        </div>
+      </div>
+      ${items.length
+        ? `<div class="anime-grid">${items.map(card).join("")}</div>`
+        : `<div class="discovery-empty">No titles answered for this filter right now.</div>`}
+    </section>`;
+  return chrome(label, `${label} streaming on CamAnime.`, userName, inner, "browse");
 }
 
 export function searchGrid(q, items, userName) {
@@ -380,58 +411,254 @@ export function watchPage(ctx, user) {
           <video id="caPlayer" class="ca-player" controls playsinline preload="metadata"
             poster="${esc(anime.bannerImage || anime.coverImage?.extraLarge || "")}"
             style="width:100%;aspect-ratio:16/9;background:#000;border-radius:14px"></video>
+          <iframe id="caFrame" title="Provider player" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen style="display:none;width:100%;aspect-ratio:16/9;border:0;border-radius:14px;background:#000"></iframe>
           <p class="discovery-empty" id="caPlayerMsg" style="display:none;padding:1rem"></p>
         </div>
-        <div id="caServers" class="ca-servers" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0"></div>
-        <p id="caDownloads" style="margin:.4rem 0"></p>
+        <div id="caServers" class="ca-servers" aria-live="polite" aria-busy="true" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0">
+          <span class="ctrl-btn" style="opacity:.55;cursor:default" data-skeleton>AnimeHeaven…</span>
+          <span class="ctrl-btn" style="opacity:.55;cursor:default" data-skeleton>MegaPlay / Anikoto…</span>
+          <span class="ctrl-btn" style="opacity:.55;cursor:default" data-skeleton>VidLink…</span>
+          <span class="ctrl-btn" style="opacity:.55;cursor:default" data-skeleton>VidSrc…</span>
+          <span style="font-size:.78rem;color:var(--text-muted);align-self:center" data-skeleton>Loading servers…</span>
+        </div>
+        <p id="caServerNote" style="margin:.2rem 0;font-size:.78rem;color:var(--text-muted)"></p>
+        <p id="caDownloads" style="margin:.4rem 0;font-size:.82rem;color:var(--text-muted)">Loading downloads…</p>
         <script>
-        (async () => {
-          const video = document.getElementById("caPlayer");
-          const msg = document.getElementById("caPlayerMsg");
-          const serversEl = document.getElementById("caServers");
-          const dlEl = document.getElementById("caDownloads");
-          const fail = (text) => { msg.textContent = text; msg.style.display = "block"; };
-          const absUrl = (u) => (u && u.startsWith("http") ? u : (u ? location.origin + u : ""));
-          let hls = null;
-          const play = (server) => {
-            if (hls) { hls.destroy(); hls = null; }
-            const url = absUrl(server.stream_url);
-            if (!url) return fail("No playable source on this server.");
+        (function () {
+          var animeId = "${anime.id}";
+          var epNum = ${Number(epNum) || 1};
+          var audio = "sub";
+          var video = document.getElementById("caPlayer");
+          var frame = document.getElementById("caFrame");
+          var msg = document.getElementById("caPlayerMsg");
+          var serversEl = document.getElementById("caServers");
+          var noteEl = document.getElementById("caServerNote");
+          var dlEl = document.getElementById("caDownloads");
+          var cacheKey = "camanime-src:v2:" + animeId + ":" + epNum + ":" + audio;
+          var originPlayer = "https://camanime.onrender.com/watch/" + animeId + "/" + epNum;
+          var hls = null;
+          var inflight = {};
+
+          function absUrl(u) { return (u && u.indexOf("http") === 0) ? u : (u ? location.origin + u : ""); }
+          function note(text) { noteEl.textContent = text || ""; }
+          function fail(text) { msg.textContent = text; msg.style.display = "block"; }
+
+          function clearStage() {
+            if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+            frame.style.display = "none";
+            frame.removeAttribute("src");
+            video.style.display = "block";
+            try { video.pause(); } catch (e) {}
+          }
+
+          function play(server) {
+            clearStage();
             msg.style.display = "none";
-            if (server.playback_mode === "iframe") return fail("This server only plays in its own page. Use the server link below.");
-            if (server.playback_mode === "hls" || url.indexOf(".m3u8") !== -1) {
-              if (video.canPlayType("application/vnd.apple.mpegurl")) { video.src = url; return; }
+            msg.textContent = "";
+            var url = absUrl(server.stream_url);
+            if (!url) { fail("This server returned no link. Pick another server below."); return; }
+            if (server.playback_mode === "iframe") {
+              frame.src = url;
+              frame.style.display = "block";
+              video.style.display = "none";
+              note("");
+              var open = document.createElement("a");
+              open.href = url;
+              open.target = "_blank";
+              open.rel = "noopener";
+              open.textContent = "open " + (server.name || "the server") + " in a new tab";
+              noteEl.appendChild(document.createTextNode("Playing in the provider's embed. If it stays blank, "));
+              noteEl.appendChild(open);
+              noteEl.appendChild(document.createTextNode("."));
+              return;
+            }
+            if (server.playback_mode === "hls" || url.indexOf("/api/proxy/hls") !== -1) {
               if (window.Hls && window.Hls.isSupported()) {
                 hls = new window.Hls({ maxBufferLength: 30 });
+                hls.on(window.Hls.Events.ERROR, function (evt, data) {
+                  if (data && data.fatal) note("This stream stalled. Try another server below.");
+                });
                 hls.loadSource(url);
                 hls.attachMedia(video);
                 return;
               }
-              return fail("This browser cannot play HLS here.");
+              if (video.canPlayType("application/vnd.apple.mpegurl")) { video.src = url; return; }
+              fail("This browser cannot play HLS here. Pick an MP4 server or open the server page.");
+              return;
             }
             video.src = url;
-          };
-          try {
-            const res = await fetch("/api/episode-sources/${anime.id}/${epNum}?audio=sub", { headers: { accept: "application/json" } });
-            const data = await res.json();
-            const servers = data.servers || [];
-            if (!servers.length) return fail("No playable source for this episode yet.");
-            const active = data.active_server || servers[0];
-            servers.forEach((s) => {
-              const b = document.createElement("button");
+            var attempt = video.play();
+            if (attempt && attempt.catch) attempt.catch(function () {});
+          }
+
+          function renderServers(servers, active) {
+            serversEl.innerHTML = "";
+            serversEl.removeAttribute("aria-busy");
+            if (!servers.length) {
+              var empty = document.createElement("span");
+              empty.style.cssText = "font-size:.82rem;color:var(--text-muted)";
+              empty.textContent = "No server answered yet.";
+              serversEl.appendChild(empty);
+              return;
+            }
+            servers.forEach(function (s, i) {
+              var b = document.createElement("button");
               b.type = "button";
               b.className = "ctrl-btn";
-              b.textContent = s.name || s.label || s.provider || "Server";
-              b.addEventListener("click", () => play(s));
+              b.textContent = s.name || s.label || s.provider || ("Server " + (i + 1));
+              if (s === active) b.setAttribute("aria-current", "true");
+              b.addEventListener("click", function () { play(s); });
               serversEl.appendChild(b);
             });
-            const links = (data.downloads || []).filter((d) => d && d.url).map((d) => '<a class="ctrl-btn" href="' + absUrl(d.url) + '" download>' + (d.label || d.quality || "Download").replace(/</g, "&lt;") + '</a>');
-            if (data.download_url && !links.length) links.push('<a class="ctrl-btn" href="' + absUrl(data.download_url) + '" download>Download episode</a>');
-            dlEl.innerHTML = links.join(" ");
-            play(active);
-          } catch (err) {
-            fail("The provider bundle did not answer. Try again, or open the origin player.");
           }
+
+          function renderDownloads(data) {
+            dlEl.innerHTML = "";
+            var rows = (data.downloads || []).filter(function (d) { return d && d.url; });
+            if (!rows.length && data.download_url) rows = [{ label: "Download episode", url: data.download_url }];
+            if (!rows.length) { dlEl.textContent = "No direct download for this episode yet."; return; }
+            rows.slice(0, 10).forEach(function (d, i) {
+              var a = document.createElement("a");
+              a.className = "ctrl-btn";
+              a.href = absUrl(d.url);
+              a.setAttribute("download", "");
+              a.textContent = d.label || d.quality || ("Download " + (i + 1));
+              dlEl.appendChild(a);
+              dlEl.appendChild(document.createTextNode(" "));
+            });
+          }
+
+          function readCache() {
+            try {
+              var raw = sessionStorage.getItem(cacheKey);
+              if (!raw) return null;
+              var hit = JSON.parse(raw);
+              if (!hit || !hit.at || Date.now() - hit.at > 30 * 60 * 1000) return null;
+              return hit.data || null;
+            } catch (e) { return null; }
+          }
+
+          function writeCache(data) {
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data: {
+                servers: data.servers || [],
+                downloads: data.downloads || [],
+                active_server: data.active_server || null,
+                download_url: data.download_url || ""
+              }}));
+            } catch (e) {}
+          }
+
+          function showEmpty(text) {
+            msg.textContent = "";
+            msg.style.display = "block";
+            msg.appendChild(document.createTextNode(text + " "));
+            var retry = document.createElement("button");
+            retry.type = "button";
+            retry.className = "ctrl-btn";
+            retry.textContent = "Retry";
+            retry.addEventListener("click", function () {
+              msg.style.display = "none";
+              serversEl.setAttribute("aria-busy", "true");
+              load();
+            });
+            var link = document.createElement("a");
+            link.className = "ctrl-btn";
+            link.href = originPlayer;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "Open origin player";
+            msg.appendChild(retry);
+            msg.appendChild(document.createTextNode(" "));
+            msg.appendChild(link);
+          }
+
+          function load() {
+            var ctrl = window.AbortController ? new AbortController() : null;
+            var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 12000) : null;
+            var opts = { headers: { accept: "application/json" }, cache: "no-store" };
+            if (ctrl) opts.signal = ctrl.signal;
+            return fetch("/api/episode-sources/" + animeId + "/" + epNum + "?audio=" + audio, opts)
+              .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+              .then(function (data) {
+                if (timer) clearTimeout(timer);
+                var servers = data.servers || [];
+                renderServers(servers, data.active_server || servers[0]);
+                renderDownloads(data);
+                if (!servers.length) { showEmpty("No server has answered for this episode yet."); return; }
+                writeCache(data);
+                note("");
+                play(data.active_server || servers[0]);
+                setTimeout(function () { prefetch(epNum + 1); }, 1400);
+              })
+              .catch(function () {
+                if (timer) clearTimeout(timer);
+                var cached = readCache();
+                if (cached && cached.servers && cached.servers.length) {
+                  renderServers(cached.servers, cached.active_server);
+                  renderDownloads(cached);
+                  note("Saved servers — live refresh failed. Tap a server to retry.");
+                  play(cached.active_server || cached.servers[0]);
+                  return;
+                }
+                renderServers([], null);
+                dlEl.textContent = "Downloads appear once a server answers.";
+                showEmpty("Servers are taking too long to answer. This is not a missing episode.");
+              });
+          }
+
+          function prefetch(ep) {
+            if (!ep || ep < 1 || ep === epNum) return;
+            var k = "camanime-src:v2:" + animeId + ":" + ep + ":" + audio;
+            if (inflight[k]) return;
+            inflight[k] = true;
+            try { if (sessionStorage.getItem(k)) return; } catch (e) {}
+            fetch("/api/episode-sources/" + animeId + "/" + ep + "?audio=" + audio, { headers: { accept: "application/json" } })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (d) {
+                if (!d || !d.servers || !d.servers.length) return;
+                try {
+                  sessionStorage.setItem(k, JSON.stringify({ at: Date.now(), data: {
+                    servers: d.servers,
+                    downloads: d.downloads || [],
+                    active_server: d.active_server || null,
+                    download_url: d.download_url || ""
+                  }}));
+                } catch (e) {}
+              })
+              .catch(function () {});
+          }
+
+          document.addEventListener("mouseover", function (e) {
+            var el = e.target;
+            while (el && el !== document) {
+              if (el.tagName === "A" && el.getAttribute("href")) {
+                var href = el.getAttribute("href");
+                if (href.indexOf("/watch/" + animeId + "/") === 0) {
+                  var n = parseInt(href.split("/").pop(), 10);
+                  if (n) prefetch(n);
+                }
+                return;
+              }
+              el = el.parentNode;
+            }
+          }, { passive: true });
+
+          function start() {
+            var cached = readCache();
+            if (cached && cached.servers && cached.servers.length) {
+              renderServers(cached.servers, cached.active_server);
+              renderDownloads(cached);
+              note("Saved servers shown instantly — refreshing…");
+              play(cached.active_server || cached.servers[0]);
+            } else {
+              note("Loading the fastest server…");
+            }
+            load();
+          }
+
+          if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+          else start();
         })();
         </script>
         <div class="transport-bar">
