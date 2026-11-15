@@ -1,6 +1,6 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
-import { homeGrids, search as catalogSearch, details, watchContext, byFormat } from "./catalog.js";
-import { chrome, homePage, browsePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage, privacyPage } from "./pages.js";
+import { homeGrids, search as catalogSearch, details, watchContext, byFormat, byGenre } from "./catalog.js";
+import { chrome, homePage, browsePage, genrePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage, privacyPage } from "./pages.js";
 import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
@@ -622,6 +622,10 @@ async function pageRoutes(request, env, ctx, path) {
   if (path === "/") {
     // The Render header's TV / Movies tabs are real filters; answer them the
     // same way instead of dropping the query and showing the home page again.
+    const genre = (url.searchParams.get("genre") || "").trim();
+    if (genre) {
+      return html(genrePage(genre, await byGenre(genre), user?.name));
+    }
     const format = (url.searchParams.get("format") || "").toUpperCase();
     if (format === "TV" || format === "MOVIE") {
       return html(browsePage(format, await byFormat(format), user?.name));

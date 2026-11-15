@@ -47,6 +47,17 @@ export async function search(q) {
   return data.data.Page.media;
 }
 
+/** Genre rail for the home page's genre strip. */
+export async function byGenre(genre) {
+  const g = String(genre || "").trim();
+  if (!g) return [];
+  const data = await alQuery(
+    `query($g:String){Page(perPage:42){media(type:ANIME,genre:$g,isAdult:false,sort:POPULARITY_DESC){${CARD_FIELDS}}}}`,
+    { g }
+  );
+  return data.data.Page.media;
+}
+
 /** TV or movie browse rail for the header filters Render exposes. */
 export async function byFormat(format) {
   const fmt = String(format || "").toUpperCase() === "MOVIE" ? "MOVIE" : "TV";

@@ -252,6 +252,13 @@ export function homePage(grids, userName) {
         <a class="btn-secondary" href="/developers#docs">View the docs</a>
       </div>
     </section>
+    <section class="filter-bar" aria-label="Browse by genre">
+      <div class="rail-head"><h2 class="rail-title">Browse by genre</h2></div>
+      <div class="genre-pills">
+        <a href="/" class="genre-pill active">All Anime</a>
+        ${["Action", "Adventure", "Comedy", "Drama", "Fantasy", "Horror", "Mystery", "Psychological", "Romance", "Sci-Fi", "Slice of Life", "Sports", "Supernatural", "Thriller"].map((g) => `<a href="/?genre=${encodeURIComponent(g)}" class="genre-pill">${esc(g)}</a>`).join("")}
+      </div>
+    </section>
     ${section("Trending now", "What AniList is trending this hour", grids.trending || [], "trending")}
     ${section("Airing this season", "Currently airing, highest rated first", grids.airing || [])}
     ${section("Popular movies", "Most followed anime films", grids.movies || [])}
@@ -259,17 +266,15 @@ export function homePage(grids, userName) {
   return chrome("Watch anime free", "CamAnime on Cloudflare: trending anime, search, watch pages and the community forum.", userName, inner, "home");
 }
 
-/** TV / movie browse view for the filters the Render header exposes. */
-export function browsePage(format, items, userName) {
-  const isMovie = format === "MOVIE";
-  const label = isMovie ? "Anime movies" : "TV series";
+/** A single titled card grid, shared by the header filters and genre strip. */
+function browseGrid(label, subtitle, items, userName) {
   const inner = `
     <section class="section-block">
       <div class="section-head">
         <div class="section-title-wrap">
           <span class="section-accent-bar" aria-hidden="true"></span>
           <h2 class="section-title">${esc(label)}</h2>
-          <span class="section-subtitle">${isMovie ? "Most followed films" : "Most popular series"} on AniList</span>
+          <span class="section-subtitle">${esc(subtitle)}</span>
         </div>
       </div>
       ${items.length
@@ -277,6 +282,27 @@ export function browsePage(format, items, userName) {
         : `<div class="discovery-empty">No titles answered for this filter right now.</div>`}
     </section>`;
   return chrome(label, `${label} streaming on CamAnime.`, userName, inner, "browse");
+}
+
+/** TV / movie browse view for the filters the Render header exposes. */
+export function browsePage(format, items, userName) {
+  const isMovie = format === "MOVIE";
+  return browseGrid(
+    isMovie ? "Anime movies" : "TV series",
+    `${isMovie ? "Most followed films" : "Most popular series"} on AniList`,
+    items,
+    userName,
+  );
+}
+
+/** Genre browse view linked from the home page's genre strip. */
+export function genrePage(genre, items, userName) {
+  return browseGrid(
+    `${genre} anime`,
+    `Most popular ${genre} titles on AniList`,
+    items,
+    userName,
+  );
 }
 
 export function searchGrid(q, items, userName) {
