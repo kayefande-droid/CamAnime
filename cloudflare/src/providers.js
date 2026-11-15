@@ -389,7 +389,22 @@ async function searchWithConsensus(titles, search, idKey, minScore) {
       votes = count;
     }
   }
-  return votes >= 2 ? consensus : null;
+  if (votes < 2 || !consensus) return null;
+  // A shared top hit must still look like the same show. Reject a page whose
+  // title is only a shorter prefix of the query (e.g. "Oreshura" for
+  // "Oreshura's Trail"), which is a different series.
+  const picked = all.get(consensus);
+  const pickedTitle = picked?.title || "";
+  const looksSame = list.some((t) => scoreTitle(t, pickedTitle) >= 55 || wordCoverage(t, pickedTitle) >= 0.8);
+  return looksSame ? consensus : null;
+}
+
+function wordCoverage(query, title) {
+  const words = (s) => String(s || "").toLowerCase().match(/[a-z0-9]+/g) || [];
+  const q = words(query);
+  if (!q.length) return 0;
+  const t = new Set(words(title));
+  return q.filter((w) => t.has(w)).length / q.length;
 }
 
 export async function heavenFindBestId(titles) {
