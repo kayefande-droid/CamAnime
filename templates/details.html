@@ -659,6 +659,8 @@
                 </button>
                 {% endif %}
             </div>
+            {% if anime.next_airing_episode and anime.next_airing_episode.airing_at %}<p class="release-countdown muted" data-airing-epoch="{{ anime.next_airing_episode.airing_at }}" data-airing-episode="{{ anime.next_airing_episode.episode or '' }}">Next episode (EP {{ anime.next_airing_episode.episode or '?' }}) airs in <strong class="cd-text">calculating…</strong></p>
+            <script>(function(){var box=document.querySelector(".release-countdown");if(!box)return;var epoch=Number(box.dataset.airingEpoch)||0;var out=box.querySelector(".cd-text");function tick(){var s=epoch-Math.floor(Date.now()/1000);if(s<=0){out.textContent="airing now or aired - checking provider";return;}var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;out.textContent=(d?d+"d ":"")+h+"h "+m+"m "+x+"s";}tick();setInterval(tick,1000);})();</script>{% endif %}
             <p class="availability-note">Quality and dub availability are detected per episode from the provider. A missing resolution or dub means the source does not publish it - it is never simulated.</p>
             {% if anime.next_airing_episode and anime.next_airing_episode.airing_at %}<p id="releaseReminderHelp" class="availability-note">Saved in this browser only. Grant notification permission to save a reminder; browser notices require the site open and are not push notifications.</p>{% endif %}
         </div>

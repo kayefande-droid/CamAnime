@@ -1,7 +1,7 @@
 name: camanime_app
 description: CamAnime Flutter app for shared anime discovery, cached artwork, and authorized playback. Made by kayefande-droid & co.
 publish_to: none
-version: 2.17.3+33
+version: 2.17.3+34
 environment:
   sdk: ">=3.2.0 <4.0.0"
 dependencies:

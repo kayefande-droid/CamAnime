@@ -18,6 +18,7 @@ import {
   unregisterDevice,
   sendNotification,
   notificationHistory,
+  notificationFeed,
   publishRelease,
   listReleases,
   usageSummary,
@@ -310,6 +311,53 @@ test("topic targeting only reaches devices that opted in", async () => {
     body: JSON.stringify({ title: "New episode", body: "sub", target: "topic", target_value: "new_episodes" }),
   }))).json();
   assert.equal(episodic.audience, 1);
+});
+
+test("notification feed returns broadcasts and own device rows only, newer than since", async () => {
+  const { env } = makeEnv();
+  await sendNotification(env, adminReq("/api/v1/notifications/send", {
+    method: "POST",
+    body: JSON.stringify({ title: "Broadcast", body: "hi" }),
+  }));
+  await sendNotification(env, adminReq("/api/v1/notifications/send", {
+    method: "POST",
+    body: JSON.stringify({ title: "Just you", body: "hi", target: "device", target_value: "install-aaaa1111" }),
+  }));
+  await sendNotification(env, adminReq("/api/v1/notifications/send", {
+    method: "POST",
+    body: JSON.stringify({ title: "Someone else", body: "hi", target: "device", target_value: "install-zzzz9999" }),
+  }));
+
+  const feedReq = (qs) => new Request(`https://x.test/api/v1/notifications/feed${qs}`);
+  const mine = await (await notificationFeed(env, feedReq("?since=0&install_id=install-aaaa1111"), new URL(feedReq("?since=0&install_id=install-aaaa1111").url))).json();
+  const titles = mine.notifications.map((n) => n.title).sort();
+  assert.deepEqual(titles, ["Broadcast", "Just you"]);
+
+  const future = await (await notificationFeed(env, feedReq("?since=99999999999"), new URL(feedReq("?since=99999999999").url))).json();
+  assert.equal(future.notifications.length, 0);
+});
+
+test("notification feed adds an update notice when the build is behind", async () => {
+  const { env } = makeEnv();
+  const req = (qs) => new Request(`https://x.test/api/v1/notifications/feed${qs}`);
+  const url = (qs) => new URL(req(qs).url);
+  const old = await (await notificationFeed(env, req("?since=0&build=1"), url("?since=0&build=1"))).json();
+  assert.equal(old.notifications.some((n) => n.category === "update"), true);
+  const current = await (await notificationFeed(env, req("?since=0&build=9999"), url("?since=0&build=9999"))).json();
+  assert.equal(current.notifications.some((n) => n.category === "update"), false);
+});
+
+test("notification feed wait returns at once when items already exist", async () => {
+  const { env } = makeEnv();
+  await sendNotification(env, adminReq("/api/v1/notifications/send", {
+    method: "POST",
+    body: JSON.stringify({ title: "Now", body: "hi" }),
+  }));
+  const started = Date.now();
+  const qs = "?since=0&wait=20";
+  const body = await (await notificationFeed(env, new Request(`https://x.test/api/v1/notifications/feed${qs}`), new URL(`https://x.test/api/v1/notifications/feed${qs}`))).json();
+  assert.equal(body.notifications.length, 1);
+  assert.ok(Date.now() - started < 2000);
 });
 
 test("unregistering keeps the row but stops delivery", async () => {

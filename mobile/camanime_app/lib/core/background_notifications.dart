@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'models.dart' show apiHost;
-import 'version_gate.dart' show kAppVersion;
+import 'version_gate.dart' show VersionGate, kAppBuildNumber, kAppVersion;
 
 /// Background delivery for installs that never got an FCM token.
 ///
@@ -30,6 +30,7 @@ class BackgroundNotifications {
   static const String _channelName = 'Announcements and app updates';
   static const String _seenAnnouncementsKey = 'bg_seen_announcement_ids';
   static const String _seenVersionKey = 'bg_seen_version';
+  static const String _feedSinceKey = 'bg_feed_since';
   static const String _notificationsPref = 'download_notifications';
 
   /// Six hours is frequent enough that a new episode/release is never a day
@@ -85,6 +86,7 @@ class BackgroundNotifications {
     try {
       await _checkAnnouncements(client, prefs);
       await _checkRelease(client, prefs);
+      await _checkFeed(client, prefs);
     } catch (_) {
       // Offline, host down or a malformed response: try again next wake-up.
     } finally {
@@ -144,6 +146,42 @@ class BackgroundNotifications {
           ? 'A newer build is published. Open the app to update.'
           : notes,
     );
+  }
+
+  /// Reads the server's own push feed (CamAnime's FCM replacement): items are
+  /// returned newer than the stored cursor, and each one is shown once.
+  static Future<void> _checkFeed(
+      http.Client client, SharedPreferences prefs) async {
+    final since = prefs.getString(_feedSinceKey) ?? '';
+    final installId = await VersionGate.installId();
+    final uri = Uri.parse('${_base()}/api/v1/notifications/feed').replace(
+      queryParameters: {
+        if (since.isNotEmpty) 'since': since,
+        'install_id': installId,
+        'build': '$kAppBuildNumber',
+      },
+    );
+    final res = await client.get(uri).timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) return;
+    final decoded = json.decode(res.body);
+    final items = (decoded is Map ? decoded['items'] : null) as List? ??
+        const [];
+    var newest = since;
+    for (final item in items) {
+      if (item is! Map) continue;
+      final title = (item['title'] ?? 'CamAnime').toString().trim();
+      final body = (item['body'] ?? '').toString().trim();
+      final created = (item['created'] ?? '').toString();
+      if (title.isNotEmpty || body.isNotEmpty) {
+        await _show(
+          created.hashCode & 0x7fffffff,
+          title.isEmpty ? 'CamAnime' : title,
+          body,
+        );
+      }
+      if (created.compareTo(newest) > 0) newest = created;
+    }
+    if (newest != since) await prefs.setString(_feedSinceKey, newest);
   }
 
   static Future<void> _show(int id, String title, String body) async {

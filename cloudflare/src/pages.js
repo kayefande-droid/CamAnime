@@ -328,7 +328,7 @@ export function detailsPage(anime, ratingSummary, user, eps) {
         <h1 class="hero-title">${esc(name)}</h1>
         <p>${anime.title.native ? esc(anime.title.native) : ""} ${anime.format ? "· " + esc(anime.format) : ""} ${anime.status ? "· " + esc(anime.status) : ""} ${anime.seasonYear ? "· " + anime.seasonYear : ""}</p>
         <p class="muted">${anime.averageScore ? `AniList score ${anime.averageScore}% · ` : ""}${(anime.genres || []).join(", ") || ""}</p>
-        ${anime.nextAiringEpisode ? `<p class="muted">Next episode airs in <strong>${Math.max(0, Math.ceil((anime.nextAiringEpisode.airingAt - Math.floor(Date.now() / 1000)) / 60))} min</strong> (EP ${anime.nextAiringEpisode.episode})</p>` : ""}
+        ${anime.nextAiringEpisode ? `<div class="release-countdown" data-airing-epoch="${Number(anime.nextAiringEpisode.airingAt) || 0}" data-airing-episode="${esc(String(anime.nextAiringEpisode.episode ?? ""))}"><p class="muted">Next episode (EP ${esc(String(anime.nextAiringEpisode.episode ?? "?"))}) airs in <strong class="cd-text">${Math.max(0, Math.ceil((anime.nextAiringEpisode.airingAt - Math.floor(Date.now() / 1000)) / 60))} min</strong></p><noscript>Countdown needs JavaScript.</noscript></div><script>(function(){var box=document.querySelector(".release-countdown");if(!box)return;var epoch=Number(box.dataset.airingEpoch)||0;var out=box.querySelector(".cd-text");function tick(){var s=epoch-Math.floor(Date.now()/1000);if(s<=0){out.textContent="airing now or aired - checking provider";return;}var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),x=s%60;out.textContent=(d?d+"d ":"")+h+"h "+m+"m "+x+"s";}tick();setInterval(tick,1000);})();</script>` : ""}
         <div id="ca-rating-out">${ratingSummary.average ? `Community score: <strong>${ratingSummary.average}/10</strong> (${ratingSummary.count} ratings)` : "No community ratings yet."}</div>
         <div class="hero-ctas">
           <a class="btn-primary" href="/watch/${anime.id}/1">Watch Episode 1</a>
@@ -374,28 +374,53 @@ export function watchPage(ctx, user) {
             style="width:100%;aspect-ratio:16/9;background:#000;border-radius:14px"></video>
           <p class="discovery-empty" id="caPlayerMsg" style="display:none;padding:1rem"></p>
         </div>
+        <div id="caServers" class="ca-servers" style="display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0"></div>
+        <p id="caDownloads" style="margin:.4rem 0"></p>
         <script>
         (async () => {
           const video = document.getElementById("caPlayer");
           const msg = document.getElementById("caPlayerMsg");
+          const serversEl = document.getElementById("caServers");
+          const dlEl = document.getElementById("caDownloads");
           const fail = (text) => { msg.textContent = text; msg.style.display = "block"; };
-          try {
-            const res = await fetch("/api/episode-sources/${anime.id}/${epNum}?audio=sub", { headers: { accept: "application/json" } });
-            const data = await res.json();
-            const active = data.active_server || (data.servers || [])[0];
-            if (!active || !active.stream_url) return fail("No playable source for this episode yet.");
-            const url = active.stream_url.startsWith("http") ? active.stream_url : location.origin + active.stream_url;
-            if (active.playback_mode === "hls" || url.indexOf(".m3u8") !== -1) {
+          const absUrl = (u) => (u && u.startsWith("http") ? u : (u ? location.origin + u : ""));
+          let hls = null;
+          const play = (server) => {
+            if (hls) { hls.destroy(); hls = null; }
+            const url = absUrl(server.stream_url);
+            if (!url) return fail("No playable source on this server.");
+            msg.style.display = "none";
+            if (server.playback_mode === "iframe") return fail("This server only plays in its own page. Use the server link below.");
+            if (server.playback_mode === "hls" || url.indexOf(".m3u8") !== -1) {
               if (video.canPlayType("application/vnd.apple.mpegurl")) { video.src = url; return; }
               if (window.Hls && window.Hls.isSupported()) {
-                const hls = new window.Hls({ maxBufferLength: 30 });
+                hls = new window.Hls({ maxBufferLength: 30 });
                 hls.loadSource(url);
                 hls.attachMedia(video);
                 return;
               }
-              return fail("This browser needs the origin player for HLS playback.");
+              return fail("This browser cannot play HLS here.");
             }
             video.src = url;
+          };
+          try {
+            const res = await fetch("/api/episode-sources/${anime.id}/${epNum}?audio=sub", { headers: { accept: "application/json" } });
+            const data = await res.json();
+            const servers = data.servers || [];
+            if (!servers.length) return fail("No playable source for this episode yet.");
+            const active = data.active_server || servers[0];
+            servers.forEach((s) => {
+              const b = document.createElement("button");
+              b.type = "button";
+              b.className = "ctrl-btn";
+              b.textContent = s.name || s.label || s.provider || "Server";
+              b.addEventListener("click", () => play(s));
+              serversEl.appendChild(b);
+            });
+            const links = (data.downloads || []).filter((d) => d && d.url).map((d) => '<a class="ctrl-btn" href="' + absUrl(d.url) + '" download>' + (d.label || d.quality || "Download").replace(/</g, "&lt;") + '</a>');
+            if (data.download_url && !links.length) links.push('<a class="ctrl-btn" href="' + absUrl(data.download_url) + '" download>Download episode</a>');
+            dlEl.innerHTML = links.join(" ");
+            play(active);
           } catch (err) {
             fail("The provider bundle did not answer. Try again, or open the origin player.");
           }

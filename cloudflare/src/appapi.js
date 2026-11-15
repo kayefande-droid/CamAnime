@@ -449,6 +449,65 @@ export async function notificationHistory(env, request) {
   return json({ history: rows.results || [], push_configured: fcmConfigured(env) }, 200, { "cache-control": "no-store" });
 }
 
+/**
+ * Firebase-free feed for the app. Returns delivered notifications newer than
+ * `since` that are addressed to everyone, or to this install_id directly.
+ * Polled by the app's background job, so no push service is required.
+ */
+async function feedRows(env, since, installId) {
+  const rows = await env.DB.prepare(
+    "SELECT id,title,body,image,action,deep_link,category,created FROM notification_log " +
+      "WHERE created > ?1 AND status IN ('sent','not_configured') AND (target = 'all' OR (target = 'device' AND target_value = ?2)) " +
+      "ORDER BY created DESC LIMIT 50",
+  )
+    .bind(since, installId)
+    .all();
+  return rows.results || [];
+}
+
+/**
+ * Optional `build` (installed build) adds an update notice when the install is
+ * behind the latest stable release. Optional `wait` (0-25 s) long-polls until a
+ * new item arrives, so the app gets near-instant delivery without FCM.
+ */
+export async function notificationFeed(env, request, url) {
+  const since = Math.max(0, parseInt(url.searchParams.get("since"), 10) || 0);
+  const installId = String(url.searchParams.get("install_id") || "").trim().slice(0, 64);
+  const build = parseInt(url.searchParams.get("build") || "", 10);
+  const wait = Math.min(25, Math.max(0, parseInt(url.searchParams.get("wait"), 10) || 0));
+  const deadline = Date.now() + wait * 1000;
+
+  let notifications = await feedRows(env, since, installId);
+  while (!notifications.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    notifications = await feedRows(env, since, installId);
+  }
+
+  if (Number.isFinite(build)) {
+    const row = await latestRelease(env, "stable");
+    const latestBuild = row?.build ?? LATEST_BUILD;
+    const minBuild = row?.min_supported_build ?? MIN_SUPPORTED_BUILD;
+    if (build < latestBuild) {
+      const required = build < minBuild;
+      notifications = [
+        {
+          id: `update-${latestBuild}`,
+          title: required ? "Update required" : "Update available",
+          body: `CamAnime ${row?.version ?? LATEST_VERSION} is ready. ${required ? "This version is no longer supported." : "Update for the latest fixes."}`,
+          image: "",
+          action: "update",
+          deep_link: "/get/android",
+          category: "update",
+          created: row?.released || 1,
+        },
+        ...notifications,
+      ];
+    }
+  }
+
+  return json({ notifications, server_time: now() }, 200, { "cache-control": "no-store" });
+}
+
 export async function cancelNotification(env, request) {
   const { user, denied } = await requireAdmin(env, request);
   if (denied) return json({ error: "Admin only." }, 403);
@@ -721,6 +780,7 @@ export async function route(env, request, url, parts) {
 
   if (p2 === "notifications") {
     if (method === "GET" && p3 === "history") return notificationHistory(env, request);
+    if (method === "GET" && p3 === "feed") return notificationFeed(env, request, url);
     if (method === "POST" && p3 === "send") return sendNotification(env, request);
     if (method === "POST" && p3 === "cancel") return cancelNotification(env, request);
     return null;
