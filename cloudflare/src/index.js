@@ -1,6 +1,6 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext } from "./catalog.js";
-import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage } from "./pages.js";
+import { chrome, homePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage, privacyPage } from "./pages.js";
 import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
@@ -594,6 +594,10 @@ async function pageRoutes(request, env, ctx, path) {
 
   if (path === "/developers" || path === "/developers/keys") {
     return html(developersPage(user));
+  }
+
+  if (path === "/privacy") {
+    return html(privacyPage());
   }
 
   // The dashboard is not public: it renders only on the private path set in

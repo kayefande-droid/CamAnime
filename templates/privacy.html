@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Privacy &amp; account data | CamAnime</title>
+<meta name="description" content="What CamAnime stores when you browse, sign in, comment or rate, which third parties are involved, and how to have your account and comments removed.">
+<meta name="theme-color" content="#087BFF">
+<meta name="robots" content="index, follow">
+<meta property="og:site_name" content="CamAnime">
+<meta property="og:url" content="https://camanime.onrender.com/privacy">
+<meta property="og:title" content="Privacy &amp; account data | CamAnime">
+<meta property="og:description" content="What CamAnime stores when you browse, sign in, comment or rate, and how to remove it.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Privacy &amp; account data | CamAnime">
+<meta name="twitter:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
+<link rel="canonical" href="https://camanime.onrender.com/privacy">
+<link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link href="/static/css/base.css?v=20261112-ink" rel="stylesheet">
+<link href="/static/css/header-layout.css?v=20261114-nav2" rel="stylesheet">
+<link href="/static/css/redesign.css?v=20261114-skin2" rel="stylesheet">
+<style>
+  .legal { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 1rem; }
+  .legal h1 { font-family: 'Bricolage Grotesque', sans-serif; font-size: clamp(1.9rem, 1.4rem + 2.4vw, 2.9rem); font-weight: 800; margin-bottom: .6rem; }
+  .legal h2 { font-family: 'Bricolage Grotesque', sans-serif; font-size: 1.25rem; margin: 2rem 0 .5rem; }
+  .legal p, .legal li { color: var(--text-secondary, #a9b4c6); line-height: 1.65; }
+  .legal ul { padding-left: 1.1rem; margin: .4rem 0 .8rem; }
+  .legal code { font-family: 'JetBrains Mono', monospace; font-size: .85em; color: var(--accent, #FFB347); }
+  .legal .stamp { font-family: 'JetBrains Mono', monospace; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent, #FFB347); }
+</style>
+</head>
+<body class="page-legal">
+<main class="legal" id="main-content">
+  <p class="stamp">Privacy · account data</p>
+  <h1>What CamAnime stores, and why</h1>
+  <p>CamAnime is a free anime catalogue and player. You can browse and watch without an account. This page lists every piece of information the site keeps, where it lives, and how to have it deleted. Last updated 15 November 2026.</p>
+
+  <h2>If you only browse</h2>
+  <p>No account and no cookie is created. The server keeps ordinary request logs (IP address, user agent, path, status, time) for security, abuse prevention and rate limiting, and it counts page visits in aggregate. Those logs are not used to build a profile and are not sold or shared.</p>
+
+  <h2>If you create an account</h2>
+  <ul>
+    <li><strong>Email address</strong> — your account identifier and sign-in name.</li>
+    <li><strong>Display name</strong> — shown next to your comments and ratings.</li>
+    <li><strong>Password</strong> — stored only as a PBKDF2-SHA256 hash with a random salt. The plain password is never stored or logged.</li>
+    <li><strong>Session cookie</strong> — <code>ca_session</code>, HttpOnly and Secure, so the site knows you are signed in. Signing out clears it.</li>
+  </ul>
+
+  <h2>If you comment, rate or like</h2>
+  <p>Comments (text, optional sticker, the episode they belong to, likes), ratings and your watch history are stored with your account so they can be shown back to you and to other visitors on that episode. Comments you post are public.</p>
+
+  <h2>If you install the mobile app</h2>
+  <p>The app may register a push token with your account so announcements and release notifications can reach you. Nothing else from your device is read.</p>
+
+  <h2>Third parties</h2>
+  <ul>
+    <li><strong>AniList</strong> — anime titles, artwork and episode metadata.</li>
+    <li><strong>Cloudflare</strong> and <strong>Render</strong> — hosting and delivery of this site; both process requests on our behalf.</li>
+    <li><strong>Streaming providers</strong> — when you press play, your browser requests the video from the provider that published it, so that provider sees your IP address. CamAnime doesn't control their logging.</li>
+    <li><strong>Google Fonts</strong> and <strong>cdnjs</strong> — stylesheets and icons.</li>
+  </ul>
+  <p>There are no advertising networks, no third-party analytics scripts and no cross-site trackers on this site. The theme and watchlist preferences you pick are kept in your browser's local storage, not on the server.</p>
+
+  <h2>Deleting your data</h2>
+  <p>Ask for deletion in the project's issue tracker — <a href="https://github.com/kayefande-droid/CamAnime/issues" style="color:var(--accent,#FFB347)">github.com/kayefande-droid/CamAnime/issues</a> — from the email address on the account, and the account, its comments, ratings, watch history and push token are removed. You can also just stop using the site: signing out removes the session cookie.</p>
+
+  <h2>Children</h2>
+  <p>The site is not directed at children under 13 and no account should be created for one.</p>
+
+  <h2>Content and terms</h2>
+  <p>CamAnime indexes metadata and links to media hosted by third-party providers; it does not host video files. Playback only works when a provider lists a source for that episode, and availability can change or disappear without notice. Don't use the site to break the law, don't attempt to overload or attack it, and don't resell the developer API. Accounts that abuse the service can be removed.</p>
+
+  <p style="margin-top:2rem"><a href="/" style="color:var(--accent,#FFB347)">Back to CamAnime</a></p>
+</main>
+{% include '_site_credit.html' %}
+</body>
+</html>

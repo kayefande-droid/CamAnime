@@ -23,11 +23,11 @@ function head(title, desc) {
 <meta property="og:title" content="${esc(title)} | ${BRAND}">
 <meta property="og:description" content="${esc(desc)}">
 <meta property="og:url" content="__CA_CANONICAL__">
-<meta property="og:image" content="__CA_ORIGIN__/static/icon-512.png">
+<meta property="og:image" content="__CA_ORIGIN__/static/brand/og-card-1200x630.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)} | ${BRAND}">
 <meta name="twitter:description" content="${esc(desc)}">
-<meta name="twitter:image" content="__CA_ORIGIN__/static/icon-512.png">
+<meta name="twitter:image" content="__CA_ORIGIN__/static/brand/og-card-1200x630.png">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
 <link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -101,6 +101,7 @@ ${inner}
       <a href="/developers" style="color: var(--text-secondary); text-decoration: none;">Developer API</a>
       <a href="/download" style="color: var(--accent); text-decoration: none;"><i class="fas fa-mobile-alt" aria-hidden="true"></i> Get the apps</a>
       <a href="/settings" style="color: var(--text-secondary); text-decoration: none;">Settings</a>
+      <a href="/privacy" style="color: var(--text-secondary); text-decoration: none;">Privacy</a>
     </div>
   </div>
   <div class="footer-inner" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--border-subtle, rgba(255,255,255,.08)); display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: var(--text-secondary); font-size: .78rem;">
@@ -425,6 +426,61 @@ export function loginPage(name) {
     })();
     </script>`;
   return chrome("Sign in", "Sign in to CamAnime.", null, inner, "login", { bodyClass: "page-auth" });
+}
+
+/** Privacy + account-data page. Mirrors the origin's /privacy, same facts. */
+export function privacyPage() {
+  const inner = `
+    <article style="max-width:760px;margin:0 auto;padding:2.5rem 1.25rem 1rem">
+      <p class="mono-label" style="font-family:var(--font-mono,monospace);font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--accent)">Privacy · account data</p>
+      <h1>What CamAnime stores, and why</h1>
+      <p>CamAnime is a free anime catalogue and player. You can browse and watch without an account. This page lists every piece of information the site keeps, where it lives, and how to have it deleted. Last updated 15 November 2026.</p>
+
+      <h2>If you only browse</h2>
+      <p>No account and no cookie is created. The server keeps ordinary request logs (IP address, user agent, path, status, time) for security, abuse prevention and rate limiting, and it counts page visits in aggregate. Those logs are not used to build a profile and are not sold or shared.</p>
+
+      <h2>If you create an account</h2>
+      <ul>
+        <li><strong>Email address</strong> — your account identifier and sign-in name.</li>
+        <li><strong>Display name</strong> — shown next to your comments and ratings.</li>
+        <li><strong>Password</strong> — stored only as a PBKDF2-SHA256 hash with a random salt. The plain password is never stored or logged.</li>
+        <li><strong>Session cookie</strong> — <code>ca_session</code>, HttpOnly and Secure, so the site knows you are signed in. Signing out clears it.</li>
+      </ul>
+
+      <h2>If you comment, rate or like</h2>
+      <p>Comments (text, optional sticker, the episode they belong to, likes), ratings and your watch history are stored with your account so they can be shown back to you and to other visitors on that episode. Comments you post are public.</p>
+
+      <h2>If you install the mobile app</h2>
+      <p>The app may register a push token with your account so announcements and release notifications can reach you. Nothing else from your device is read.</p>
+
+      <h2>Third parties</h2>
+      <ul>
+        <li><strong>AniList</strong> — anime titles, artwork and episode metadata.</li>
+        <li><strong>Cloudflare</strong> and <strong>Render</strong> — hosting and delivery of this site; both process requests on our behalf.</li>
+        <li><strong>Streaming providers</strong> — when you press play, your browser requests the video from the provider that published it, so that provider sees your IP address. CamAnime doesn't control their logging.</li>
+        <li><strong>Google Fonts</strong> and <strong>cdnjs</strong> — stylesheets and icons.</li>
+      </ul>
+      <p>There are no advertising networks, no third-party analytics scripts and no cross-site trackers on this site. The theme and watchlist preferences you pick are kept in your browser's local storage, not on the server.</p>
+
+      <h2>Deleting your data</h2>
+      <p>Ask for deletion in the project's issue tracker — <a href="https://github.com/kayefande-droid/CamAnime/issues">github.com/kayefande-droid/CamAnime/issues</a> — from the email address on the account, and the account, its comments, ratings, watch history and push token are removed. You can also just stop using the site: signing out removes the session cookie.</p>
+
+      <h2>Children</h2>
+      <p>The site is not directed at children under 13 and no account should be created for one.</p>
+
+      <h2>Content and terms</h2>
+      <p>CamAnime indexes metadata and links to media hosted by third-party providers; it does not host video files. Playback only works when a provider lists a source for that episode, and availability can change or disappear without notice. Don't use the site to break the law, don't attempt to overload or attack it, and don't resell the developer API. Accounts that abuse the service can be removed.</p>
+
+      <p style="margin-top:2rem"><a href="/">Back to CamAnime</a></p>
+    </article>`;
+  return chrome(
+    "Privacy & account data",
+    "What CamAnime stores when you browse, sign in, comment or rate, and how to remove it.",
+    null,
+    inner,
+    "privacy",
+    { bodyClass: "page-legal" },
+  );
 }
 
 export function errorPage(status, msg) {

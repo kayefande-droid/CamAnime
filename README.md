@@ -54,13 +54,15 @@ flutter build apk --release --dart-define=CAMANIME_API=https://your-host
 - `GET /api/version` — release policy consumed by the update checker
 - `/api/admin/*` — role-guarded operations (owner, developer, support)
 
-## 🚢 Ship status (13 November 2026)
+## 🚢 Ship status (15 November 2026)
 
 Live on both hosts, over HTTPS:
 
 - Origin: <https://camanime.onrender.com> — Flask + Jinja, auto-deploys from `main` (~2.5 min).
 - Mirror: <https://camanjme.camanime.workers.dev> — Cloudflare Worker (D1 cache, R2 assets), deploy with `cd cloudflare && npx wrangler deploy`.
-- Both serve the same `/static` tree, so one stylesheet change reaches both; the pin is `redesign.css?v=20261113-hero5`.
+- Both serve the same `/static` tree, so one stylesheet change reaches both; the pin is `redesign.css?v=20261114-skin2`.
+- `/privacy` is the public privacy and account-data page on both hosts, linked from the footer and listed in both sitemaps. Social cards use `/static/brand/og-card-1200x630.png`.
+- The launch checklist, item by item, is in [`docs/LAUNCH-CHECKLIST.md`](docs/LAUNCH-CHECKLIST.md).
 
 Smoke-tested after the last deploy: `/`, `/anime/21`, `/watch/21/1`, `/download`,
 `/robots.txt`, `/sitemap.xml` and the 404 page return 200/404 on both hosts with

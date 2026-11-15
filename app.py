@@ -3646,6 +3646,12 @@ def _app_file_info(filename: str):
             "updated": updated.strftime("%Y-%m-%d %H:%M")}
 
 
+@app.route("/privacy")
+def privacy_page():
+    """Public privacy and account-data page (launch checklist item)."""
+    return render_template("privacy.html")
+
+
 @app.route("/download")
 def download_page():
     from app_version import get_policy
@@ -5108,7 +5114,7 @@ def sitemap():
     so omit lastmod.
     """
     base = "https://camanime.onrender.com"
-    entries = ["/", "/scraper", "/download", "/promo", "/developers", "/advert"]
+    entries = ["/", "/scraper", "/download", "/promo", "/developers", "/advert", "/privacy"]
     try:
         with platform._db() as conn:
             rows = conn.execute(
