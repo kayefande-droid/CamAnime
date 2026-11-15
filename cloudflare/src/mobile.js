@@ -12,6 +12,7 @@
 import { json } from "./util.js";
 import { getComments } from "./api.js";
 import { alQuery } from "./anilist.js";
+import { backupCatalogRails, backupSearchMedia, backupDetails } from "./metadata-backup.js";
 import { episodeBundle, anikotoEpisodes, anikotoFindBestSlug } from "./providers.js";
 import { route as mediaRoute } from "./media.js";
 import {
@@ -99,7 +100,7 @@ export function card(m) {
  * main source of AniList 429s from the app; one aliased document is one hit
  * on the rate limit and one cache entry.
  */
-export async function catalogHome() {
+async function catalogHomeLive() {
   const data = await al(`query{
     trending: Page(perPage:24){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${CARD_FIELDS}}}
     popular: Page(perPage:18){media(type:ANIME,sort:POPULARITY_DESC,isAdult:false){${CARD_FIELDS}}}
@@ -119,6 +120,33 @@ export async function catalogHome() {
     series: pick(data?.series),
     featured: trendingRows[0] || null,
   };
+}
+
+/**
+ * Home rails with a Render-independent backup.
+ *
+ * AniList is the source of truth; when it refuses this egress and no stored
+ * copy exists, Kitsu answers with the same AniList ids, so cards keep their
+ * links and the app still launches with a full catalogue.
+ */
+export async function catalogHome() {
+  try {
+    return await catalogHomeLive();
+  } catch (err) {
+    const rails = await backupCatalogRails();
+    if (!rails) throw err;
+    const pick = (rows) => (rows || []).map(card);
+    const trending = pick(rails.trending);
+    return {
+      trending,
+      popular: pick(rails.popular),
+      top_rated: pick(rails.top_rated),
+      recently_added: pick(rails.recently_added),
+      movies: pick(rails.movies),
+      series: pick(rails.series),
+      featured: trending[0] || null,
+    };
+  }
 }
 
 /** Provider dub flags live for six hours, same TTL as the Flask cache. */
@@ -192,8 +220,10 @@ const SOURCE_TTL_SECONDS = 15 * 60;
 const SOURCE_MEMO = new Map();
 const SOURCE_INFLIGHT = new Map();
 
+// v2: the bundle now survives a suspended Render, and the version segment
+// retires bundles cached before the provider set was fixed.
 function sourceCacheUrl(id, ep, audio) {
-  return new Request(`https://ca-cache.internal/episode-sources/${id}/${ep}?audio=${audio}`);
+  return new Request(`https://ca-cache.internal/v2/episode-sources/${id}/${ep}?audio=${audio}`);
 }
 
 async function readSourceCache(id, ep, audio) {
@@ -231,12 +261,22 @@ async function writeSourceCache(id, ep, audio, body) {
 }
 
 /** JSON body for /api/episode-sources, answered from the edge when possible. */
-export async function cachedEpisodeSources(id, ep, audio = "sub") {
+export async function cachedEpisodeSources(env, id, ep, audio = "sub") {
   const n = Math.max(1, ep | 0);
   const cached = await readSourceCache(id, n, audio);
   if (cached) return cached;
 
   const key = `${id}:${n}:${audio}`;
+
+  // D1 keeps a resolved bundle for a day, so an edge eviction or a suspended
+  // Render does not send the next visitor back through the scrapers.
+  const stored = await readD1Mirror(env, `src:${key}`);
+  if (stored) {
+    const body = JSON.stringify(stored);
+    await writeSourceCache(id, n, audio, body);
+    return body;
+  }
+
   const pending = SOURCE_INFLIGHT.get(key);
   if (pending) return pending;
 
@@ -245,6 +285,7 @@ export async function cachedEpisodeSources(id, ep, audio = "sub") {
     if (!bundle) return null;
     const body = JSON.stringify(bundle);
     await writeSourceCache(id, n, audio, body);
+    await writeD1Mirror(env, `src:${key}`, body);
     return body;
   })();
   SOURCE_INFLIGHT.set(key, task);
@@ -256,9 +297,9 @@ export async function cachedEpisodeSources(id, ep, audio = "sub") {
 }
 
 /** Warm the cache for the episode a watch page is about to request. */
-export async function warmEpisode(id, ep, audio = "sub") {
+export async function warmEpisode(env, id, ep, audio = "sub") {
   try {
-    await cachedEpisodeSources(id, ep, audio);
+    await cachedEpisodeSources(env, id, ep, audio);
   } catch {
     // Prefetching is best effort; the player's own request still works.
   }
@@ -321,7 +362,7 @@ export async function dubAvailability(ids) {
   };
 }
 
-export async function search(q, limit = 36) {
+async function searchLive(q, limit = 36) {
   const data = await al(
     `query($s:String){Page(perPage:${Math.max(1, Math.min(50, limit | 0 || 36))}){media(type:ANIME,search:$s,isAdult:false,sort:SEARCH_MATCH){${CARD_FIELDS}}}}`,
     { s: q }
@@ -329,7 +370,7 @@ export async function search(q, limit = 36) {
   return (data?.Page?.media || []).map(card);
 }
 
-export async function animeDetails(id) {
+async function animeDetailsLive(id) {
   const data = await al(
     `query($id:Int){Media(id:$id,type:ANIME){idMal ${CARD_FIELDS} synonyms
       streamingEpisodes { title thumbnail url site }
@@ -368,6 +409,41 @@ export async function animeDetails(id) {
       url: se.url || "",
     })),
   };
+}
+
+/** Search that survives an AniList block via the Kitsu backup. */
+export async function search(q, limit = 36) {
+  try {
+    return await searchLive(q, limit);
+  } catch (err) {
+    const media = await backupSearchMedia(q, limit);
+    if (media.length) return media.map(card);
+    throw err;
+  }
+}
+
+/**
+ * Title details for the player. Falls back to the Kitsu card kept in D1, which
+ * still carries the AniList id and the names the providers match on.
+ */
+export async function animeDetails(id) {
+  try {
+    return await animeDetailsLive(id);
+  } catch (err) {
+    const media = await backupDetails(id);
+    if (!media) throw err;
+    const base = card(media);
+    return {
+      ...base,
+      mal_id: null,
+      title_romaji: base.romaji,
+      synonyms: [],
+      seasons: [],
+      next_airing: null,
+      streaming_metadata: [],
+      metadata_source: "kitsu",
+    };
+  }
 }
 
 /**
@@ -668,7 +744,7 @@ async function routeLocal(env, request, url, parts) {
   if (p1 === "episode-sources" && p2) {
     const audio = (url.searchParams.get("audio") || "sub").toLowerCase() === "dub" ? "dub" : "sub";
     const ep = parseInt(p3 || "1", 10);
-    const body = await cachedEpisodeSources(p2, ep, audio);
+    const body = await cachedEpisodeSources(env, p2, ep, audio);
     if (!body) return json({ error: "Anime not found" }, 404);
     // Server lists change slowly, so a repeat open is answered from the edge
     // instead of re-scraping every provider while the player waits.

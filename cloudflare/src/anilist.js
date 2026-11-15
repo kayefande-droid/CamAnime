@@ -31,6 +31,11 @@ export function bindStore(env) {
   d1 = env?.DB || null;
 }
 
+/** The request's D1 binding, so the metadata backup can persist its cards. */
+export function boundDb() {
+  return d1;
+}
+
 const D1_DIRECT = 30 * 24 * 60 * 60;
 
 async function readD1(body) {
@@ -140,30 +145,26 @@ export async function alQuery(query, variables = {}, options = {}) {
 const ORIGIN = "https://camanime.onrender.com";
 
 async function viaOrigin(body) {
-  // The origin is the only route around AniList's block of Cloudflare egress, so
-  // a single blip there (a challenge page, one cold Render dyno, a 429) turned a
-  // cache miss into a failed page. Two attempts with a short backoff ride out one
-  // failure without holding the request for more than a few extra seconds.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const res = await fetch(`${ORIGIN}/api/anilist`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json",
-          "user-agent": "CamAnime/2.13.0 (+https://camanime.onrender.com)",
-        },
-        body,
-        signal: AbortSignal.timeout(15000),
-      });
-      if (res.ok) {
-        const payload = await res.json();
-        if (payload && payload.data && Object.keys(payload.data).length) return payload;
-      }
-    } catch {
-      // Network error or timeout: fall through to the retry.
+  // One bounded attempt. The Render origin is an optional relay, not a
+  // dependency: a suspended instance must not hold a catalogue page for half a
+  // minute before the Render-independent Kitsu backup gets its turn.
+  try {
+    const res = await fetch(`${ORIGIN}/api/anilist`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        "user-agent": "CamAnime/2.13.0 (+https://camanime.onrender.com)",
+      },
+      body,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const payload = await res.json();
+      if (payload && payload.data && Object.keys(payload.data).length) return payload;
     }
-    if (attempt === 0) await sleep(400);
+  } catch {
+    // Network error or timeout: the caller moves on to the backup source.
   }
   return null;
 }

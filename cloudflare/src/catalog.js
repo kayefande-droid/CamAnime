@@ -1,5 +1,6 @@
 /** AniList catalog: home grids, search, details, episodes. Public GraphQL, cached at the edge. */
 import { alQuery } from "./anilist.js";
+import { backupRails, backupSearchMedia, backupDetails } from "./metadata-backup.js";
 
 const CARD_FIELDS = `
   id
@@ -22,6 +23,7 @@ const CARD_FIELDS = `
  * keeps the same data for a third of the budget.
  */
 export async function homeGrids() {
+  try {
   const payload = await alQuery(
     `query{
       trending: Page(perPage:24){media(type:ANIME,sort:TRENDING_DESC,isAdult:false){${CARD_FIELDS}}}
@@ -37,14 +39,26 @@ export async function homeGrids() {
     airing: data.airing.media,
     movies: data.movies.media,
   };
+  } catch (err) {
+    // AniList blocked and no stored copy: Kitsu keeps the same AniList ids.
+    const backup = await backupRails();
+    if (backup) return backup;
+    throw err;
+  }
 }
 
 export async function search(q) {
+  try {
   const data = await alQuery(
     `query($s:String){Page(perPage:36){media(type:ANIME,search:$s,isAdult:false,sort:SEARCH_MATCH){${CARD_FIELDS}}}}`,
     { s: q }
   );
   return data.data.Page.media;
+  } catch (err) {
+    const backup = await backupSearchMedia(q);
+    if (backup.length) return backup;
+    throw err;
+  }
 }
 
 /** Genre rail for the home page's genre strip. */
@@ -69,6 +83,7 @@ export async function byFormat(format) {
 }
 
 export async function details(id) {
+  try {
   const data = await alQuery(
     `query($id:Int){Media(id:$id,type:ANIME){${CARD_FIELDS}
       streamingEpisodes { title thumbnail url site }
@@ -77,6 +92,11 @@ export async function details(id) {
     { id }
   );
   return data.data.Media;
+  } catch (err) {
+    const backup = await backupDetails(id);
+    if (backup) return backup;
+    throw err;
+  }
 }
 
 /** Watch page context: anime + episode list + current episode. */
