@@ -50,5 +50,5 @@ test("exhausted retries surface the rate limit rather than inventing data", asyn
   };
   await assert.rejects(() => alQuery("always-429"), /429/);
   assert.equal(direct, 3, "initial try plus two retries against AniList");
-  assert.equal(relay, 2, "the origin relay is retried once before the error surfaces");
+  assert.equal(relay, 1, "the origin relay is attempted once, then the backup source takes over");
 });
