@@ -631,13 +631,19 @@ export async function image(request, url) {
     res = null;
   }
   if (!res || !res.ok) {
-    try {
-      res = await fetch(
-        `${RENDER_ORIGIN}/api/img?u=${encodeURIComponent(target.toString())}`,
-        { signal: AbortSignal.timeout(8000) },
-      );
-    } catch {
-      res = null;
+    // The Render relay is the only route when AniList refuses Cloudflare's
+    // egress, and one throttled origin response used to leave 15 posters 502 on
+    // a single home page. A second attempt after a short pause usually lands.
+    for (let attempt = 0; attempt < 2 && (!res || !res.ok); attempt++) {
+      try {
+        res = await fetch(
+          `${RENDER_ORIGIN}/api/img?u=${encodeURIComponent(target.toString())}`,
+          { signal: AbortSignal.timeout(8000) },
+        );
+      } catch {
+        res = null;
+      }
+      if (res && !res.ok) await new Promise((r) => setTimeout(r, 300));
     }
   }
   if (!res || !res.ok) {

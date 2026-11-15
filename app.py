@@ -126,6 +126,11 @@ app.config.update(
 # ── Lightweight in-memory rate limiting (stdlib only, no new deps) ──
 _RATE_BUCKETS: Dict[str, List[float]] = {}
 _RATE_BUCKETS_MAX = 4096
+# The end-to-end suite registers several throwaway accounts per run and is
+# restarted often, so the per-IP window would otherwise turn a green suite
+# into a 429. Limiting itself stays covered by tests/test_security.py; this
+# switch is only ever set by tests/e2e/start-server.mjs.
+_RATE_LIMIT_DISABLED = os.environ.get("CAMANIME_DISABLE_RATE_LIMIT") == "1"
 _RATE_BUCKET_EVICT = 256
 _RATE_RULES = (
     # (path prefix, max requests, window in seconds)
@@ -182,6 +187,8 @@ def _client_ip() -> str:
 
 def _rate_limited(path: str) -> bool:
     """Sliding-window limiter for sensitive endpoints."""
+    if _RATE_LIMIT_DISABLED:
+        return False
     now = time.time()
     for prefix, limit, window in _RATE_RULES:
         if path.startswith(prefix):

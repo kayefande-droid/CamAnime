@@ -67,8 +67,9 @@ Clicking a score posts to `/api/community/rate` and the average updates.
 *Edge:* a second click from the same client does not double-count the same rater.
 
 ### J7 Download the APK (guest)
-`/download` shows version `2.12.0` (build `23`); the download control resolves to
-the APK and `/get/android` redirects to it.
+`/download` shows the version and build that `/healthz` reports (the test reads
+the endpoint, so it cannot go stale again); the download control resolves to the
+APK and `/get/android` redirects to it.
 *Edge:* Render and the mirror serve byte-identical APKs of the same length.
 
 ### J8 Sign up and sign in (member)

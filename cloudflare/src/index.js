@@ -220,8 +220,23 @@ async function handle(request, env, ctx) {
       // though the origin serves them fine, so both statuses try the origin.
       const fallback = await originFallback(url);
       if (fallback) return fallback;
+      // AniList refusing Cloudflare's egress is an upstream outage, not a bug in
+      // this page: say so with a 503 and a retry hint instead of a bare 500.
+      if (/anilist/i.test(String(err && err.message))) {
+        return withSeo(
+          html(
+            errorPage(503, "The catalogue is briefly unavailable. Please retry in a moment."),
+            503,
+            { "retry-after": "60" },
+          ),
+          url,
+        );
+      }
       const message = status === 404 ? "Page not found." : "Something went wrong on the edge.";
-      return html(errorPage(status, message), status);
+      // The plain error page carries the __CA_CANONICAL__ / __CA_ORIGIN__
+      // placeholders, so it must pass through withSeo like every other page or
+      // the head leaks literal template markers to crawlers and link checkers.
+      return withSeo(html(errorPage(status, message), status), url);
     }
 }
 
@@ -330,8 +345,15 @@ async function originFallback(url) {
     const res = await fetch(new URL(url.pathname + url.search, ORIGIN), {
       headers: { accept: "text/html", "user-agent": "CamAnime-Edge/2.13.0" },
       signal: AbortSignal.timeout(12000),
-      redirect: "follow",
+      // Manual so installer links can be replayed: /get/windows, /get/mac and
+      // friends exist on the origin as 302s to the release assets, and following
+      // them here would turn a working download link into this worker's 404.
+      redirect: "manual",
     });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (location) return Response.redirect(location, res.status);
+    }
     if (!res.ok) return null;
     if (!(res.headers.get("content-type") || "").includes("text/html")) return null;
     let body = await res.text();

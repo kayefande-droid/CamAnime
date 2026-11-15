@@ -24,6 +24,9 @@ const child = spawn(python, ["-c", `import app; app.app.run(host="127.0.0.1", po
     CAMANIME_DB: join(dbDir, "e2e.db"),
     CAMANIME_SECRET: "e2e-only-not-production",
     CAMANIME_COOKIE_SECURE: "0",
+    // Each run registers a handful of throwaway members; the per-IP window is
+    // unit-tested in tests/test_security.py, so it is off for this server only.
+    CAMANIME_DISABLE_RATE_LIMIT: "1",
     CAMANIME_ADMIN_EMAIL: "e2e-owner@example.com",
     CAMANIME_ADMIN_PASSWORD: "e2e-owner-password",
     PYTHONIOENCODING: "utf-8",

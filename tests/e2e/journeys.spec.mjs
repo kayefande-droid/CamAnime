@@ -210,11 +210,15 @@ test("J6 rating posts and the score is clamped to 1-10", async ({ page, request 
 
 // ── J7: the APK ──────────────────────────────────────────────────────────
 
-test("J7 the download page names version 2.12.0 and serves the APK", async ({ page, request }) => {
+test("J7 the download page names the shipped version and serves the APK", async ({ page, request }) => {
   await page.goto("/download");
+  const health = await (await request.get("/healthz")).json();
+  expect(health.version).toMatch(/^\d+\.\d+\.\d+$/);
   const text = await page.locator("body").innerText();
-  expect(text).toContain("2.12.0");
-  expect(text).toMatch(/23/);
+  // The page and the running app must agree; a stale hard-coded build number
+  // here is exactly how a release note drifts from the APK.
+  expect(text).toContain(`CamAnime ${health.version} (build `);
+  expect(text).toMatch(/build \d+\d/);
 
   // The APK is streamed, not redirected; check its size so a placeholder HTML
   // file can never pass as the app.

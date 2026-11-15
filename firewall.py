@@ -17,6 +17,7 @@ front of both hosts).
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -38,6 +39,12 @@ BAN_STRIKES = 8                  # strikes inside the window that trigger a ban
 BAN_SECONDS = 900                # ban length
 
 MAX_TRACKED_IPS = 20000          # bounded memory on a small instance
+
+# The end-to-end suite signs several throwaway members in and out within a
+# minute, which the auth pace would read as a burst. Only tests/e2e/
+# start-server.mjs sets this, and only the pace check reads it — bans and
+# signatures stay live, and the pace itself is covered by tests/test_firewall.py.
+RATE_DISABLED = os.environ.get("CAMANIME_DISABLE_RATE_LIMIT") == "1"
 
 AUTH_PREFIXES = ("/api/auth/", "/login", "/register", "/api/mfa")
 MEDIA_PREFIXES = ("/api/proxy/", "/api/download/", "/api/v1/stream")
@@ -162,7 +169,7 @@ class Firewall:
             return ("Address temporarily blocked after repeated abuse.", 403,
                     {"Retry-After": str(left), "X-CamAnime-Firewall": "ban"})
 
-        wait = self._rate_exceeded(ip, path)
+        wait = None if RATE_DISABLED else self._rate_exceeded(ip, path)
         if wait:
             # A rate limit is a pace signal, not an attack: striking it would
             # turn an honest burst (or a login typo streak) into a ban and lock
