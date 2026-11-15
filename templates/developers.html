@@ -4,20 +4,20 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Developer API — free anime streaming | CamAnime</title>
 <meta name="description" content="Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day. Create a key in seconds.">
-<link rel="canonical" href="https://camanime.onrender.com/developers">
+<link rel="canonical" href="{{ site_origin }}/developers">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta property="og:site_name" content="CamAnime">
-<meta property="og:url" content="https://camanime.onrender.com/developers">
+<meta property="og:url" content="{{ site_origin }}/developers">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Developer API — free anime streaming | CamAnime">
 <meta property="og:description" content="One provider behind a free key: direct MP4 stream URLs, per-key quota and 1,000 calls a day.">
-<meta property="og:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
+<meta property="og:image" content="{{ site_origin }}/static/brand/og-card-1200x630.png">
 <meta property="og:image:alt" content="CamAnime — watch anime online free in HD">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Developer API — free anime streaming | CamAnime">
 <meta name="twitter:description" content="One provider behind a free key: direct MP4 stream URLs, per-key quota and 1,000 calls a day.">
-<meta name="twitter:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"CamAnime Developer API","applicationCategory":"DeveloperApplication","operatingSystem":"Any","url":"https://camanime.onrender.com/developers","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"CamAnime","url":"https://camanime.onrender.com/"}}</script>
+<meta name="twitter:image" content="{{ site_origin }}/static/brand/og-card-1200x630.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"CamAnime Developer API","applicationCategory":"DeveloperApplication","operatingSystem":"Any","url":"{{ site_origin }}/developers","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"publisher":{"@type":"Organization","name":"CamAnime","url":"{{ site_origin }}/"}}</script>
 
 <meta name="theme-color" content="#07080d">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
@@ -116,7 +116,7 @@
 
   <section id="docs">
     <h2 class="section-title">Quickstart</h2>
-    <pre class="dev-code">curl -s "https://camanime.onrender.com/api/v1/stream/16498/1" \
+    <pre class="dev-code">curl -s "{{ site_origin }}/api/v1/stream/16498/1" \
   -H "x-api-key: ca_live_your_key_here"</pre>
     <p class="muted">The same route exists on the Cloudflare deployment: <code>https://camanjme.camanime.workers.dev/api/v1/stream/16498/1</code>.</p>
 
@@ -149,7 +149,7 @@
 }</pre>
 
     <h2 class="section-title">Embed it</h2>
-    <pre class="dev-code">const res = await fetch("https://camanime.onrender.com/api/v1/stream/16498/1", {
+    <pre class="dev-code">const res = await fetch("{{ site_origin }}/api/v1/stream/16498/1", {
   headers: { "x-api-key": "ca_live_your_key_here" }
 });
 const data = await res.json();
@@ -193,11 +193,11 @@ x-api-key: ca_live_your_key_here
     <h3 class="dev-sub">3. Play it</h3>
     <pre class="dev-code">const key = "ca_live_your_key_here";   // keep this server-side
 
-const list = await fetch("https://camanime.onrender.com/api/v1/dev/catalog?sort=trending", {
+const list = await fetch("{{ site_origin }}/api/v1/dev/catalog?sort=trending", {
   headers: { "x-api-key": key }
 }).then(r =&gt; r.json());
 
-const ep = await fetch("https://camanime.onrender.com/api/v1/stream/" + list.results[0].id + "/1", {
+const ep = await fetch("{{ site_origin }}/api/v1/stream/" + list.results[0].id + "/1", {
   headers: { "x-api-key": key }
 }).then(r =&gt; r.json());
 

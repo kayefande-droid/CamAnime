@@ -131,6 +131,16 @@ _RATE_BUCKETS_MAX = 4096
 # into a 429. Limiting itself stays covered by tests/test_security.py; this
 # switch is only ever set by tests/e2e/start-server.mjs.
 _RATE_LIMIT_DISABLED = os.environ.get("CAMANIME_DISABLE_RATE_LIMIT") == "1"
+
+# The public hostname is a deployment setting rather than a constant: canonical
+# tags, JSON-LD, the sitemap and robots.txt must name whichever host actually
+# serves the site, so a custom domain is configured once here instead of being
+# baked into every template. Unset keeps the Render hostname.
+_PUBLIC_ORIGIN_ENV = (os.environ.get("CAMANIME_PUBLIC_ORIGIN") or "").strip().rstrip("/")
+PUBLIC_ORIGIN = _PUBLIC_ORIGIN_ENV or "https://camanime.onrender.com"
+# Only redirect www when an operator has named the canonical host, so the
+# Render hostname keeps answering health checks and the mirror's origin relay.
+_CANONICAL_HOST_ENFORCED = bool(_PUBLIC_ORIGIN_ENV)
 _RATE_BUCKET_EVICT = 256
 _RATE_RULES = (
     # (path prefix, max requests, window in seconds)
@@ -287,6 +297,30 @@ def _canonical_url():
     target = path.rstrip("/") or "/"
     query = request.query_string.decode("utf-8", "replace")
     return redirect(f"{target}?{query}" if query else target, code=308)
+
+
+@app.context_processor
+def _public_origin_context():
+    """Expose the configured public origin to every template."""
+    return {"site_origin": PUBLIC_ORIGIN}
+
+
+@app.before_request
+def _canonical_host():
+    """Serve one hostname: www redirects to the configured apex.
+
+    Search engines otherwise see the same page on two hostnames, and the
+    canonical tag inside each copy would disagree with the other.
+    """
+    if not _CANONICAL_HOST_ENFORCED or request.method not in ("GET", "HEAD"):
+        return None
+    host = (request.host or "").split(":")[0].lower()
+    apex = PUBLIC_ORIGIN.split("://", 1)[-1].split("/")[0].lower()
+    if not host.startswith("www.") or host == apex:
+        return None
+    query = request.query_string.decode("utf-8", "replace")
+    target = f"{PUBLIC_ORIGIN}{request.path or '/'}"
+    return redirect(f"{target}?{query}" if query else target, code=301)
 
 
 @app.before_request
@@ -5180,7 +5214,7 @@ def sitemap():
     Cache timestamps track requests rather than meaningful content changes,
     so omit lastmod.
     """
-    base = "https://camanime.onrender.com"
+    base = PUBLIC_ORIGIN
     entries = ["/", "/scraper", "/download", "/promo", "/developers", "/advert", "/privacy"]
     try:
         with platform._db() as conn:
@@ -5213,7 +5247,7 @@ def robots():
             "User-agent: *\nAllow: /\nAllow: /static/\n"
             "Disallow: /admin\nDisallow: /login\nDisallow: /logout\nDisallow: /settings\n"
             "Disallow: /api/\nDisallow: /get/\nDisallow: /heaven/\n"
-            "Sitemap: https://camanime.onrender.com/sitemap.xml\n")
+            f"Sitemap: {PUBLIC_ORIGIN}/sitemap.xml\n")
     resp = Response(body, mimetype="text/plain")
     resp.headers["Cache-Control"] = "public, max-age=3600"
     return resp

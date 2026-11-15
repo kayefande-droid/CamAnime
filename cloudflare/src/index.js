@@ -77,6 +77,26 @@ export default {
   },
 };
 
+/**
+ * Redirect www to the configured apex domain.
+ *
+ * Only active once PUBLIC_ORIGIN names the canonical host, so the workers.dev
+ * hostname keeps serving normally until DNS is pointed at the deployment.
+ */
+export function canonicalHostRedirect(request, env, url) {
+  const configured = String(env.PUBLIC_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (!configured || (request.method !== "GET" && request.method !== "HEAD")) return null;
+  let apex;
+  try {
+    apex = new URL(configured).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (!host.startsWith("www.") || host === apex) return null;
+  return Response.redirect(new URL(url.pathname + url.search, configured).toString(), 301);
+}
+
 async function handle(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -88,6 +108,11 @@ async function handle(request, env, ctx) {
     // anything else so a scanner never reaches routing or a provider call.
     const blocked = guard(request, url);
     if (blocked) return blocked;
+
+    // One hostname per site: when a custom domain is configured, www redirects
+    // to it so the same page is never served (and indexed) twice.
+    const apexRedirect = canonicalHostRedirect(request, env, url);
+    if (apexRedirect) return apexRedirect;
 
     // One canonical URL per page. A trailing slash used to 404 while the same
     // page without it worked, which broke links copied by hand or by tools.

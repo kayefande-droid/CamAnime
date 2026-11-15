@@ -12,7 +12,7 @@ Walked item by item against the two live hosts:
 | Production build passes with no unexplained warnings | **Done** | `pytest tests -q` 215 passed; `npm --prefix cloudflare test` 88 passed |
 | Env vars and secrets set on the host, production keys separate, nothing secret in the client bundle | **Done** | Render dashboard holds `CAMANIME_SECRET`, `CAMANIME_ADMIN_*`, `CAMANIME_D1_*`; worker uses its own bindings plus `cloudflare/.cf-deploy.env` (git-ignored). No key is referenced from any template or shipped JS — the developer API returns keys only over an authenticated session. |
 | Database migrations applied; backup or point-in-time restore enabled | **Done (D1) / Open (file fallback)** | D1 schema is applied by the worker's own migrations and by `camanime_platform.py` on the origin; Cloudflare D1 offers Time Travel restores (30 days). The SQLite file fallback on a dev machine has no backup — it holds no production data. |
-| Domain connected, HTTPS, `www`/apex redirect, HSTS | **Done (platform hostnames)** | Both hosts answer on HTTPS with `strict-transport-security: max-age=31536000; includeSubDomains`. There is no custom domain yet, so a www/apex redirect is not applicable. |
+| Domain connected, HTTPS, `www`/apex redirect, HSTS | **Ready, needs a domain** | Both hosts answer on HTTPS with `strict-transport-security: max-age=31536000; includeSubDomains`. `www` now 301s to the configured apex on both hosts and every canonical/sitemap/JSON-LD URL reads `CAMANIME_PUBLIC_ORIGIN`; no domain is connected yet, so the platform hostnames remain the canonical origin. |
 | Preview and staging are `noindex` or protected | **Not applicable** | Both deployments are the production site; there is no separate preview environment. The owner console is behind `ADMIN_PATH` + role, and `/search` is noindex. |
 
 ## Search and sharing
@@ -60,6 +60,5 @@ Walked item by item against the two live hosts:
 
 1. **Uptime and error alerting.** Pick a monitor (Cloudflare's own uptime checks or an external one) and give it an alert destination.
 2. **`CAMANIME_D1_TOKEN` on Render.** The origin only writes to D1 when this is set in the dashboard; until then the origin keeps its own store.
-3. **Custom domain.** Both hosts currently live on platform hostnames; connecting a domain brings www/apex redirects and a single canonical origin.
-4. **Long episode rails.** A 1000+ episode series still renders its whole rail server-side on the origin; paginate it with `/api/v1/anime/<id>/episodes`.
+3. **Custom domain.** The wiring is in place and needs a domain: set `CAMANIME_PUBLIC_ORIGIN` (origin) and `PUBLIC_ORIGIN` (Worker), add the Worker route and the Render custom domain, and www 301s to the apex on both hosts. Steps are in the README's *Custom domain* section.
 5. **Sitemap ownership.** The mirror's sitemap lists catalogue URLs the origin's does not — decide one source of truth before submitting either to search engines.

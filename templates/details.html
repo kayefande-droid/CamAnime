@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ anime.title }} — Episode Guide | CamAnime</title>
-    {% set social_image = anime.image if anime.image and anime.image.startswith('http') else 'https://camanime.onrender.com' ~ (anime.image or '/static/icon-512.png') %}
+    {% set social_image = anime.image if anime.image and anime.image.startswith('http') else '{{ site_origin }}' ~ (anime.image or '/static/icon-512.png') %}
     <meta name="description" content="{{ anime.title }} episode guide on CamAnime — browse episode information, cast, relations and recommendations. Playback and audio options are shown when available from configured providers.">
     <meta name="theme-color" content="#087BFF">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="keywords" content="{{ anime.title }} anime, {{ anime.title }} episodes, {{ anime.title }} episode guide, CamAnime {{ anime.title }}{% for t in (anime.tags or [])[:3] %}, {{ t }} anime{% endfor %}">
     <meta property="og:site_name" content="CamAnime">
-    <meta property="og:url" content="https://camanime.onrender.com/anime/{{ anime.id }}">
+    <meta property="og:url" content="{{ site_origin }}/anime/{{ anime.id }}">
     <meta property="og:title" content="{{ anime.title }} — Episode Guide | CamAnime">
     <meta property="og:description" content="Browse {{ anime.title }} episode information. Playback and audio options are shown when available from configured providers.">
     <meta property="og:type" content="video.tv_show">
@@ -22,13 +22,13 @@
     <meta name="twitter:description" content="Browse {{ anime.title }} episode information on CamAnime.">
     <meta name="twitter:image" content="{{ social_image }}">
     <meta name="twitter:image:alt" content="{{ anime.title }} anime poster">
-    <link rel="canonical" href="https://camanime.onrender.com/anime/{{ anime.id }}">
+    <link rel="canonical" href="{{ site_origin }}/anime/{{ anime.id }}">
     {% if ep_pages > 1 %}
-    {% if ep_page > 1 %}<link rel="prev" href="https://camanime.onrender.com/anime/{{ anime.id }}?eps={{ ep_page - 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
-    {% if ep_page < ep_pages %}<link rel="next" href="https://camanime.onrender.com/anime/{{ anime.id }}?eps={{ ep_page + 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
+    {% if ep_page > 1 %}<link rel="prev" href="{{ site_origin }}/anime/{{ anime.id }}?eps={{ ep_page - 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
+    {% if ep_page < ep_pages %}<link rel="next" href="{{ site_origin }}/anime/{{ anime.id }}?eps={{ ep_page + 1 }}{{ '&order=desc' if ep_order == 'desc' else '' }}">{% endif %}
     {% endif %}
     <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"TVSeries","url":"https://camanime.onrender.com/anime/{{ anime.id }}","name":{{ anime.title | tojson }},"image":{{ social_image | tojson }},"description":{{ anime.description | tojson }}{% if anime.total_episodes is not none %},"numberOfEpisodes":{{ anime.total_episodes }}{% endif %}{% if anime.tags %},"genre":{{ anime.tags | tojson }}{% endif %}{% if anime.studio %},"productionCompany":{"@type":"Organization","name":{{ anime.studio | tojson }}}{% endif %}}
+    {"@context":"https://schema.org","@type":"TVSeries","url":"{{ site_origin }}/anime/{{ anime.id }}","name":{{ anime.title | tojson }},"image":{{ social_image | tojson }},"description":{{ anime.description | tojson }}{% if anime.total_episodes is not none %},"numberOfEpisodes":{{ anime.total_episodes }}{% endif %}{% if anime.tags %},"genre":{{ anime.tags | tojson }}{% endif %}{% if anime.studio %},"productionCompany":{"@type":"Organization","name":{{ anime.studio | tojson }}}{% endif %}}
     </script>
     <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">

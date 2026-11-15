@@ -82,9 +82,6 @@ Still open, recorded in `TEST-REPORT.md`:
   `redesign.css`; tokenising them is its own change.
 - The mirror sitemap lists catalogue URLs the origin does not; pick a single
   source of truth before submitting either to search engines.
-- The origin's details page renders every episode of a 1000+ episode series
-  server-side (LCP 7.9s on ONE PIECE); paginate the episode rail with
-  `/api/v1/anime/<id>/episodes`.
 - Error tracking and uptime monitors are not wired to a paid service; the
   Worker's `wrangler tail` and Render logs are the current observability.
 
@@ -94,7 +91,32 @@ Deployment uses **Render** for the Flask origin and **Cloudflare Workers** for t
 
 Owner-only runbooks, release-signing procedures, provider notes and incident steps live in `docs/private/` and are intentionally **git-ignored**. Do not commit signing keys, `.env` files, service-account JSON, or admin credentials — `.gitignore` already blocks the usual suspects.
 
-Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
+Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), `CAMANIME_PUBLIC_ORIGIN` (see *Custom domain*), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
+
+### Custom domain
+
+Both hosts can answer on one domain, with the apex as the only canonical host:
+
+1. **DNS.** Add the domain to a Cloudflare zone and point it at the deployment.
+   For the Worker, add a route (or a Workers *Custom Domain*) in
+   `cloudflare/wrangler.jsonc` once the zone exists:
+   `"routes": [{ "pattern": "camanime.example/*", "zone_name": "camanime.example" }]`
+   with a proxied `www` record too. For Render, add the same hostnames under
+   *Settings → Custom Domains* and follow the CNAME it prints.
+2. **Canonical origin.** Set `CAMANIME_PUBLIC_ORIGIN=https://camanime.example` on
+   the Render service and `PUBLIC_ORIGIN` (Worker variable) to the same value,
+   then redeploy both. Canonical tags, `og:url`, JSON-LD, the sitemap, the
+   robots `Sitemap:` line and the visible hostname in the advert/promo pages all
+   read that one value; nothing hardcodes a hostname any more.
+3. **One hostname.** With the variable set, `www.` requests 301 to the apex on
+   both hosts, path and query preserved. Left unset, nothing redirects, so the
+   Render service keeps answering `/healthz` and the mirror's origin relay.
+
+`https://camanime.onrender.com` and the `workers.dev` hostname keep working after
+this; they are simply no longer the canonical origin advertised to search
+engines. `tests/test_canonical_urls.py` and
+`cloudflare/test/canonical-host.test.mjs` pin the redirect and canonical
+behaviour.
 
 ### Reaching the CLI on a restrictive mobile network
 

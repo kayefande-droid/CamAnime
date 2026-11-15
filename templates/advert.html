@@ -4,18 +4,18 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CamAnime — Every feature, two fast ways to watch</title>
 <meta name="description" content="CamAnime advert: streaming, downloads, adaptive quality, themes and layout templates, community, accounts — on Render and on Cloudflare.">
-<link rel="canonical" href="https://camanime.onrender.com/advert">
+<link rel="canonical" href="{{ site_origin }}/advert">
 <meta property="og:site_name" content="CamAnime">
-<meta property="og:url" content="https://camanime.onrender.com/advert">
+<meta property="og:url" content="{{ site_origin }}/advert">
 <meta property="og:type" content="website">
 <meta property="og:title" content="CamAnime — Every feature, two fast ways to watch">
 <meta property="og:description" content="Streaming, downloads, themes, layout templates and the developer API, on Render and on Cloudflare.">
-<meta property="og:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
+<meta property="og:image" content="{{ site_origin }}/static/brand/og-card-1200x630.png">
 <meta property="og:image:alt" content="CamAnime — watch anime online free in HD">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="CamAnime — Every feature, two fast ways to watch">
 <meta name="twitter:description" content="Streaming, downloads, themes, layout templates and the developer API, on Render and on Cloudflare.">
-<meta name="twitter:image" content="https://camanime.onrender.com/static/brand/og-card-1200x630.png">
+<meta name="twitter:image" content="{{ site_origin }}/static/brand/og-card-1200x630.png">
 
 <meta name="theme-color" content="#07080d">
 <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">
@@ -72,7 +72,7 @@ body{background:var(--bg-canvas,#07080d);background-image:radial-gradient(rgba(2
 <div class="ad-wrap">
   <div class="ad-top">
     <a href="/" aria-label="CamAnime home"><img src="/static/brand/camanime-logo.svg" alt="CamAnime"></a>
-    <a href="/">camanime.onrender.com <i class="fas fa-arrow-up-right-from-square"></i></a>
+    <a href="/">{{ site_origin | replace("https://", "") | replace("http://", "") }} <i class="fas fa-arrow-up-right-from-square"></i></a>
   </div>
 
   <header class="ad-hero">
@@ -81,7 +81,7 @@ body{background:var(--bg-canvas,#07080d);background-image:radial-gradient(rgba(2
     <p class="lede">CamAnime is a free anime streaming experience with HD English sub &amp; English dub playback, a smart adaptive player, real offline library tools, and a community that rates and reviews every show today — served from two independent deployments on Render and Cloudflare.</p>
     <div class="ad-ctas">
       <a class="ad-btn primary" href="/download"><i class="fas fa-android"></i> Get the Android app</a>
-      <a class="ad-btn secondary" href="https://camanime.onrender.com"><i class="fas fa-fire"></i> Open on Render</a>
+      <a class="ad-btn secondary" href="{{ site_origin }}"><i class="fas fa-fire"></i> Open on Render</a>
       <a class="ad-btn ghost" href="https://camanjme.camanime.workers.dev"><i class="fas fa-cloud"></i> Open on Cloudflare</a>
     </div>
   </header>
@@ -89,8 +89,8 @@ body{background:var(--bg-canvas,#07080d);background-image:radial-gradient(rgba(2
   <section class="ad-hosts" aria-label="Both CamAnime deployments">
     <div class="ad-host">
       <span class="tag">RENDER</span>
-      <h2><i class="fas fa-fire" style="color:#FF5E62"></i> camanime.onrender.com</h2>
-      <a class="entry" href="https://camanime.onrender.com">camanime.onrender.com</a>
+      <h2><i class="fas fa-fire" style="color:#FF5E62"></i> {{ site_origin | replace("https://", "") | replace("http://", "") }}</h2>
+      <a class="entry" href="{{ site_origin }}">{{ site_origin | replace("https://", "") | replace("http://", "") }}</a>
       <p>The original full-fat deployment: Python scraping pipeline, HD provider extraction, live schedule, forum and admin APIs.</p>
     </div>
     <div class="ad-host">
@@ -143,7 +143,7 @@ body{background:var(--bg-canvas,#07080d);background-image:radial-gradient(rgba(2
 
   <div class="ad-ctas" style="justify-content:center;padding-bottom:1rem">
     <a class="ad-btn primary" href="/download"><i class="fas fa-download"></i> Download CamAnime</a>
-    <a class="ad-btn secondary" href="https://camanime.onrender.com"><i class="fas fa-fire"></i> Render site</a>
+    <a class="ad-btn secondary" href="{{ site_origin }}"><i class="fas fa-fire"></i> Render site</a>
     <a class="ad-btn ghost" href="https://camanjme.camanime.workers.dev"><i class="fas fa-cloud"></i> Cloudflare site</a>
   </div>
   <p class="ad-quote">Tell a friend: same brand, same catalogue, same community — pick whichever edge is closer to you today.</p>

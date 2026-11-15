@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime</title>
-    {% set social_image = anime.image if anime.image and anime.image.startswith('http') else 'https://camanime.onrender.com' ~ (anime.image or '/static/brand/og-card-1200x630.png') %}
+    {% set social_image = anime.image if anime.image and anime.image.startswith('http') else '{{ site_origin }}' ~ (anime.image or '/static/brand/og-card-1200x630.png') %}
     <meta name="description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — free anime streaming with episode guides. Playback and audio options depend on available providers.">
     <meta name="keywords" content="CamAnime, watch anime online, watch {{ anime.title }} Episode {{ ep_num }}, free anime streaming, anime streaming website, {{ anime.title }} episode guide">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta property="og:site_name" content="CamAnime">
-    <meta property="og:url" content="https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}">
+    <meta property="og:url" content="{{ site_origin }}/watch/{{ anime.id }}/{{ ep_num }}">
     <meta property="og:title" content="Watch {{ anime.title }} Episode {{ ep_num }} | CamAnime">
     <meta property="og:description" content="Watch {{ anime.title }} Episode {{ ep_num }} on CamAnime — episode guide with playback and audio options when available from configured providers.">
     <meta property="og:type" content="video.episode">
@@ -20,9 +20,9 @@
     <meta name="twitter:description" content="Watch {{ anime.title }} Episode {{ ep_num }} — episode guide on CamAnime.">
     <meta name="twitter:image" content="{{ social_image }}">
     <meta name="twitter:image:alt" content="{{ anime.title }} anime poster">
-    <link rel="canonical" href="https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}">
+    <link rel="canonical" href="{{ site_origin }}/watch/{{ anime.id }}/{{ ep_num }}">
     <script type="application/ld+json">
-    {"@context":"https://schema.org","@type":"TVEpisode","name":{{ current_episode_title | tojson }},"episodeNumber":{{ ep_num }},"partOfSeries":{"@type":"TVSeries","name":{{ anime.title | tojson }},"url":"https://camanime.onrender.com/anime/{{ anime.id }}"},"image":{{ social_image | tojson }},"url":"https://camanime.onrender.com/watch/{{ anime.id }}/{{ ep_num }}"}
+    {"@context":"https://schema.org","@type":"TVEpisode","name":{{ current_episode_title | tojson }},"episodeNumber":{{ ep_num }},"partOfSeries":{"@type":"TVSeries","name":{{ anime.title | tojson }},"url":"{{ site_origin }}/anime/{{ anime.id }}"},"image":{{ social_image | tojson }},"url":"{{ site_origin }}/watch/{{ anime.id }}/{{ ep_num }}"}
     </script>
     <meta name="theme-color" content="#087BFF">
     <link rel="icon" href="/static/brand/camanime-icon.svg" type="image/svg+xml">

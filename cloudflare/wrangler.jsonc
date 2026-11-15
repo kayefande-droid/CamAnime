@@ -27,7 +27,11 @@
     "ADMIN_PATH": "/owner-console",
     // Public identifier of the Firebase project used for FCM (not a secret;
     // the service-account key is set with `wrangler secret put FCM_SERVICE_ACCOUNT`).
-    "FCM_PROJECT_ID": ""
+    "FCM_PROJECT_ID": "",
+    // Canonical public origin, e.g. "https://camanime.com". Leave empty while
+    // the worker answers on its workers.dev hostname; set it once the custom
+    // domain (and its Worker route) exists and www will 301 to this host.
+    "PUBLIC_ORIGIN": ""
   },
 
   // Hourly new-episode digest. FCM delivers to devices with the app closed or
