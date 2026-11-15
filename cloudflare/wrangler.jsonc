@@ -28,6 +28,11 @@
     // Public identifier of the Firebase project used for FCM (not a secret;
     // the service-account key is set with `wrangler secret put FCM_SERVICE_ACCOUNT`).
     "FCM_PROJECT_ID": "",
+    // Alerting. ALERT_WEBHOOK is an incoming webhook that accepts
+    // {"text": ...} (Slack, Discord, custom). Set it as a secret with
+    // `wrangler secret put ALERT_WEBHOOK`; unset means no alerts are sent.
+    // UPTIME_TARGETS overrides the two /healthz URLs the 5-minute cron polls.
+    "UPTIME_TARGETS": "https://camanime.onrender.com/healthz,https://camanjme.camanime.workers.dev/healthz",
     // Canonical public origin, e.g. "https://camanime.com". Leave empty while
     // the worker answers on its workers.dev hostname; set it once the custom
     // domain (and its Worker route) exists and www will 301 to this host.
@@ -37,7 +42,7 @@
   // Hourly new-episode digest. FCM delivers to devices with the app closed or
   // the screen off; a run with nothing airing sends nothing at all.
   "triggers": {
-    "crons": ["0 * * * *"]
+    "crons": ["0 * * * *", "*/5 * * * *"]
   },
 
   "d1_databases": [

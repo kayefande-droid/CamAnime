@@ -82,8 +82,9 @@ Still open, recorded in `TEST-REPORT.md`:
   `redesign.css`; tokenising them is its own change.
 - The mirror sitemap lists catalogue URLs the origin does not; pick a single
   source of truth before submitting either to search engines.
-- Error tracking and uptime monitors are not wired to a paid service; the
-  Worker's `wrangler tail` and Render logs are the current observability.
+- Alerting has no hosted account behind it yet: errors and uptime failures are
+  posted to `CAMANIME_ALERT_WEBHOOK` / `ALERT_WEBHOOK`, so an alert destination
+  (Slack, Discord, or any receiver) still has to be chosen and set.
 
 ## 🛡️ Operations & privacy
 
@@ -91,7 +92,7 @@ Deployment uses **Render** for the Flask origin and **Cloudflare Workers** for t
 
 Owner-only runbooks, release-signing procedures, provider notes and incident steps live in `docs/private/` and are intentionally **git-ignored**. Do not commit signing keys, `.env` files, service-account JSON, or admin credentials — `.gitignore` already blocks the usual suspects.
 
-Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), `CAMANIME_PUBLIC_ORIGIN` (see *Custom domain*), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
+Environment variables the host expects: `CAMANIME_SECRET`, `CAMANIME_ADMIN_EMAIL` + `CAMANIME_ADMIN_PASSWORD` (set together to provision the first owner), `CAMANIME_PUBLIC_ORIGIN` (see *Custom domain*), `CAMANIME_ALERT_WEBHOOK` + optional `CAMANIME_ALERT_INTERVAL` (see *Alerting*), and the persistent store — `CAMANIME_D1_ACCOUNT_ID`, `CAMANIME_D1_DATABASE_ID`, `CAMANIME_D1_TOKEN`. With all three set the app keeps accounts, comments, ratings, notifications and counters in D1 and they survive a redeploy; without them it falls back to the local file from `CAMANIME_DB` (fine for a dev machine). No ffmpeg or re-encoding is used: the API reports exactly the qualities and audio tracks the sources publish.
 
 ### Custom domain
 
@@ -117,6 +118,36 @@ this; they are simply no longer the canonical origin advertised to search
 engines. `tests/test_canonical_urls.py` and
 `cloudflare/test/canonical-host.test.mjs` pin the redirect and canonical
 behaviour.
+
+### Alerting
+
+Two things raise an alert, both to the same destination:
+
+- **Errors.** Any 5xx the origin returns, and any 5xx the Worker returns, is
+  posted once per kind per 5 minutes (`CAMANIME_ALERT_INTERVAL` /
+  `ALERT_INTERVAL_SECONDS`). The webhook is dialled on a background thread
+  (origin) or through `ctx.waitUntil` (edge), so a dead webhook never delays a
+  page.
+- **Uptime.** The Worker's `*/5 * * * *` cron polls
+  `https://camanime.onrender.com/healthz` and
+  `https://camanjme.camanime.workers.dev/healthz` and alerts for whichever one
+  fails or times out; `UPTIME_TARGETS` (Worker variable, comma-separated)
+  replaces the list. Both `/healthz` endpoints are exempt from the firewall, so
+  a monitor is never rate-limited.
+
+Set a destination at any time; neither host sends anything while it is unset:
+
+```bash
+# Render: environment variable
+CAMANIME_ALERT_WEBHOOK=https://hooks.example/...
+# Cloudflare: encrypted secret (and redeploy for the cron to pick it up)
+cd cloudflare && npx wrangler secret put ALERT_WEBHOOK
+```
+
+The payload is `{"text": "[CamAnime ...] ...", "kind", "message", "detail"}`,
+which Slack and Discord incoming webhooks accept directly. If a hosted monitor
+is preferred instead, point it at the same two `/healthz` URLs and have it post
+to the same webhook — the app-side alerting needs no change.
 
 ### Reaching the CLI on a restrictive mobile network
 

@@ -63,16 +63,99 @@ export function withSecurityHeaders(response) {
   });
 }
 
+const UPTIME_CRON = "*/5 * * * *";
+// Both deployments, so a dead origin or a dead mirror both raise something.
+// UPTIME_TARGETS overrides this list without a redeploy of the code.
+const DEFAULT_HEALTH_TARGETS = [
+  "https://camanime.onrender.com/healthz",
+  "https://camanjme.camanime.workers.dev/healthz",
+];
+const _alertSent = new Map();
+
+/**
+ * Post one throttled alert to ALERT_WEBHOOK (any webhook that accepts
+ * {"text": ...}). No-op when it is unset, so a fresh deployment stays quiet.
+ */
+export function alertWebhook(env, ctx, kind, message, detail = "") {
+  const hook = String(env.ALERT_WEBHOOK || "").trim();
+  if (!hook) return false;
+  const throttleMs = Number(env.ALERT_INTERVAL_SECONDS || 300) * 1000;
+  const last = _alertSent.get(kind) || 0;
+  if (Date.now() - last < throttleMs) return false;
+  _alertSent.set(kind, Date.now());
+  const post = fetch(hook, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      text: `[CamAnime edge] ${message}`,
+      kind,
+      message,
+      detail: String(detail).slice(0, 1500),
+    }),
+  }).catch((err) =>
+    console.error(JSON.stringify({ message: "alert webhook failed", error: String(err) })),
+  );
+  if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(post);
+  return true;
+}
+
+/** Poll every health endpoint and alert on the ones that do not answer 200. */
+export async function uptimeSweep(env, ctx) {
+  const configured = String(env.UPTIME_TARGETS || "")
+    .split(",")
+    .map((target) => target.trim())
+    .filter(Boolean);
+  const targets = configured.length ? configured : DEFAULT_HEALTH_TARGETS;
+  const results = await Promise.all(
+    targets.map(async (target) => {
+      try {
+        const res = await fetch(target, {
+          headers: { "user-agent": "CamAnime-uptime/1.0" },
+          signal: AbortSignal.timeout(10000),
+        });
+        return { target, ok: res.ok, detail: `HTTP ${res.status}` };
+      } catch (err) {
+        return { target, ok: false, detail: String(err) };
+      }
+    }),
+  );
+  for (const result of results) {
+    if (result.ok) continue;
+    alertWebhook(
+      env, ctx, `uptime:${result.target}`,
+      `health check failed: ${result.target}`, result.detail,
+    );
+  }
+  return results;
+}
+
 export default {
   async fetch(request, env, ctx) {
-    return withSecurityHeaders(await handle(request, env, ctx));
+    const response = withSecurityHeaders(await handle(request, env, ctx));
+    if (response.status >= 500) {
+      alertWebhook(
+        env, ctx, `http-${response.status}`,
+        `${response.status} on ${request.method} ${new URL(request.url).pathname}`,
+        new URL(request.url).host,
+      );
+    }
+    return response;
   },
 
   async scheduled(controller, env, ctx) {
+    if (controller.cron === UPTIME_CRON) {
+      ctx.waitUntil(
+        uptimeSweep(env, ctx).catch((err) =>
+          console.error(JSON.stringify({ message: "uptime sweep failed", error: String(err) })),
+        ),
+      );
+      return;
+    }
     ctx.waitUntil(
-      appapi.hourlyDigest(env).catch((err) =>
-        console.error(JSON.stringify({ message: "digest failed", error: String(err) })),
-      ),
+      appapi.hourlyDigest(env).catch((err) => {
+        console.error(JSON.stringify({ message: "digest failed", error: String(err) }));
+        alertWebhook(env, ctx, "digest", "hourly digest failed", String(err));
+      }),
     );
   },
 };

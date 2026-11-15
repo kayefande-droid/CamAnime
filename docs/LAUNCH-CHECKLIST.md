@@ -45,7 +45,7 @@ Walked item by item against the two live hosts:
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| Error tracking and uptime checks with alerts | **Open** | `wrangler tail` and Render logs are the current observability; no Sentry or external uptime monitor is configured, and no alert destination has been agreed. |
+| Error tracking and uptime checks with alerts | **Wired, needs a destination** | Origin and Worker both post 5xx to `CAMANIME_ALERT_WEBHOOK` / `ALERT_WEBHOOK` (throttled to one per kind per 5 minutes), and the Worker's 5-minute cron polls both `/healthz` endpoints and alerts on failure. No webhook URL has been set yet, so nothing is sent. |
 | Analytics that respects consent | **Not applicable / Done** | No third-party analytics. The origin counts visits in its own `counters` table and the worker counts edge visits in D1 — first-party, aggregate, no identifiers. |
 
 ## Handover
@@ -58,7 +58,7 @@ Walked item by item against the two live hosts:
 
 ## Open after launch
 
-1. **Uptime and error alerting.** Pick a monitor (Cloudflare's own uptime checks or an external one) and give it an alert destination.
+1. **Alert destination.** Error and uptime alerting is wired on both hosts; set `CAMANIME_ALERT_WEBHOOK` on Render and `ALERT_WEBHOOK` on the Worker to start receiving it.
 2. **`CAMANIME_D1_TOKEN` on Render.** The origin only writes to D1 when this is set in the dashboard; until then the origin keeps its own store.
 3. **Custom domain.** The wiring is in place and needs a domain: set `CAMANIME_PUBLIC_ORIGIN` (origin) and `PUBLIC_ORIGIN` (Worker), add the Worker route and the Render custom domain, and www 301s to the apex on both hosts. Steps are in the README's *Custom domain* section.
 5. **Sitemap ownership.** The mirror's sitemap lists catalogue URLs the origin's does not — decide one source of truth before submitting either to search engines.

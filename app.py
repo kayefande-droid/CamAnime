@@ -45,6 +45,47 @@ def _utc_now_timestamp() -> int:
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "WARNING").upper())
 logger = logging.getLogger(__name__)
 
+# ── Alerting ──
+# One destination for both kinds of alert: a hosted uptime monitor polling
+# /healthz, and this app's own 5xx responses. CAMANIME_ALERT_WEBHOOK takes any
+# incoming webhook URL that accepts {"text": ...} (Slack, Discord, or a custom
+# receiver); nothing is sent and no thread is started when it is unset.
+ALERT_WEBHOOK = (os.environ.get("CAMANIME_ALERT_WEBHOOK") or "").strip()
+_ALERT_THROTTLE = float(os.environ.get("CAMANIME_ALERT_INTERVAL") or 300)
+_ALERT_SENT: Dict[str, float] = {}
+_ALERT_LOCK = Lock()
+
+
+def send_alert(kind: str, message: str, detail: str = "") -> bool:
+    """Post one throttled alert. Returns False when skipped or not configured.
+
+    The POST runs on a daemon thread so a slow or dead webhook can never delay
+    a response, and a failure is logged instead of raised into the request.
+    """
+    if not ALERT_WEBHOOK:
+        return False
+    with _ALERT_LOCK:
+        now = time.time()
+        if now - _ALERT_SENT.get(kind, 0.0) < _ALERT_THROTTLE:
+            return False
+        _ALERT_SENT[kind] = now
+    payload = {
+        "text": f"[CamAnime {APP_VERSION}] {message}",
+        "kind": kind,
+        "message": message,
+        "detail": (detail or "")[:1500],
+    }
+
+    def _post() -> None:
+        try:
+            requests.post(ALERT_WEBHOOK, json=payload, timeout=5)
+        except Exception:
+            logger.warning("alert webhook failed", exc_info=True)
+
+    Thread(target=_post, daemon=True).start()
+    return True
+
+
 app = Flask(__name__)
 
 # Free developer streaming API (one provider, keyed access) — same routes the
@@ -297,6 +338,22 @@ def _canonical_url():
     target = path.rstrip("/") or "/"
     query = request.query_string.decode("utf-8", "replace")
     return redirect(f"{target}?{query}" if query else target, code=308)
+
+
+@app.after_request
+def _alert_on_server_error(response):
+    """One alert per failing route, throttled: uptime covers the process dying,
+    this covers a request that answers 5xx while the process is still up."""
+    try:
+        if response.status_code >= 500 and not (request.path or "").startswith("/healthz"):
+            send_alert(
+                f"http-{response.status_code}",
+                f"{response.status_code} on {request.method} {request.path}",
+                f"host={request.host}",
+            )
+    except Exception:
+        logger.warning("alert hook failed", exc_info=True)
+    return response
 
 
 @app.context_processor
