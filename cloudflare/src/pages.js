@@ -338,7 +338,15 @@ export function detailsPage(anime, ratingSummary, user, eps) {
     <section><h2 class="section-title">Synopsis</h2><p class="ca-sub">${esc(String(anime.description || "").replace(/<[^>]*>/g, ""))}</p></section>
     <section><h2 class="section-title">Episodes</h2>
       ${(() => {
-        const entries = (anime.streamingEpisodes || []).map((se, i) => ({ n: i + 1, se }));
+        // AniList often has no per-episode list for new or ongoing titles. Fall
+        // back to the episode count so the watch links still show.
+        // Same rule as the Render app: an ongoing title counts only episodes
+        // already aired, so the next scheduled episode is not listed early.
+        const nextEp = Number(anime.nextAiringEpisode?.episode) || 0;
+        const nextAt = Number(anime.nextAiringEpisode?.airingAt) || 0;
+        const aired = nextEp ? (nextAt && nextAt <= Math.floor(Date.now() / 1000) ? nextEp : nextEp - 1) : 0;
+        const total = (anime.streamingEpisodes || []).length || (anime.status === "RELEASING" ? aired : Number(anime.episodes)) || 0;
+        const entries = Array.from({ length: total }, (_, i) => ({ n: i + 1, se: (anime.streamingEpisodes || [])[i] || { title: "Episode " + (i + 1) } }));
         if (!entries.length) {
           return `<p class="discovery-empty">No per-episode stream data on AniList for this title — main catalogue episodes: ${anime.episodes ?? "?"}.</p>`;
         }
