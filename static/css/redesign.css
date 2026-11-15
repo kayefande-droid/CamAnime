@@ -542,7 +542,7 @@ body .dev-content { min-width: 0; }
   body .release-follow-toggle { white-space: nowrap; }
 }
 
-body .ep-rail-item { line-height: 1.2; padding-block: .55rem; overflow: visible; }
+body .ep-rail-item { line-height: 1.2; padding-block: .55rem; }
 
 
 

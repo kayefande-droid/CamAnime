@@ -845,6 +845,11 @@
     }
     window.caApplyStreamQuality = caApplyStreamQuality;
 
+    // Registered once for the page lifetime. Each server switch used to add
+    // fresh document listeners, which piled up and fought each other.
+    document.addEventListener('camanime:quality', caApplyStreamQuality);
+    document.addEventListener('camanime:data', caApplyStreamQuality);
+
     function switchServer(srv, opts) {
         if (!srv) return;
         opts = opts || {};
@@ -871,6 +876,7 @@
             hlsInstance.destroy();
             hlsInstance = null;
         }
+        window.__caApplyQuality = null;
         video.pause();
         video.removeAttribute('src');
         video.innerHTML = '';
@@ -951,8 +957,6 @@
                     } catch (e) {}
                 }
                 window.__caApplyQuality = caApplyQuality;
-                document.addEventListener('camanime:quality', caApplyQuality);
-                document.addEventListener('camanime:data', caApplyQuality);
                 hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
                     caApplyQuality();
                     markServerHealthy(srv);
