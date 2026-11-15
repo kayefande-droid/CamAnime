@@ -9,6 +9,7 @@ import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import * as media from "./media.js";
+import { mirror } from "./mirror.js";
 import { guard, firewallStats } from "./firewall.js";
 import { fcmConfigured } from "./push.js";
 import {
@@ -49,6 +50,10 @@ const SECURITY_HEADERS = {
 };
 
 export function withSecurityHeaders(response) {
+  // A mirrored origin page already carries Render's own security headers.
+  // Replacing them would override the origin's CSP and break its inline theme
+  // bootstrap, so those responses pass through untouched.
+  if (response.headers.get("x-camanime-mirror")) return response;
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(name, value);
@@ -280,10 +285,17 @@ async function handle(request, env, ctx) {
       }
     }
 
-    // APIs first.
+    // APIs first. A route the Worker does not implement is forwarded to the
+    // origin (community, schedule, track…) so the mirrored pages keep working.
     try {
       const handled = await apiRoutes(request, env, url, path);
-      if (handled) return handled;
+      if (handled) {
+        if (handled.headers.get("x-camanime-unhandled") === "1") {
+          const mirroredApi = await mirror(request, env, url, ctx);
+          if (mirroredApi) return mirroredApi;
+        }
+        return handled;
+      }
     } catch (err) {
       return json({ error: "Server error", detail: String(err && err.message) }, 500);
     }
@@ -314,6 +326,15 @@ async function handle(request, env, ctx) {
     // origin, so the Cloudflare sitemap never points at the Render host.
     if (path === "/sitemap.xml") return sitemapResponse(await sitemapXml(url.origin));
     if (path === "/robots.txt") return robotsTxt(url.origin, env.ADMIN_PATH || "");
+
+    // The origin's own pages. Serving them from here is what makes this host an
+    // exact duplicate of camanime.onrender.com (same markup, CSS, JS, motion and
+    // account flows) instead of an approximation that drifts. The native pages
+    // below stay as the fallback when the origin cannot be reached.
+    if (env.MIRROR_ORIGIN) {
+      const mirrored = await mirror(request, env, url, ctx);
+      if (mirrored) return mirrored;
+    }
 
     // Pages (SSR HTML) — failures render the themed error page.
     try {
@@ -572,7 +593,7 @@ async function apiRoutes(request, env, url, path) {
   // AniList artwork, relayed because its CDN refuses Cloudflare egress.
   if (p1 === "img") return media.image(request, url);
 
-  return json({ error: "Unknown API route" }, 404);
+  return json({ error: "Unknown API route" }, 404, { "x-camanime-unhandled": "1" });
 }
 
 const store = (() => {
