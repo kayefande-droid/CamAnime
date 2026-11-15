@@ -167,7 +167,7 @@ export async function prewarm(env, ctx) {
   await Promise.all(
     rows.map((row) =>
       mobile
-        .warmEpisode(String(row.anime_id), Math.max(1, parseInt(row.ep, 10) || 1), "sub")
+        .warmEpisode(env, String(row.anime_id), Math.max(1, parseInt(row.ep, 10) || 1), "sub")
         .catch(() => {}),
     ),
   );
@@ -381,7 +381,7 @@ async function handle(request, env, ctx) {
       const ep = watchMatch ? parseInt(watchMatch[2], 10) : 0;
       if (watchMatch && ep > 0) {
         ctx.waitUntil(
-          mobile.warmEpisode(decodeURIComponent(watchMatch[1]), ep, "sub").catch(() => {}),
+          mobile.warmEpisode(env, decodeURIComponent(watchMatch[1]), ep, "sub").catch(() => {}),
         );
       }
     }
