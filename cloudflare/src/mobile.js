@@ -183,6 +183,88 @@ async function writeDubCache(id, flags) {
 }
 
 /**
+ * Episode bundles are the thing a visitor waits on before a server chip
+ * appears, so they are cached at the edge and coalesced inside an isolate.
+ * A repeat open, and the prefetch fired while the watch page loads, both land
+ * on this copy instead of re-scraping three providers.
+ */
+const SOURCE_TTL_SECONDS = 15 * 60;
+const SOURCE_MEMO = new Map();
+const SOURCE_INFLIGHT = new Map();
+
+function sourceCacheUrl(id, ep, audio) {
+  return new Request(`https://ca-cache.internal/episode-sources/${id}/${ep}?audio=${audio}`);
+}
+
+async function readSourceCache(id, ep, audio) {
+  const memoKey = `${id}:${ep}:${audio}`;
+  const memo = SOURCE_MEMO.get(memoKey);
+  if (memo && Date.now() - memo.at < SOURCE_TTL_SECONDS * 1000) return memo.body;
+  if (typeof caches === "undefined" || !caches.default) return null;
+  try {
+    const hit = await caches.default.match(sourceCacheUrl(id, ep, audio));
+    if (!hit) return null;
+    const body = await hit.text();
+    SOURCE_MEMO.set(memoKey, { at: Date.now(), body });
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+async function writeSourceCache(id, ep, audio, body) {
+  SOURCE_MEMO.set(`${id}:${ep}:${audio}`, { at: Date.now(), body });
+  if (typeof caches === "undefined" || !caches.default) return;
+  try {
+    await caches.default.put(
+      sourceCacheUrl(id, ep, audio),
+      new Response(body, {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": `public, max-age=${SOURCE_TTL_SECONDS}`,
+        },
+      }),
+    );
+  } catch {
+    // Caching is an optimisation; the answer is still correct without it.
+  }
+}
+
+/** JSON body for /api/episode-sources, answered from the edge when possible. */
+export async function cachedEpisodeSources(id, ep, audio = "sub") {
+  const n = Math.max(1, ep | 0);
+  const cached = await readSourceCache(id, n, audio);
+  if (cached) return cached;
+
+  const key = `${id}:${n}:${audio}`;
+  const pending = SOURCE_INFLIGHT.get(key);
+  if (pending) return pending;
+
+  const task = (async () => {
+    const bundle = await episodeSources(id, n, audio);
+    if (!bundle) return null;
+    const body = JSON.stringify(bundle);
+    await writeSourceCache(id, n, audio, body);
+    return body;
+  })();
+  SOURCE_INFLIGHT.set(key, task);
+  try {
+    return await task;
+  } finally {
+    SOURCE_INFLIGHT.delete(key);
+  }
+}
+
+/** Warm the cache for the episode a watch page is about to request. */
+export async function warmEpisode(id, ep, audio = "sub") {
+  try {
+    await cachedEpisodeSources(id, ep, audio);
+  } catch {
+    // Prefetching is best effort; the player's own request still works.
+  }
+}
+
+/**
  * `/api/v1/dub-availability` for up to 24 ids, matching the Flask payload.
  * Unknown answers are omitted instead of reported as "no dub" so the app
  * never hides a dub it has not checked.
@@ -584,16 +666,18 @@ async function routeLocal(env, request, url, parts) {
   }
 
   if (p1 === "episode-sources" && p2) {
-    const bundle = await episodeSources(
-      p2,
-      parseInt(p3 || "1", 10),
-      (url.searchParams.get("audio") || "sub").toLowerCase() === "dub" ? "dub" : "sub"
-    );
-    if (!bundle) return json({ error: "Anime not found" }, 404);
-    // Server lists change slowly; letting the edge answer repeats makes the
-    // player open on a warm copy instead of waiting for a fresh scrape.
-    return json(bundle, 200, {
-      "cache-control": "public, max-age=60, stale-while-revalidate=300",
+    const audio = (url.searchParams.get("audio") || "sub").toLowerCase() === "dub" ? "dub" : "sub";
+    const ep = parseInt(p3 || "1", 10);
+    const body = await cachedEpisodeSources(p2, ep, audio);
+    if (!body) return json({ error: "Anime not found" }, 404);
+    // Server lists change slowly, so a repeat open is answered from the edge
+    // instead of re-scraping every provider while the player waits.
+    return new Response(body, {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": `public, max-age=${SOURCE_TTL_SECONDS}, stale-while-revalidate=3600`,
+      },
     });
   }
 

@@ -9,7 +9,7 @@ import * as mobile from "./mobile.js";
 import * as developer from "./developer.js";
 import * as appapi from "./appapi.js";
 import * as media from "./media.js";
-import { mirror } from "./mirror.js";
+import { mirror, mirrorOrigin, warmMirror } from "./mirror.js";
 import { guard, firewallStats } from "./firewall.js";
 import { fcmConfigured } from "./push.js";
 import {
@@ -134,6 +134,46 @@ export async function uptimeSweep(env, ctx) {
   return results;
 }
 
+/**
+ * Warm the pages visitors open most, and their server lists.
+ *
+ * Every mirrored page is now answered from the edge cache, so the only slow
+ * visit left is a cold one. The cron runs every five minutes; this keeps the
+ * home page and the four most-watched titles already cached, and resolves
+ * their episode sources so the player's first request is instant too.
+ */
+export async function prewarm(env, ctx) {
+  let rows = [];
+  try {
+    if (env.DB) {
+      const result = await env.DB.prepare(
+        "SELECT anime_id, ep FROM watch_history WHERE anime_id != '' " +
+          "GROUP BY anime_id ORDER BY COUNT(*) DESC LIMIT 4",
+      ).all();
+      rows = (result.results || []).filter((row) => /^\d+$/.test(String(row.anime_id || "")));
+    }
+  } catch {
+    rows = [];
+  }
+
+  const paths = ["/"];
+  for (const row of rows) {
+    const ep = Math.max(1, parseInt(row.ep, 10) || 1);
+    paths.push(`/anime/${row.anime_id}`, `/watch/${row.anime_id}/${ep}`);
+  }
+  // Page snapshots only when the optional origin mirror is enabled; the server
+  // lists are resolved by this Worker either way.
+  const pages = mirrorOrigin(env) ? await warmMirror(env, paths, ctx) : 0;
+  await Promise.all(
+    rows.map((row) =>
+      mobile
+        .warmEpisode(String(row.anime_id), Math.max(1, parseInt(row.ep, 10) || 1), "sub")
+        .catch(() => {}),
+    ),
+  );
+  return { pages, titles: rows.length };
+}
+
 export default {
   async fetch(request, env, ctx) {
     const response = withSecurityHeaders(await handle(request, env, ctx));
@@ -152,6 +192,12 @@ export default {
       ctx.waitUntil(
         uptimeSweep(env, ctx).catch((err) =>
           console.error(JSON.stringify({ message: "uptime sweep failed", error: String(err) })),
+        ),
+      );
+      // Same tick as the health check: keep the busiest pages warm at the edge.
+      ctx.waitUntil(
+        prewarm(env, ctx).catch((err) =>
+          console.error(JSON.stringify({ message: "prewarm failed", error: String(err) })),
         ),
       );
       return;
@@ -327,6 +373,19 @@ async function handle(request, env, ctx) {
     if (path === "/sitemap.xml") return sitemapResponse(await sitemapXml(url.origin));
     if (path === "/robots.txt") return robotsTxt(url.origin, env.ADMIN_PATH || "");
 
+    // Start resolving the episode's servers before the player asks for them.
+    // The watch page is the heaviest origin render, so this head start is what
+    // makes the server chips appear with the page instead of seconds after it.
+    if (path.startsWith("/watch/")) {
+      const watchMatch = /^\/watch\/([^/]+)\/([^/]+)\/?$/.exec(path);
+      const ep = watchMatch ? parseInt(watchMatch[2], 10) : 0;
+      if (watchMatch && ep > 0) {
+        ctx.waitUntil(
+          mobile.warmEpisode(decodeURIComponent(watchMatch[1]), ep, "sub").catch(() => {}),
+        );
+      }
+    }
+
     // The origin's own pages. Serving them from here is what makes this host an
     // exact duplicate of camanime.onrender.com (same markup, CSS, JS, motion and
     // account flows) instead of an approximation that drifts. The native pages
@@ -473,7 +532,9 @@ async function originFallback(url) {
   try {
     const res = await fetch(new URL(url.pathname + url.search, ORIGIN), {
       headers: { accept: "text/html", "user-agent": "CamAnime-Edge/2.13.0" },
-      signal: AbortSignal.timeout(12000),
+      // Fast: this only runs after a native render failed, and a suspended
+      // origin must not turn one error into a twelve-second stall.
+      signal: AbortSignal.timeout(4000),
       // Manual so installer links can be replayed: /get/windows, /get/mac and
       // friends exist on the origin as 302s to the release assets, and following
       // them here would turn a working download link into this worker's 404.

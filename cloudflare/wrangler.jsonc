@@ -22,10 +22,11 @@
   // dashboard (Settings → Variables) without editing code.
   "vars": {
     "APP_VERSION": "2.16.0",
-    // Origin whose own pages/assets are served here, so this host is an exact
-    // duplicate of camanime.onrender.com (UI, animations, pages, account flows).
-    // /api/* streaming stays native; set to "" to fall back to the native pages.
-    "MIRROR_ORIGIN": "https://camanime.onrender.com",
+    // This Worker serves its own pages, catalogue, servers and streams, so a
+    // suspended camanime.onrender.com cannot take the site or playback down.
+    // Set this to the origin only to temporarily serve the origin's own HTML
+    // again (which makes page rendering depend on it).
+    "MIRROR_ORIGIN": "",
     // Leave empty to keep /admin a 404, matching the Render origin's
     // CAMANIME_ADMIN_PATH policy. Set it to serve the private dashboard.
     "ADMIN_PATH": "/owner-console",

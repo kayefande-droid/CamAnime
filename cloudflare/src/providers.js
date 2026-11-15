@@ -248,6 +248,45 @@ function cacheSet(key, value, ttlMs) {
 
 const MINUTE = 60_000;
 
+/**
+ * Give a provider branch a hard deadline.
+ *
+ * AnimeHeaven's gate can hang for its full 15s timeout, and the whole bundle
+ * used to wait for it even when Anikoto had already resolved. A provider that
+ * misses its deadline is dropped from this response instead of delaying the
+ * player; the next request retries it.
+ */
+function withDeadline(promise, ms, fallback) {
+  let timer;
+  const deadline = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise.catch(() => fallback), deadline]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The Render origin is a convenience fallback, never a dependency.
+ *
+ * If it stops answering (a suspended free instance), two misses park every
+ * origin call for five minutes. Without this, each episode request waited on
+ * an origin timeout before the Cloudflare-resolved servers were returned.
+ */
+const originBreaker = { misses: 0, until: 0 };
+
+function originUp() {
+  return Date.now() >= originBreaker.until;
+}
+
+function noteOrigin(ok) {
+  if (ok) {
+    originBreaker.misses = 0;
+    originBreaker.until = 0;
+    return;
+  }
+  originBreaker.misses += 1;
+  if (originBreaker.misses >= 2) originBreaker.until = Date.now() + 5 * MINUTE;
+}
+
 async function getText(url, { headers = {}, timeout = 12_000, cookie } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -531,10 +570,12 @@ async function mediaTotalSize(url) {
     // fall through to the origin probe
   }
   try {
+    if (!originUp()) return null;
     const res = await fetch(
       `https://camanime.onrender.com/api/media/size?u=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(4000) },
+      { signal: AbortSignal.timeout(2500) },
     );
+    noteOrigin(true);
     if (!res.ok) return null;
     const data = await res.json();
     return Number.isFinite(data?.size) ? data.size : null;
@@ -562,12 +603,13 @@ function originUrlOf(streamUrl) {
 }
 
 async function heavenSourcesFromRender(animeId, episode) {
-  if (!animeId) return [];
+  if (!animeId || !originUp()) return [];
   try {
     const res = await fetch(
       `https://camanime.onrender.com/api/episode-sources/${animeId}/${episode}?audio=sub`,
-      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) }
+      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(3000) }
     );
+    noteOrigin(true);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.servers || [])
@@ -584,6 +626,7 @@ async function heavenSourcesFromRender(animeId, episode) {
         unverified: true,
       }));
   } catch {
+    noteOrigin(false);
     return [];
   }
 }
@@ -607,12 +650,13 @@ function localProxyPath(u) {
  * Cloudflare rather than sending the visitor to Render.
  */
 async function renderMirrorBundle(animeId, episode, audioPref) {
-  if (!animeId) return { servers: [], downloads: [] };
+  if (!animeId || !originUp()) return { servers: [], downloads: [] };
   try {
     const res = await fetch(
       `https://camanime.onrender.com/api/episode-sources/${animeId}/${episode}?audio=${audioPref}`,
-      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) }
+      { headers: { "user-agent": UA }, signal: AbortSignal.timeout(3000) }
     );
+    noteOrigin(true);
     if (!res.ok) return { servers: [], downloads: [] };
     const data = await res.json();
     const servers = (data.servers || [])
@@ -633,6 +677,7 @@ async function renderMirrorBundle(animeId, episode, audioPref) {
       .map((d) => ({ ...d, url: localProxyPath(d.url) }));
     return { servers, downloads };
   } catch {
+    noteOrigin(false);
     return { servers: [], downloads: [] };
   }
 }
@@ -660,7 +705,7 @@ export async function heavenStreamSources(episodeKey, refererSiteId) {
       "cache-control": "no-cache",
     },
     cookie: `key=${episodeKey}`,
-    timeout: 15_000,
+    timeout: 8_000,
   });
   if (!res.ok) return { sources: [], provider: "animeheaven", error: `gate ${res.status}` };
   if (/watch\s+episode\s+on\s+animeheaven\.me/i.test(res.text)) {
@@ -1201,15 +1246,17 @@ export async function episodeBundle({
   };
 
   if (heavenId) {
-    const info = await heavenInfoPromise;
+    const info = await withDeadline(heavenInfoPromise, 6000, null);
     const target = info?.episodes?.find((e) => Math.round(e.num) === episode);
     if (target) heavenEpKey = target.key;
     let resolved = { sources: [] };
-    if (target) resolved = await heavenStreamSources(target.key, heavenId);
+    if (target) {
+      resolved = await withDeadline(heavenStreamSources(target.key, heavenId), 9000, { sources: [] });
+    }
     // No episode key at all means the gate could not be crawled from here; the
     // origin bundle is the only way that provider still appears on the edge.
     if (!resolved.sources.length && anilistId) {
-      const mirrored = await heavenSourcesFromRender(anilistId, episode);
+      const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 6000, []);
       if (mirrored.length) resolved = { ...resolved, sources: mirrored };
     }
     if (target) {
@@ -1228,7 +1275,7 @@ export async function episodeBundle({
   // The gate may be unreachable from the edge and no Heaven title matched, so
   // the provider would vanish entirely. The origin bundle keeps it listed.
   if (!servers.some((srv) => srv.provider === "animeheaven") && anilistId) {
-    const mirrored = await heavenSourcesFromRender(anilistId, episode);
+    const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 6000, []);
     if (mirrored.length) addHeavenSources(mirrored);
   }
 
