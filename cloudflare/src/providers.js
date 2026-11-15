@@ -570,12 +570,13 @@ async function mediaTotalSize(url) {
     // fall through to the origin probe
   }
   try {
+    // A size probe is optional metadata: its failures must not trip the
+    // origin circuit breaker, or a slow probe would hide AnimeHeaven entirely.
     if (!originUp()) return null;
     const res = await fetch(
       `https://camanime.onrender.com/api/media/size?u=${encodeURIComponent(url)}`,
-      { signal: AbortSignal.timeout(2500) },
+      { signal: AbortSignal.timeout(4000) },
     );
-    noteOrigin(true);
     if (!res.ok) return null;
     const data = await res.json();
     return Number.isFinite(data?.size) ? data.size : null;
@@ -1246,7 +1247,7 @@ export async function episodeBundle({
   };
 
   if (heavenId) {
-    const info = await withDeadline(heavenInfoPromise, 6000, null);
+    const info = await withDeadline(heavenInfoPromise, 7000, null);
     const target = info?.episodes?.find((e) => Math.round(e.num) === episode);
     if (target) heavenEpKey = target.key;
     let resolved = { sources: [] };
@@ -1256,7 +1257,7 @@ export async function episodeBundle({
     // No episode key at all means the gate could not be crawled from here; the
     // origin bundle is the only way that provider still appears on the edge.
     if (!resolved.sources.length && anilistId) {
-      const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 6000, []);
+      const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 3500, []);
       if (mirrored.length) resolved = { ...resolved, sources: mirrored };
     }
     if (target) {
@@ -1275,7 +1276,7 @@ export async function episodeBundle({
   // The gate may be unreachable from the edge and no Heaven title matched, so
   // the provider would vanish entirely. The origin bundle keeps it listed.
   if (!servers.some((srv) => srv.provider === "animeheaven") && anilistId) {
-    const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 6000, []);
+    const mirrored = await withDeadline(heavenSourcesFromRender(anilistId, episode), 3500, []);
     if (mirrored.length) addHeavenSources(mirrored);
   }
 
