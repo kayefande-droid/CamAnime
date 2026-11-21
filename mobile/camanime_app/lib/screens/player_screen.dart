@@ -1,3 +1,4 @@
+import '../main.dart' show Api;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -471,6 +472,10 @@ class _PlayerScreenState extends State<PlayerScreen>
         }
         unawaited(_rememberServer(i));
         _scheduleHide();
+        if (!_local && widget.animeId != null && widget.episode != null) {
+          unawaited(Api.prefetchEpisode(
+              widget.animeId!, widget.episode! + 1, widget.audio ?? 'sub'));
+        }
         return;
       } catch (e) {
         try {
@@ -1091,7 +1096,12 @@ class _PlayerScreenState extends State<PlayerScreen>
           child: CircularProgressIndicator(strokeWidth: 2.4),
         ),
         const SizedBox(height: 12),
-        Text(_attempt.isEmpty ? 'Loading episode…' : _attempt,
+        Text(
+            _attempt.isNotEmpty
+                ? _attempt
+                : (_urls.isEmpty
+                    ? 'Loading episode…'
+                    : '${_urls.length} source${_urls.length == 1 ? '' : 's'} ready — connecting…'),
             style: const TextStyle(color: CamColors.inkDim, fontSize: 12)),
       ]),
     );

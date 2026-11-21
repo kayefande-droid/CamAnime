@@ -1156,34 +1156,118 @@ class Api {
   static bool _episodeFresh(int stamp) =>
       DateTime.now().millisecondsSinceEpoch - stamp < _episodeTtl.inMilliseconds;
 
+  static Future<Map<String, dynamic>> _episodeBundleFrom(
+      String host, String animeId, int ep, String audio) async {
+    final root = host.replaceFirst(RegExp(r'/+$'), '');
+    final response = await _get(
+        Uri.parse(
+            '$root/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio'),
+        timeout: const Duration(seconds: 15));
+    return json.decode(response.body) as Map<String, dynamic>;
+  }
+
+  /// Warm the cache for the next episode while the current one plays, so the
+  /// following tap starts on a resolved server instead of waiting on the API.
+  static Future<void> prefetchEpisode(
+      String animeId, int ep, String audio) async {
+    if (ep < 1 || animeId.isEmpty) return;
+    try {
+      await episodeSources(animeId, ep, audio);
+    } catch (_) {
+      // A missing next episode is not an error the viewer needs to see.
+    }
+  }
+
+  /// Episode sources from every known host, merged in parallel.
+  ///
+  /// Cloudflare and Render resolve different provider sets and keep separate
+  /// caches, so asking both gives the app more servers for the same episode.
+  /// The requests run together — the wait is the slowest host, not the sum —
+  /// and a successful merged bundle is cached for instant offline restarts.
   static Future<Map<String, dynamic>> episodeSources(
       String animeId, int ep, String audio) async {
-    final url =
+    final primaryUrl =
         '${base()}/api/episode-sources/${Uri.encodeComponent(animeId)}/$ep?audio=$audio';
-    final memo = _episodeMemo[url];
-    if (memo != null && _episodeFresh(_episodeMemoAt[url] ?? 0)) return memo;
-    final cache = await _episodeCacheFile(url);
-    try {
-      if (await cache.exists() &&
-          _episodeFresh(await cache.lastModified().then(
-              (t) => t.millisecondsSinceEpoch))) {
-        final stored = json.decode(await cache.readAsString()) as Map<String, dynamic>;
-        _episodeMemo[url] = stored;
-        _episodeMemoAt[url] = DateTime.now().millisecondsSinceEpoch;
-        return stored;
-      }
-    } catch (_) {
-      // A broken cache file must never block a fresh request.
+    final memo = _episodeMemo[primaryUrl];
+    if (memo != null && _episodeFresh(_episodeMemoAt[primaryUrl] ?? 0)) {
+      return memo;
     }
-    final response = await _get(Uri.parse(url));
-    final bundle = json.decode(response.body) as Map<String, dynamic>;
-    _episodeMemo[url] = bundle;
-    _episodeMemoAt[url] = DateTime.now().millisecondsSinceEpoch;
+    final cache = await _episodeCacheFile(primaryUrl);
+
+    final hosts = <String>[
+      apiHost,
+      ...apiHostFallbacks.where((h) => h != apiHost),
+    ];
+    final bundles = <String, Map<String, dynamic>>{};
+    Object? lastError;
+    await Future.wait(hosts.map((host) async {
+      try {
+        bundles[host] = await _episodeBundleFrom(host, animeId, ep, audio);
+      } catch (error) {
+        lastError = error;
+      }
+    }));
+
+    final servers = <String, Map<String, dynamic>>{};
+    final downloads = <String, Map<String, dynamic>>{};
+    final answered = <String>[];
+    Map<String, dynamic>? primary;
+    for (final host in hosts) {
+      final bundle = bundles[host];
+      if (bundle == null) continue;
+      answered.add(host);
+      primary ??= bundle;
+      for (final raw in (bundle['servers'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final server = raw.cast<String, dynamic>();
+        final id = '${server['provider'] ?? ''}|${server['name'] ?? ''}|'
+            '${server['stream_url'] ?? server['embed_url'] ?? ''}';
+        servers.putIfAbsent(
+            id, () => <String, dynamic>{...server, 'source_host': host});
+      }
+      for (final raw in (bundle['downloads'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final item = raw.cast<String, dynamic>();
+        final url = (item['url'] ?? '').toString();
+        if (url.isNotEmpty) downloads.putIfAbsent(url, () => item);
+      }
+    }
+
+    Map<String, dynamic>? result;
+    if (servers.isNotEmpty || downloads.isNotEmpty) {
+      result = <String, dynamic>{
+        ...?primary,
+        'servers': servers.values.toList(growable: false),
+        'downloads': downloads.values.toList(growable: false),
+        'active_server':
+            servers.isEmpty ? null : servers.values.first,
+        'download_url': (primary?['download_url'] ?? '').toString(),
+        'answered_hosts': answered,
+      };
+    } else {
+      try {
+        if (await cache.exists()) {
+          result = json.decode(await cache.readAsString())
+              as Map<String, dynamic>;
+        }
+      } catch (_) {
+        // A broken cache file must never hide the real network error.
+      }
+      if (result == null && lastError != null) throw lastError!;
+    }
+
+    result ??= <String, dynamic>{
+      'servers': const [],
+      'downloads': const [],
+      'active_server': null,
+    };
+    _episodeMemo[primaryUrl] = result;
+    _episodeMemoAt[primaryUrl] = DateTime.now().millisecondsSinceEpoch;
     try {
       await cache.parent.create(recursive: true);
-      await cache.writeAsString(json.encode(bundle), flush: true);
+      await cache.writeAsString(json.encode(result), flush: true);
     } catch (_) {}
-    return bundle;
+    return result;
   }
 
   /// Official YouTube trailer id for a title, resolved by the website (AniList

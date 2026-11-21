@@ -10,6 +10,14 @@ const String apiHost = String.fromEnvironment(
   defaultValue: 'https://camanime.onrender.com',
 );
 
+/// Every host that serves the same CamAnime API. The app asks the primary
+/// first, then each fallback, and merges the servers each one resolves so a
+/// single host being down never stops playback.
+const List<String> apiHostFallbacks = [
+  'https://camanjme.camanime.workers.dev',
+  'https://camanime.onrender.com',
+];
+
 /// Global navigator key used by background-triggered actions (notification taps,
 /// scheduled updates) to show dialogs and snacks even when no build context is
 /// directly available.

@@ -6,7 +6,7 @@ import { card } from "./catalog.js";
 const THEME_GUARD = `<script>try{var t=localStorage.getItem('camanime-theme');if(['midnight','light','vibrant','sakura','forest','obsidian','neo','tokyo'].indexOf(t)===-1)t='midnight';document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>`;
 const LAYOUT_GUARD = `<script>try{var l=localStorage.getItem('camanime-layout');if(['classic','cinema','compact','minimal','wide','magazine','wall'].indexOf(l)===-1)l='classic';document.documentElement.setAttribute('data-layout',l);}catch(e){}</script>`;
 
-function head(title, desc) {
+export function head(title, desc, opts = {}) {
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -54,13 +54,15 @@ function head(title, desc) {
 <script src="/static/js/release-schedule.js?v=20261111-sched2" defer></script>
 ${THEME_GUARD}
 ${LAYOUT_GUARD}
+${(opts.styles || []).map((href) => `<link rel="stylesheet" href="${href}">`).join("\n")}
+${(opts.scripts || []).map((src) => `<script src="${src}" defer></script>`).join("\n")}
 </head><body>`;
 }
 
 export function chrome(title, desc, userName, inner, active = "home", opts = {}) {
   const bodyClass = opts.bodyClass ? ` class="${opts.bodyClass}"` : "";
   const mainClass = opts.mainClass || "main-wrap";
-  return `${head(title, desc)}
+  return `${head(title, desc, opts)}
 <body${bodyClass}>
 <a class="skip-link" href="#main-content">Skip to content</a>
 <header>
@@ -175,6 +177,7 @@ export function homePage(grids, userName) {
   const heroMetaOf = (a) => [
     a?.averageScore ? `<span class="meta-pill gold"><i class="fas fa-star" aria-hidden="true"></i> ${(a.averageScore / 10).toFixed(1)}</span>` : "",
     a?.format ? `<span class="meta-pill">${esc(a.format)}</span>` : "",
+    a?.episodes ? `<span class="meta-pill">EP ${Number(a.episodes)}</span>` : "",
     a?.seasonYear ? `<span class="meta-pill">${esc(a.seasonYear)}</span>` : "",
     ...(a?.genres || []).slice(0, 3).map((g) => `<span class="meta-pill">${esc(g)}</span>`),
   ].join("");
@@ -194,7 +197,7 @@ export function homePage(grids, userName) {
           ${meta ? `<div class="hero-meta-row">${meta}</div>` : ""}
           <p class="hero-desc">${esc(heroDesc(a))}</p>
           <div class="hero-ctas">
-            <a class="btn-primary" href="/anime/${a.id}"><i class="fas fa-circle-info" aria-hidden="true"></i> View details</a>
+            <a class="btn-primary" href="/watch/${a.id}/1"><i class="fas fa-play" aria-hidden="true"></i> Watch Episode 1</a>
             <a class="btn-secondary" href="/anime/${a.id}"><i class="fas fa-layer-group" aria-hidden="true"></i> Episodes &amp; download</a>
           </div>
         </div>
@@ -993,7 +996,15 @@ player.src = data.streams[0].url;   // &lt;video id="player" controls&gt;&lt;/vi
     })();
     </script>` : ""}`;
 
-  return chrome("Developer API", "Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day.", user?.name, inner, "dev", { bodyClass: "page-dev" });
+  const shell = `<div class="dev-layout">
+    <aside class="dev-rail" aria-label="On this page">
+      <a href="#docs">Quickstart</a>
+      <a href="#build">Build with it</a>
+      <a href="/settings">Get an API key</a>
+    </aside>
+    <div class="dev-content">${inner}</div>
+  </div>`;
+  return chrome("Developer API", "Free anime streaming API for developers: one provider, direct MP4, keyed access and 1,000 calls a day.", user?.name, shell, "dev", { bodyClass: "page-developers", styles: ["/static/css/page-developers.css?v=20261122-render"] });
 }
 
 export function settingsPage(user) {

@@ -1,0 +1,23 @@
+/* Extracted verbatim from Render templates/developers.html.html so both hosts compute
+   identical styles for this page. */
+/* Docs page: the floating release-schedule tab would sit on top of the API tables. */
+.live-schedule-tab, .live-schedule-backdrop, .live-schedule-drawer { display: none !important; }
+.dev-code-wrap { position: relative; }
+.dev-copy-btn {
+  position: absolute; top: .55rem; right: .6rem;
+  font: 600 .72rem/1 'Plus Jakarta Sans', system-ui, sans-serif;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-secondary, #9aa4bd);
+  background: rgba(255,255,255,.07);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,.12));
+  border-radius: 8px; padding: .38rem .6rem; cursor: pointer;
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+}
+.dev-copy-btn:hover, .dev-copy-btn:focus-visible {
+  color: var(--text-primary, #f3f5fa);
+  border-color: var(--accent, #FFB347);
+}
+.dev-copy-btn.is-copied { color: var(--accent, #FFB347); border-color: var(--accent, #FFB347); }
+.dev-key-copy { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-top: .5rem; }
+.dev-key-copy .ctrl-btn.is-copied { color: var(--accent, #FFB347); }
+.dev-sub { font-size: 1rem; font-weight: 700; margin: 1.4rem 0 .5rem; color: var(--text-primary, #f3f5fa); }

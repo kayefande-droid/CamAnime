@@ -285,6 +285,7 @@ export function renderSettings(user, chrome, esc) {
     "CamAnime settings: themes, layouts and account.",
     user?.name,
     inner,
-    "settings"
+    "settings",
+    { bodyClass: "page-settings", styles: ["/static/css/page-settings.css?v=20261122-render"] }
   );
 }

@@ -1,6 +1,7 @@
 /** CamAnime edge worker (camanjme): independent app on Workers + D1 + R2. No Render dependency. */
 import { homeGrids, search as catalogSearch, details, watchContext, byFormat, byGenre } from "./catalog.js";
-import { chrome, homePage, browsePage, genrePage, searchGrid, detailsPage, watchPage, loginPage, errorPage, settingsPage, developersPage, downloadPage, privacyPage } from "./pages.js";
+import { chrome, homePage, browsePage, genrePage, searchGrid, loginPage, errorPage, settingsPage, developersPage, downloadPage, privacyPage } from "./pages.js";
+import { detailsPage, watchPage } from "./page-shells.js";
 import { html, json, parseByteRange } from "./util.js";
 import * as api from "./api.js";
 import * as auth from "./auth.js";
@@ -46,6 +47,9 @@ const SECURITY_HEADERS = {
     "media-src 'self' https: blob: data:; " +
     "frame-src 'self' https:; " +
     "connect-src 'self' https: blob:; " +
+    // hls.js runs its demuxer in a blob worker; without this the player threw
+    // "Refused to create a worker from blob:" and fell back to a stalled stream.
+    "worker-src 'self' blob:; " +
     "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';",
 };
 

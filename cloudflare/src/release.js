@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.17.3";
-export const LATEST_BUILD = 33;
+export const LATEST_VERSION = "2.17.4";
+export const LATEST_BUILD = 35;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -20,8 +20,7 @@ export const DISCONTINUED_VERSION = "2.7.0";
 export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
-export const APK_SHA256 =
-  "1eb66d2f57bbfdbac0644db20da7d516c66038ab7759cf613d1697c654d13bf1";
+export const APK_SHA256 = "6fee35bbc89e19e79b117d763ca801dacd80bc3a0931508029ebe0012223f359";
 
 /** Download filename shown to users, so saved APKs are never ambiguous. */
 export const APK_FILENAME = `CamAnime-${LATEST_VERSION}-build${LATEST_BUILD}.apk`;

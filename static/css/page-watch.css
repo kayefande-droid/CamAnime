@@ -1,0 +1,429 @@
+/* Extracted verbatim from Render templates/watch.html.html so both hosts compute
+   identical styles for this page. */
+/* Theme tokens are owned centrally by /static/css/sync.css?v=20261112-ink so the Settings theme picker works on this page too. */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            line-height: 1.5;
+            min-height: 100vh;
+            transition: background-color 0.3s ease;
+        }
+        body.lights-off {
+            background-color: #000000;
+        }
+        body.lights-off header,
+        body.lights-off .episode-sidebar,
+        body.lights-off .lower-panels {
+            opacity: 0.12;
+            transition: opacity 0.3s ease;
+        }
+        body.lights-off header:hover,
+        body.lights-off .episode-sidebar:hover,
+        body.lights-off .lower-panels:hover {
+            opacity: 1;
+        }
+
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            background: var(--header-glass, rgba(6, 7, 12, 0.9));
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0.8rem 2rem;
+        }
+        .header-inner {
+            max-width: 1520px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .site-logo { display:inline-flex; align-items:center; text-decoration:none; flex:0 0 auto; }
+        .site-logo img { display:block; width:clamp(172px,16vw,228px); height:auto; max-height:54px; object-fit:contain; }
+        .site-logo:focus-visible { outline:2px solid #12CDE8; outline-offset:5px; border-radius:5px; }
+        @media (max-width:600px) { .site-logo img { width:clamp(150px,36vw,205px); max-height:46px; } }
+        .breadcrumb-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+        }
+        .breadcrumb-bar a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+        .breadcrumb-bar a:hover { color: var(--accent); }
+
+        .watch-container {
+            max-width: 1520px;
+            margin: 1.5rem auto 4rem;
+            padding: 0 2rem;
+        }
+
+        /* ─── CINEMA GRID: PLAYER + EPISODE RAIL ─── */
+        .cinema-grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 1.5rem;
+            align-items: start;
+            margin-bottom: 1.75rem;
+        }
+
+        .player-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .video-stage {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background: #000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(var(--accent-rgb, 255, 179, 71), 0.22);
+            box-shadow: 0 24px 70px rgba(0, 0, 0, 0.85);
+        }
+        .video-stage video,
+        .video-stage iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background: #000;
+        }
+
+        .skip-intro-btn {
+            position: absolute;
+            right: 24px;
+            bottom: 72px;
+            z-index: 30;
+            background: rgba(7, 8, 13, 0.9);
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            padding: 0.55rem 1.2rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 0.45rem;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+        }
+        .skip-intro-btn:hover {
+            background: var(--accent);
+            color: var(--bg-canvas, #07080d);
+        }
+
+        /* ─── PLAYER TRANSPORT & CONTROLS BAR ─── */
+        .transport-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 1rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 14px;
+            padding: 0.9rem 1.25rem;
+        }
+        .now-playing-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .ep-pill {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: var(--bg-canvas, #07080d);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
+            font-size: 0.82rem;
+            padding: 0.3rem 0.75rem;
+            border-radius: 8px;
+        }
+        .mode-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.74rem;
+            padding: 0.22rem 0.6rem;
+            border-radius: 6px;
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #34d399;
+        }
+        .transport-actions {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+        }
+        .ctrl-btn {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 0.95rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            cursor: pointer;
+            transition: border-color .2s ease, color .2s ease, background-color .2s ease, box-shadow .2s ease;
+        }
+        .ctrl-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .ctrl-btn.disabled {
+            color: var(--text-secondary);
+            border-color: var(--ca-field-line);
+            opacity: 1;
+            pointer-events: none;
+        }
+        .ctrl-btn.download-cta {
+            background: rgba(16, 185, 129, 0.16);
+            border-color: rgba(16, 185, 129, 0.45);
+            color: #34d399;
+        }
+        .ctrl-btn.download-cta:hover {
+            background: var(--emerald);
+            color: #052e16;
+        }
+
+        /* ─── SERVER & AVAILABLE AUDIO SWITCHER DECK ─── */
+        .server-deck {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.25rem 1.4rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .server-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .server-row-label {
+            min-width: 130px;
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .server-btn {
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 0.95rem;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: border-color .2s ease, color .2s ease, background-color .2s ease, box-shadow .2s ease;
+        }
+        .server-btn:hover {
+            border-color: var(--accent);
+        }
+        .server-btn.active {
+            background: linear-gradient(135deg, var(--accent), var(--accent-crimson));
+            color: var(--bg-canvas, #07080d);
+            border-color: transparent;
+            font-weight: 700;
+            box-shadow: 0 6px 18px rgba(var(--accent-rgb, 255, 179, 71), 0.3);
+        }
+        .server-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.68rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        /* ─── EPISODE SIDEBAR RAIL ─── */
+        .episode-sidebar {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.15rem;
+            display: flex;
+            flex-direction: column;
+            max-height: 680px;
+        }
+        .sidebar-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.85rem;
+        }
+        .sidebar-title {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-weight: 800;
+            font-size: 1.05rem;
+        }
+        .ep-search-box {
+            width: 100%;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            padding: 0.5rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.83rem;
+            margin-bottom: 0.85rem;
+            outline: none;
+        }
+        .ep-rail-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+            gap: 0.5rem;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+        }
+        .ep-rail-item {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            text-decoration: none;
+            text-align: center;
+            padding: 0.55rem 0.3rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.18s;
+        }
+        .ep-rail-item:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+        .ep-rail-item.current {
+            background: var(--accent);
+            color: var(--bg-canvas, #07080d);
+            border-color: var(--accent);
+            font-weight: 800;
+        }
+
+        /* ─── LOWER PANELS: DIRECT DOWNLOAD MANAGER & YOUTUBE TRAILER ─── */
+        .lower-panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        .panel-box {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            padding: 1.4rem;
+        }
+        .panel-box-title {
+            font-family: 'Bricolage Grotesque', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 800;
+            margin-bottom: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .dl-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+        .dl-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+        }
+        .dl-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .dl-name {
+            font-weight: 700;
+            font-size: 0.88rem;
+        }
+        .dl-sub {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .dl-action {
+            background: var(--emerald);
+            color: #052e16;
+            text-decoration: none;
+            padding: 0.48rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            white-space: nowrap;
+        }
+        .dl-action:hover {
+            filter: brightness(1.1);
+        }
+
+        /* Three standard viewport classes: PC >=1024, tablet 768-1023, mobile <768. */
+        .cinema-grid > *, .player-column, .episode-sidebar { min-width: 0; }
+        .header-inner { flex-wrap: nowrap; }
+        .header-inner > div { min-width: 0; }
+        .header-inner > div:first-child { flex: 1 1 auto; }
+        .header-inner > div:last-child { display: flex; gap: 0.65rem; flex-wrap: nowrap; justify-content: flex-end; max-width: 100%; }
+        .breadcrumb-bar { min-width: 0; flex-wrap: nowrap; }
+        .breadcrumb-bar a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28vw; display: inline-block; vertical-align: bottom; }
+        @media (min-width: 768px) and (max-width: 1023px) {
+            header { padding-inline: 1rem; }
+            .header-inner { gap: 0.65rem; }
+            .header-inner > div:first-child { gap: 0.75rem !important; }
+            .header-inner > div:last-child { gap: 0.4rem; }
+            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.65rem; font-size: 0.76rem; }
+            .watch-container { padding-inline: 1.25rem; }
+            .cinema-grid { grid-template-columns: minmax(0, 1fr) minmax(230px, 0.38fr); gap: 1rem; }
+            .episode-sidebar { padding: 0.9rem; }
+            .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); }
+            .lower-panels { gap: 1rem; }
+        }
+        @media (max-width: 767px) {
+            header { padding: 0.7rem 1rem; }
+            .header-inner { flex-wrap: wrap; gap: 0.7rem; }
+            .header-inner > div:first-child { width: 100%; gap: 0.75rem !important; }
+            .header-inner > div:last-child { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 0.45rem; }
+            .header-inner > div:last-child .ctrl-btn { padding: 0.45rem 0.7rem; font-size: 0.75rem; }
+            .breadcrumb-bar { flex: 1; }
+            .breadcrumb-bar a { max-width: 48vw; }
+            .cinema-grid, .lower-panels { grid-template-columns: 1fr; }
+            .watch-container { padding: 0 0.85rem; margin-top: 1rem; }
+            .video-stage { border-radius: 12px; }
+            .episode-sidebar { max-height: 360px; }
+            .transport-bar { flex-direction: column; align-items: stretch; }
+            .now-playing-info { flex-wrap: wrap; }
+            .transport-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+            .transport-actions .ctrl-btn { flex: 1 1 145px; justify-content: center; min-height: 44px; }
+            .server-row-label { min-width: 0; }
+            .skip-intro-btn { right: 12px; bottom: 64px; padding: 0.5rem 0.9rem; }
+            .dl-row { flex-wrap: wrap; }
+            .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+        }
