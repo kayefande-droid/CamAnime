@@ -96,4 +96,6 @@ curl -s -m 60 -o /dev/null -D - -H "Range: bytes=0-1023" "$BASE/get/android?r=$R
   | tr -d '\r' | awk 'BEGIN{IGNORECASE=1} /^HTTP|^content-range|^content-length/'
 
 echo "== download page agrees =="
-curl -s -m 60 "$BASE/download?p=$RANDOM" | grep -oE 'CamAnime [0-9.]+ \(build [0-9]+\).*?MB' | head -1
+page=$(curl -s -m 60 "$BASE/download?p=$RANDOM")
+echo "$page" | grep -oE 'CamAnime [0-9]+\.[0-9]+\.[0-9]+ \(build [0-9]+\)' | head -1
+echo "$page" | grep -oE '[0-9]+\.[0-9]+ MB' | head -1
