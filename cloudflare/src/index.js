@@ -624,6 +624,10 @@ async function apiRoutes(request, env, url, path) {
   // The website's community widget posts FormData to these paths (guests
   // included). Without them the mirror rendered the forum but every post
   // answered 404, so comments only worked on the Render host.
+  if (p1 === "community" && p2 === "comments" && method === "GET") {
+    const cu = new URL(request.url);
+    return api.getComments(env, request, cu.searchParams.get("anime_id") || "", cu.searchParams.get("ep") || "");
+  }
   if (p1 === "community" && p2 === "comment" && method === "POST") {
     return api.commentPost(env, request);
   }

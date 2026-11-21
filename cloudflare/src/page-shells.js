@@ -105,6 +105,44 @@ function detailsHeader() {
 </header>`;
 }
 
+const siteFooter = `
+<footer style="border-top:1px solid var(--border-subtle, rgba(255,255,255,.08)); margin-top:2rem;">
+  <div class="footer-inner" style="display:flex; flex-wrap:wrap; gap:.4rem 1rem; justify-content:space-between; padding:1.1rem 1rem; color:var(--text-secondary); font-size:.78rem;">
+    <span>© 2026 CamAnime. All rights reserved.</span>
+    <span>Built by <strong style="color:var(--text-primary,#f3f5fa)">kayefande &amp; Co.</strong>
+      <a href="/developers" style="color:var(--accent,#FFB347); text-decoration:underline; text-underline-offset:2px;">Developer API</a>
+      <a href="/privacy" style="color:var(--text-secondary,#a9b4c6); text-decoration:underline; text-underline-offset:2px;">Privacy</a>
+    </span>
+  </div>
+</footer>`;
+
+/** Render's guest forum, driven by /static/js/community.js + /api/community/*. */
+function communitySection(animeId, ep, user) {
+  const themes = ["light", "midnight", "vibrant", "sakura", "forest", "obsidian", "neo", "tokyo"];
+  return `<section id="ca-community" data-anime="${esc(String(animeId))}" data-ep="${esc(String(ep || ""))}" class="ca-community">
+        <h2 class="ca-community-title">Comments &amp; episode forum</h2>
+        <p class="ca-community-sub">${user ? "Signed in as " + esc(user.name) + " — post below." : "No sign-in needed — pick a name, rate 1–10, and join the forum. Replies, likes and stickers work as a guest."}</p>
+        <div class="ca-theme-row" role="group" aria-label="Site theme">
+            <span class="ca-theme-label">Theme:</span>
+            ${themes.map((t) => `<button type="button" class="ca-theme-btn" data-theme-name="${t}">${t === "midnight" ? "Midnight" : t === "neo" ? "Neo" : t === "tokyo" ? "Neon Tokyo" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
+        </div>
+        <div class="ca-rate-row" id="ca-rate-row">
+            <span class="ca-rate-label">Rate this anime:</span>
+            ${Array.from({ length: 10 }, (_, i) => `<button type="button" class="ca-rate-btn" data-score="${i + 1}" aria-label="Rate ${i + 1} out of 10">${i + 1}</button>`).join("")}
+            <span id="ca-rating-out" class="ca-rating-out">Tap a score — average updates instantly.</span>
+        </div>
+        <form id="ca-comment-form" class="ca-comment-form">
+            <input id="ca-guest-name" maxlength="24" placeholder="Your name (optional)" autocomplete="nickname" aria-label="Display name">
+            <input id="ca-comment-text" maxlength="600" placeholder="Join the discussion… (no login needed)" aria-label="Comment text">
+            <button type="submit">Post</button>
+        </form>
+        <div id="ca-form-msg" class="ca-form-msg" aria-live="polite"></div>
+        <div id="ca-sticker-row" class="ca-sticker-row"></div>
+        <div id="ca-comments" class="ca-comments"></div>
+    </section>
+    <script src="/static/js/community.js" defer></script>`;
+}
+
 export function watchPage(ctx, user) {
   const { anime, episodes, current, epNum } = ctx;
   const name = anime.title?.english || anime.title?.romaji || "Anime";
@@ -209,6 +247,24 @@ ${watchHeader(anime, epNum, name)}
                 </div>
                 <p role="note" style="color:var(--text-secondary);font-size:.8rem;margin:.6rem 0 0;">Quality and dub availability are read from the provider for this exact episode. Choices the source does not publish are never shown or invented.</p>
             </div>
+
+        <div class="panel-box">
+            <div class="panel-box-title"><i class="fab fa-youtube" style="color:#ff4e45;"></i> Trailer &amp; episode notes</div>
+            <div id="watchTrailerBox"><p style="font-size:.85rem;color:var(--text-secondary);">Loading the official trailer…</p></div>
+            <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.7rem;">The embedded trailer is provided by YouTube. External video services and embeds may show their own ads, which we cannot control.</p>
+            <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.7rem;" id="watchProviderNote"></p>
+        </div>
+
+        <div class="panel-box" id="downloadPanel">
+            <div class="panel-box-title"><i class="fas fa-cloud-download-alt" style="color: var(--emerald);"></i> Direct Episode ${Number(epNum) || 1} Download Manager</div>
+            <p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                The green button above downloads the exact file now playing. No sign-in needed. Only files the provider publishes are listed — CamAnime never re-encodes video into a lower resolution, so if 360p or a dub is missing here, the source does not have it.
+            </p>
+            <div id="dlStatus" style="display:none;font-size:.82rem;margin-bottom:.8rem;color:#fca5a5;"></div>
+            <div class="dl-grid" id="downloadGrid">
+                <p style="font-size:.85rem;color:var(--text-secondary);">Downloads appear as soon as a server answers.</p>
+            </div>
+        </div>
         </div>
 
         <aside class="episode-sidebar">
@@ -224,34 +280,10 @@ ${watchHeader(anime, epNum, name)}
         </aside>
     </div>
 
-    <div class="lower-panels">
-        <div class="panel-box" id="downloadPanel">
-            <div class="panel-box-title"><i class="fas fa-cloud-download-alt" style="color: var(--emerald);"></i> Direct Episode ${Number(epNum) || 1} Download Manager</div>
-            <p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1rem;">
-                The green button above downloads the exact file now playing. No sign-in needed. Only files the provider publishes are listed — CamAnime never re-encodes video into a lower resolution, so if 360p or a dub is missing here, the source does not have it.
-            </p>
-            <div id="dlStatus" style="display:none;font-size:.82rem;margin-bottom:.8rem;color:#fca5a5;"></div>
-            <div class="dl-grid" id="downloadGrid">
-                <p style="font-size:.85rem;color:var(--text-secondary);">Downloads appear as soon as a server answers.</p>
-            </div>
-        </div>
-        <div class="panel-box">
-            <div class="panel-box-title"><i class="fab fa-youtube" style="color:#ff4e45;"></i> Trailer &amp; episode notes</div>
-            <div id="watchTrailerBox"><p style="font-size:.85rem;color:var(--text-secondary);">Loading the official trailer…</p></div>
-            <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.7rem;">The embedded trailer is provided by YouTube. External video services and embeds may show their own ads, which we cannot control.</p>
-            <p style="font-size:.8rem;color:var(--text-secondary);margin-top:.7rem;" id="watchProviderNote"></p>
-        </div>
-    </div>
 
-    <section id="ca-community" data-anime="${anime.id}" data-ep="${epNum}" class="ca-community">
-        <h2 class="ca-community-title">Comments &amp; episode forum</h2>
-        <p class="ca-community-sub">${user ? "Signed in as " + esc(user.name) + " — post below." : "Sign in to post comments and ratings."}</p>
-        <div class="ca-theme-row" role="group" aria-label="Site theme">
-            <span class="ca-theme-label">Theme:</span>
-            ${["light", "midnight", "vibrant", "sakura", "forest", "obsidian", "neo", "tokyo"].map((t) => `<button type="button" class="ca-theme-btn" data-theme-name="${t}">${t === "midnight" ? "Midnight" : t[0].toUpperCase() + t.slice(1)}</button>`).join("")}
-        </div>
-    </section>
+    ${communitySection(anime.id, epNum, user)}
 </div>
+${siteFooter}
 
 <script>
 (function () {
@@ -297,7 +329,7 @@ ${watchHeader(anime, epNum, name)}
     active = server;
     intro = server.intro && Number.isFinite(server.intro.end) ? server.intro : null;
     var url = absUrl(server.stream_url);
-    var label = server.name || "server";
+    var label = String(server.name || "server").replace(/\s*\((?:SUB|DUB)\)\s*$/i, "");
     status.textContent = "Active Server: " + label + " (" + String(server.audio || audio).toUpperCase() + ")";
     badge.textContent = server.playback_mode === "iframe" ? "EMBED" : (server.playback_mode === "hls" || url.indexOf("/api/proxy/hls") !== -1 ? "HLS" : "MP4");
     dlBtn.href = absUrl(server.download_url || server.stream_url || "");
@@ -612,6 +644,10 @@ export function detailsPage(anime, ratingSummary, user, eps) {
   const summary = String(anime.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]*>/g, "").trim();
   const trailerId = anime.trailer?.site === "youtube" && /^[A-Za-z0-9_-]{11}$/.test(String(anime.trailer?.id || "")) ? anime.trailer.id : "";
   const related = (anime.relations?.edges || []).filter((e) => e?.node?.type === "ANIME").slice(0, 8);
+  const recommendations = (anime.recommendations?.nodes || [])
+    .map((n) => n?.mediaRecommendation)
+    .filter((m) => m && m.id)
+    .slice(0, 12);
   const title = `${name} — episodes, stream and download`;
   const desc = `Watch ${name} on CamAnime: every confirmed episode, provider servers, SUB/DUB availability and direct downloads.`;
 
@@ -668,6 +704,7 @@ ${detailsHeader()}
                   : `<span class="btn-outline" aria-disabled="true"><i class="fas fa-circle-info"></i> No released episode confirmed</span>`}
                 <button type="button" class="btn-outline" id="bookmarkBtn" aria-pressed="false"><i class="fas fa-bookmark" aria-hidden="true"></i> <span id="bookmarkText">Add to Watchlist</span></button>
             </div>
+            ${nextEp ? `<button type="button" class="btn-outline" id="remindBtn" style="margin-top:.6rem;"><i class="fas fa-bell"></i> <span id="remindText">Remind me about releases</span></button>` : ""}
             ${nextEp && nextAt ? `<p class="release-countdown muted" data-airing-epoch="${nextAt}" data-airing-episode="${nextEp}">Next episode (EP ${nextEp}) airs in <strong class="cd-text">calculating…</strong></p>` : ""}
             <p class="availability-note">Quality and dub availability are detected per episode from the provider. A missing resolution or dub means the source does not publish it — it is never simulated.</p>
             ${ratingSummary?.average ? `<p class="availability-note">Community score: <strong>${ratingSummary.average}/10</strong> from ${ratingSummary.count} rating${ratingSummary.count === 1 ? "" : "s"}.</p>` : ""}
@@ -736,7 +773,24 @@ ${detailsHeader()}
             </a>`).join("")}
         </div>
     </div>` : ""}
+
+    ${recommendations.length ? `<div class="panel-card" style="margin-bottom: 2.5rem;">
+        <div class="panel-header"><div class="panel-title"><span class="accent-dot"></span> Recommended Similar Anime</div></div>
+        <div class="mini-grid">
+            ${recommendations.map((r) => `<a href="/anime/${r.id}" class="mini-poster-card" title="${esc(r.title?.english || r.title?.romaji || "")}">
+                ${r.coverImage?.large ? `<img src="${esc(r.coverImage.large)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="${esc(r.title?.english || r.title?.romaji || "")}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">` : ""}
+                <div class="mini-poster-fallback" style="${r.coverImage?.large ? "display:none;" : ""}"><i class="fas fa-layer-group"></i></div>
+                <div class="mini-poster-body">
+                    <div class="mini-poster-rel">${r.averageScore ? "★ " + (r.averageScore / 10).toFixed(1) : ""}${r.averageScore && r.episodes ? " • " : ""}${r.episodes ? r.episodes + " EPS" : ""}</div>
+                    <div class="mini-poster-title">${esc(r.title?.english || r.title?.romaji || "")}</div>
+                </div>
+            </a>`).join("")}
+        </div>
+    </div>` : ""}
+
+    ${communitySection(anime.id, "", user)}
 </div>
+${siteFooter}
 
 <script>
 (function () {
@@ -765,6 +819,23 @@ ${detailsHeader()}
       out.textContent = (d ? d + "d " : "") + h + "h " + m + "m " + x + "s";
     }
     tick(); setInterval(tick, 1000);
+  }
+
+  var remind = document.getElementById("remindBtn");
+  if (remind) {
+    var rkey = "camanime-remind:" + ${JSON.stringify(String(anime.id))};
+    function paintRemind() {
+      var on = false; try { on = localStorage.getItem(rkey) === "1"; } catch (e) {}
+      var out = document.getElementById("remindText");
+      if (out) out.textContent = on ? "Reminder saved in this browser" : "Remind me about releases";
+    }
+    remind.addEventListener("click", function () {
+      var on = false; try { on = localStorage.getItem(rkey) === "1"; } catch (e) {}
+      try { on ? localStorage.removeItem(rkey) : localStorage.setItem(rkey, "1"); } catch (e) {}
+      try { if (!on && "Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (e) {}
+      paintRemind();
+    });
+    paintRemind();
   }
 
   var btn = document.getElementById("bookmarkBtn");

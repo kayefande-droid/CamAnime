@@ -322,7 +322,7 @@
         /* ─── LOWER PANELS: DIRECT DOWNLOAD MANAGER & YOUTUBE TRAILER ─── */
         .lower-panels {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 1.5rem;
         }
         .panel-box {
@@ -427,3 +427,19 @@
             .dl-row { flex-wrap: wrap; }
             .ep-rail-list { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
         }
+
+        /* The page draws its own transport bar; hide the browser's duplicate. */
+        #nativeVideo::-webkit-media-controls,
+        #nativeVideo::-webkit-media-controls-enclosure { display: none !important; }
+
+        /* base.css makes .watch-container a two-column grid; on this page the
+           grid lives in .cinema-grid, so the container must be a plain block
+           or the forum and footer are pulled up as extra grid columns. */
+        body.page-watch .watch-container { display: block; max-width: 1520px; }
+
+        /* Render stacks the now-playing row above the action buttons; without
+           this the title collapses to a sliver beside the buttons. */
+        body.page-watch .transport-bar { flex-direction: column; align-items: stretch; gap: .7rem; }
+        body.page-watch .now-playing-info { flex-wrap: wrap; }
+        body.page-watch .now-playing-info > div { flex: 1 1 220px; min-width: 0; }
+        body.page-watch .transport-actions { justify-content: flex-start; }

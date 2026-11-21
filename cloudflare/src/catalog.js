@@ -88,6 +88,9 @@ export async function details(id) {
     `query($id:Int){Media(id:$id,type:ANIME){${CARD_FIELDS}
       streamingEpisodes { title thumbnail url site }
       nextAiringEpisode { episode airingAt }
+      studios { nodes { name isAnimationStudio } }
+      relations { edges { relationType node { id title { romaji english } coverImage { large } format seasonYear episodes status type } } }
+      recommendations(perPage: 12, sort: RATING_DESC) { nodes { rating mediaRecommendation { id title { romaji english } coverImage { large } format episodes status averageScore } } }
     }}`,
     { id }
   );
