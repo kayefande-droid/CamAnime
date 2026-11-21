@@ -850,6 +850,50 @@
     document.addEventListener('camanime:quality', caApplyStreamQuality);
     document.addEventListener('camanime:data', caApplyStreamQuality);
 
+    // One English track per server. The provider bundles every language it
+    // has (MegaPlay returns 37), so without this the CC menu is unusable and
+    // DUB servers — which also ship the English track — showed nothing.
+    function attachEnglishSubtitles(srv) {
+        const video = document.getElementById('nativeVideo');
+        const ccBtn = document.querySelector('[data-ca="cc"]');
+        if (!video) return;
+        video.querySelectorAll('track').forEach(track => track.remove());
+        if (!srv || srv.playback_mode === 'iframe') {
+            if (ccBtn) ccBtn.style.display = 'none';
+            return;
+        }
+        const rank = sub => {
+            const lang = String((sub && sub.lang) || '').toLowerCase();
+            if (lang === 'english') return 0;
+            if (lang.indexOf('english') === 0) return /forced/.test(lang) ? 2 : 1;
+            return 99;
+        };
+        const best = (srv.subtitles || [])
+            .filter(sub => sub && sub.url && rank(sub) < 99)
+            .sort((a, b) => rank(a) - rank(b))[0];
+        if (!best) {
+            if (ccBtn) ccBtn.style.display = 'none';
+            return;
+        }
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = 'English';
+        track.srclang = 'en';
+        track.src = best.url;
+        track.default = true;
+        video.appendChild(track);
+        const show = () => {
+            const tracks = video.textTracks || [];
+            for (let i = 0; i < tracks.length; i += 1) tracks[i].mode = i === 0 ? 'showing' : 'disabled';
+        };
+        show();
+        setTimeout(show, 500);
+        if (ccBtn) {
+            ccBtn.style.display = '';
+            ccBtn.setAttribute('aria-pressed', 'true');
+        }
+    }
+
     function switchServer(srv, opts) {
         if (!srv) return;
         opts = opts || {};
@@ -884,6 +928,7 @@
         // Keep the CamAnime chrome in sync: it only ever shows for native video.
         if (window.caPlayerSetMode) window.caPlayerSetMode(srv.playback_mode);
         currentIntro = srv.intro || null;
+        attachEnglishSubtitles(srv);
 
         if (srv.playback_mode === 'mp4') {
             iframe.style.display = 'none';
@@ -907,17 +952,6 @@
             iframe.style.display = 'none';
             iframe.src = 'about:blank';
             video.style.display = 'block';
-
-            // Attach subtitle tracks
-            (srv.subtitles || []).forEach(sub => {
-                const track = document.createElement('track');
-                track.kind = 'subtitles';
-                track.label = sub.lang || 'English';
-                track.srclang = (sub.lang || 'en').slice(0, 2).toLowerCase();
-                track.src = sub.url;
-                if (sub.default) track.default = true;
-                video.appendChild(track);
-            });
 
             if (window.Hls && Hls.isSupported()) {
                 // Buffer sizing by network tier: data-data=low/medium means a bad

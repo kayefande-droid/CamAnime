@@ -327,6 +327,9 @@ ${siteFooter}
     clearErr();
     teardown();
     active = server;
+    // iframe servers render inside the provider's own player, where a <track>
+    // cannot be injected; native HLS/MP4 servers get the English track here.
+    bindSubs(server.playback_mode === "iframe" ? [] : englishSubs(server.subtitles));
     intro = server.intro && Number.isFinite(server.intro.end) ? server.intro : null;
     var url = absUrl(server.stream_url);
     var label = String(server.name || "server").replace(/\s*\((?:SUB|DUB)\)\s*$/i, "");
@@ -517,15 +520,35 @@ ${siteFooter}
     else if (player.requestFullscreen) player.requestFullscreen().catch(function () {});
   });
   var cc = player.querySelector('[data-ca="cc"]');
+  // Providers publish the same episode in dozens of languages (37 tracks for
+  // MegaPlay alone). Picking the plain "English" track keeps the CC menu one
+  // click and guarantees an English track is on for both SUB and DUB servers.
+  function englishSubs(subs) {
+    function rank(s) {
+      var lang = String((s && s.lang) || "").toLowerCase();
+      if (lang === "english") return 0;
+      if (lang.indexOf("english") === 0) return /forced/.test(lang) ? 2 : 1;
+      return 99;
+    }
+    var best = (subs || []).filter(function (s) { return s && s.url && rank(s) < 99; })
+      .sort(function (a, b) { return rank(a) - rank(b); })[0];
+    return best ? [{ url: best.url, lang: "English", default: true }] : [];
+  }
   function bindSubs(subs) {
     video.querySelectorAll("track").forEach(function (t) { t.remove(); });
-    (subs || []).forEach(function (s, i) {
+    var list = subs || [];
+    list.forEach(function (s) {
       var t = document.createElement("track");
-      t.kind = "subtitles"; t.label = s.lang || ("Track " + (i + 1)); t.srclang = "en";
-      t.src = absUrl(s.url); if (s.default && i === 0) t.default = true;
+      t.kind = "subtitles"; t.label = s.lang || "English"; t.srclang = "en";
+      t.src = absUrl(s.url); t.default = true;
       video.appendChild(t);
     });
-    if (cc) cc.style.display = (subs || []).length ? "inline-flex" : "none";
+    var tracks = video.textTracks;
+    for (var i = 0; i < tracks.length; i += 1) tracks[i].mode = i === 0 ? "showing" : "disabled";
+    if (cc) {
+      cc.style.display = list.length ? "inline-flex" : "none";
+      cc.setAttribute("aria-pressed", list.length ? "true" : "false");
+    }
   }
   if (cc) cc.addEventListener("click", function () {
     var tracks = video.textTracks;
