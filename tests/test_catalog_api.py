@@ -83,6 +83,47 @@ def test_download_page_exposes_copyable_android_url_and_direct_download(api):
     assert version.json["apk_url"] == "/get/android"
 
 
+def test_download_page_lists_archived_apks_from_the_mirror(api, monkeypatch):
+    class MirrorListing:
+        def json(self):
+            return {"files": [
+                {"key": "downloads/archive/CamAnime-2.17.3-build33.apk",
+                 "name": "archive/CamAnime-2.17.3-build33.apk", "size": 59000000,
+                 "url": "/api/download/file/downloads%2Farchive%2FCamAnime-2.17.3-build33.apk"},
+                {"key": "downloads/archive/CamAnime-2.17.4-build35.apk",
+                 "name": "archive/CamAnime-2.17.4-build35.apk", "size": 60009362,
+                 "url": "/api/download/file/downloads%2Farchive%2FCamAnime-2.17.4-build35.apk"},
+                {"key": "downloads/CamAnime-Windows.zip",
+                 "name": "CamAnime-Windows.zip", "size": 4096,
+                 "url": "/api/download/file/downloads%2FCamAnime-Windows.zip"},
+            ]}
+
+    requested = {}
+
+    def mirror_get(url, **kwargs):
+        requested["url"] = url
+        return MirrorListing()
+
+    monkeypatch.setattr(api.requests, "get", mirror_get)
+    monkeypatch.setattr(api, "_PREVIOUS_BUILDS_CACHE", {"at": 0.0, "items": []})
+
+    page = api.app.test_client().get("/download").get_data(as_text=True)
+
+    assert requested["url"] == f"{api.CLOUDFLARE_SITE}/api/download/list"
+    assert "Previous Android builds" in page
+    archive = page.split("Previous Android builds", 1)[1].split("</section>", 1)[0]
+    assert "CamAnime 2.17.4 (build 35)" in archive
+    assert "CamAnime 2.17.3 (build 33)" in archive
+    assert archive.index("build 35") < archive.index("build 33")
+    assert "57.2 MB" in archive
+    assert (
+        f'href="{api.CLOUDFLARE_SITE}/api/download/file/downloads%2Farchive%2F'
+        'CamAnime-2.17.4-build35.apk"'
+    ) in archive
+    # Only downloads/archive/*.apk belongs in this list.
+    assert "CamAnime-Windows.zip" not in archive
+
+
 def test_health_is_versioned(api):
     response = api.app.test_client().get("/api/v1/health")
     assert response.status_code == 200
