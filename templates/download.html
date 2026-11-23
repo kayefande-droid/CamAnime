@@ -131,6 +131,17 @@ a{color:var(--accent, #FFB347)}
     </article>
   </section>
 
+  {% if archive %}
+  <section class="dl-build" aria-label="Previous Android builds">
+    <h2>Previous Android builds</h2>
+    <p class="dl-platform-note">Older CamAnime builds stay downloadable from the mirror. Every build from 2.9.0 (build 19) up still streams and downloads from the same servers; the app only asks you to update below that floor.</p>
+    <ul class="dl-steps">
+      {% for item in archive %}<li><a href="{{ item.url }}" download>{{ item.label }}</a>{% if item.size %} — {{ item.size }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   <section class="dl-build" id="build">
     <h2>Build it yourself</h2>
     <ol class="dl-steps">

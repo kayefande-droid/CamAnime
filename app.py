@@ -3804,6 +3804,51 @@ def _app_file_info(filename: str):
             "updated": updated.strftime("%Y-%m-%d %H:%M")}
 
 
+_PREVIOUS_BUILDS_CACHE = {"at": 0.0, "items": []}
+_PREVIOUS_BUILDS_RE = re.compile(r"CamAnime-([\d.]+)-build(\d+)\.apk$", re.I)
+
+
+def _previous_android_builds():
+    """Archived APKs that the Cloudflare mirror keeps under downloads/archive/.
+
+    Older installs must stay downloadable, and the mirror owns that archive, so
+    the Render page links straight at those objects instead of keeping a second
+    copy in this repo. Cached for five minutes (failures included) and fail-soft:
+    if the mirror is unreachable the section is simply omitted.
+    """
+    now = time.time()
+    if now - _PREVIOUS_BUILDS_CACHE["at"] < 300:
+        return _PREVIOUS_BUILDS_CACHE["items"]
+    items = []
+    try:
+        resp = requests.get(f"{CLOUDFLARE_SITE}/api/download/list", timeout=2)
+        files = (resp.json() or {}).get("files") or []
+    except (requests.RequestException, ValueError, AttributeError):
+        files = []
+    ranked = []
+    for entry in files:
+        name = str(entry.get("name") or "")
+        if not name.startswith("archive/") or not name.lower().endswith(".apk"):
+            continue
+        match = _PREVIOUS_BUILDS_RE.search(name)
+        if match:
+            label = f"CamAnime {match.group(1)} (build {match.group(2)})"
+            rank = (match.group(1), int(match.group(2)))
+        else:
+            label = name.split("/", 1)[-1]
+            rank = ("0", 0)
+        size = entry.get("size") or 0
+        ranked.append((rank, {
+            "label": label,
+            "url": f"{CLOUDFLARE_SITE}{entry.get('url') or ''}",
+            "size": f"{size / (1024 * 1024):.1f} MB" if size else "",
+        }))
+    ranked.sort(key=lambda row: row[0], reverse=True)
+    items = [row[1] for row in ranked][:8]
+    _PREVIOUS_BUILDS_CACHE.update({"at": now, "items": items})
+    return items
+
+
 @app.route("/privacy")
 def privacy_page():
     """Public privacy and account-data page (launch checklist item)."""
@@ -3820,6 +3865,7 @@ def download_page():
                            winapp=winapp,
                            app_version=policy["latest_version"],
                            app_build=policy["latest_version_code"],
+                           archive=_previous_android_builds(),
                            cloudflare_url=CLOUDFLARE_SITE)
 
 
