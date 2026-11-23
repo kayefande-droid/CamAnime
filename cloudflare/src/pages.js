@@ -1016,7 +1016,7 @@ export function settingsPage(user) {
  * on the Render origin, so the shared stylesheets render both hosts the same
  * way; only the figures come from this deployment's own R2 bucket.
  */
-export function downloadPage({ userName, user, version, build, sizeLabel, sha, extras = [], origin }) {
+export function downloadPage({ userName, user, version, build, sizeLabel, sha, archive = [], extras = [], origin }) {
   const here = String(origin || "").replace(/\/+$/, "");
   const copyBlock = (id, label, value, ariaLabel) => `
       <div class="dl-copy">
@@ -1070,6 +1070,16 @@ export function downloadPage({ userName, user, version, build, sizeLabel, sha, e
       <li>Point the app at your site URL and sign in with your website account. One shared user database.</li>
     </ol>
   </section>
+  ${archive.length ? `
+  <section class="dl-build" aria-label="Previous Android builds">
+    <h2>Previous Android builds</h2>
+    <p class="dl-platform-note">Older CamAnime builds stay downloadable here. Every build from 2.9.0 (build 19) up still streams and downloads from the same servers; the app only asks you to update below that floor.</p>
+    <ul class="dl-steps">${archive.map((f) => {
+      const m = /CamAnime-([\d.]+)-build(\d+)\.apk$/i.exec(f.name);
+      const label = m ? `CamAnime ${m[1]} (build ${m[2]})` : f.name.replace(/^archive\//, "");
+      return `<li><a href="${esc(f.url)}" download>${esc(label)}</a> — ${(f.size / 1024 / 1024).toFixed(1)} MB</li>`;
+    }).join("")}</ul>
+  </section>` : ""}
   ${extras.length ? `
   <section class="dl-build" aria-label="Other files">
     <h2>Other files</h2>

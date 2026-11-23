@@ -779,9 +779,16 @@ async function pageRoutes(request, env, ctx, path) {
     } catch {
       apkSize = null;
     }
-    const extras = (await (await api.downloadList(env)).json()).files.filter(
+    const files = (await (await api.downloadList(env)).json()).files.filter(
       (f) => f.key !== APK_KEY,
     );
+    // Previous Android builds live under downloads/archive/ so visitors can
+    // reinstall an older release and keep streaming: the servers accept every
+    // build at or above the supported minimum, not just the newest one.
+    const archive = files.filter(
+      (f) => f.name.startsWith("archive/") && /\.apk$/i.test(f.name),
+    );
+    const extras = files.filter((f) => !archive.includes(f));
     const sizeLabel = apkSize
       ? `${(apkSize / (1024 * 1024)).toFixed(1)} MB`
       : "size shown by the main site";
@@ -793,6 +800,7 @@ async function pageRoutes(request, env, ctx, path) {
         build: LATEST_BUILD,
         sizeLabel,
         sha: APK_SHA256,
+        archive,
         extras,
         origin: url.origin,
       }),

@@ -23,19 +23,19 @@ from typing import Dict, List, Optional
 import camanime_platform as platform
 
 DEFAULT_POLICY = {
-    "latest_version": "2.17.3",
-    "latest_version_code": 33,
+    "latest_version": "2.17.5",
+    "latest_version_code": 36,
     "minimum_supported_version": "2.9.0",
     "minimum_supported_version_code": 19,
     "force_update": 1,
     "download_url": "https://camanime.onrender.com/get/android",
     "release_notes": (
-        "Build 30: a diagnostics screen that reports the real notification "
-        "permission, the last update check and the account role, plus "
-        "source-owned rankings and trending, DUB badges from the "
+        "Build 36: English subtitles load automatically on every native "
+        "stream, sub and dub alike, as a single English track with the CC "
+        "control already on. The app also carries the earlier diagnostics "
+        "screen, source-owned rankings and trending, DUB badges, "
         "notifications that work with the app closed, a fast update check, "
-        "admin account recognition, shared comment threads and the Cloudflare "
-        "mirror brought onto the same design."
+        "admin account recognition and shared comment threads."
     ),
     "update_message": (
         "Your CamAnime version is outdated. Please update to the latest version "

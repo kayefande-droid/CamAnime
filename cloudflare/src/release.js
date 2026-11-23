@@ -8,8 +8,8 @@
  * Keep LATEST_* in step with `mobile/camanime_app/pubspec.yaml` and
  * `lib/core/version_gate.dart`.
  */
-export const LATEST_VERSION = "2.17.4";
-export const LATEST_BUILD = 35;
+export const LATEST_VERSION = "2.17.5";
+export const LATEST_BUILD = 36;
 
 /** Builds below this cannot stream or download. */
 export const MIN_SUPPORTED_VERSION = "2.9.0";
@@ -20,19 +20,19 @@ export const DISCONTINUED_VERSION = "2.7.0";
 export const DISCONTINUED_BUILD = 17;
 
 /** SHA-256 of the APK published at /get/android (static/downloads/CamAnime.apk). */
-export const APK_SHA256 = "6fee35bbc89e19e79b117d763ca801dacd80bc3a0931508029ebe0012223f359";
+export const APK_SHA256 = "a024bdeb5a75f786cdaa3318dd5ae0682f4fa99daa07d8a41cb176f7567a2e20";
 
 /** Download filename shown to users, so saved APKs are never ambiguous. */
 export const APK_FILENAME = `CamAnime-${LATEST_VERSION}-build${LATEST_BUILD}.apk`;
 
 export const RELEASE_NOTES =
-  "Build 30: an in-app diagnostics screen reports the real notification "
-  "permission, the last update check and the signed-in account role. "
-  "Rankings and trending numbers come from the metadata source, "
-  "DUB badges from the provider episode index, aired-only episode lists, "
-  "background notifications delivered while the app is closed, a fast "
-  "update check, admin account recognition, shared comment threads, and "
-  "this mirror styled with the same design as the main site.";
+  "Build 36: English subtitles load automatically on every native stream, "
+  "sub and dub alike, as a single English track with the CC control "
+  "already on. Also includes the in-app diagnostics screen, "
+  "source-owned rankings and trending, DUB badges, aired-only episode "
+  "lists, background notifications delivered while the app is closed, a "
+  "fast update check, admin account recognition, shared comment threads, "
+  "and this mirror styled with the same design as the main site.";
 
 export const RENDER_ORIGIN = "https://camanime.onrender.com";
 export const WORKER_ORIGIN = "https://camanjme.camanime.workers.dev";

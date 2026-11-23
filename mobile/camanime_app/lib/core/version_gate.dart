@@ -14,8 +14,8 @@ import 'models.dart' show apiHost;
 
 /// Build identity reported to the server. Kept here so the gate has no
 /// dependency on the UI layer (and no import cycle through main.dart).
-const String kAppVersion = '2.17.3';
-const int kAppBuildNumber = 34;
+const String kAppVersion = '2.17.5';
+const int kAppBuildNumber = 36;
 
 /// Server-driven release policy.
 ///
