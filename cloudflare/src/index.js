@@ -773,12 +773,13 @@ async function pageRoutes(request, env, ctx, path) {
   if (path === "/download") {
     // Report the exact bytes /get/android will hand over, so the page and the
     // downloaded file can never disagree about version, size or name.
-    let apkSize = null;
+    let apkObj = null;
     try {
-      if (env.FILES) apkSize = (await env.FILES.head(APK_KEY))?.size ?? null;
+      if (env.FILES) apkObj = (await env.FILES.head(APK_KEY)) ?? null;
     } catch {
-      apkSize = null;
+      apkObj = null;
     }
+    const apkSize = apkObj?.size ?? null;
     const files = (await (await api.downloadList(env)).json()).files.filter(
       (f) => f.key !== APK_KEY,
     );
@@ -789,8 +790,12 @@ async function pageRoutes(request, env, ctx, path) {
       (f) => f.name.startsWith("archive/") && /\.apk$/i.test(f.name),
     );
     const extras = files.filter((f) => !archive.includes(f));
+    // Same wording as templates/download.html: "57.2 MB, updated 2026-11-23 11:08".
+    const updated = apkObj?.uploaded
+      ? `, updated ${new Date(apkObj.uploaded).toISOString().slice(0, 16).replace("T", " ")}`
+      : "";
     const sizeLabel = apkSize
-      ? `${(apkSize / (1024 * 1024)).toFixed(1)} MB`
+      ? `${(apkSize / (1024 * 1024)).toFixed(1)} MB${updated}`
       : "size shown by the main site";
     return html(
       downloadPage({

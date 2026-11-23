@@ -1016,7 +1016,7 @@ export function settingsPage(user) {
  * on the Render origin, so the shared stylesheets render both hosts the same
  * way; only the figures come from this deployment's own R2 bucket.
  */
-export function downloadPage({ userName, user, version, build, sizeLabel, sha, archive = [], extras = [], origin }) {
+export function downloadPage({ userName, user, version, build, sizeLabel, archive = [], extras = [], origin }) {
   const here = String(origin || "").replace(/\/+$/, "");
   const copyBlock = (id, label, value, ariaLabel) => `
       <div class="dl-copy">
@@ -1038,7 +1038,6 @@ export function downloadPage({ userName, user, version, build, sizeLabel, sha, a
     <dl class="dl-facts">
       <div><dt>Version</dt><dd>CamAnime ${esc(version)} (build ${esc(build)})</dd></div>
       <div><dt>Android file</dt><dd>${esc(sizeLabel)}</dd></div>
-      <div><dt>Checksum</dt><dd><code>${esc(sha)}</code></dd></div>
       <div><dt>Account</dt><dd>One sign-in for the site and the app</dd></div>
     </dl>
   </section>
